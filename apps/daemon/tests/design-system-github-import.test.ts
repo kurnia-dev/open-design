@@ -336,4 +336,52 @@ exit 1
     expect(fs.existsSync(path.join(result.dir, 'manifest.json'))).toBe(true);
     expect(fs.existsSync(path.join(result.dir, 'package.json'))).toBe(true);
   });
+
+  it('clones a generic Git URL using githubToken options', async () => {
+    const fakeGitSpyPath = path.join(tempRoot, 'git-spy-generic.txt');
+    const fakeGitSpy = path.join(tempRoot, 'fake-git-spy-generic.sh');
+    fs.writeFileSync(
+      fakeGitSpy,
+      `#!/bin/sh
+set -eu
+if [ "$1" = "clone" ]; then
+  echo "$@" > "${fakeGitSpyPath}"
+  target=""
+  for arg in "$@"; do target="$arg"; done
+  mkdir -p "$target"
+  cp -R "$FAKE_GIT_SOURCE"/. "$target"/
+  exit 0
+fi
+if [ "$1" = "-C" ] && [ "$3" = "rev-parse" ] && [ "$4" = "--abbrev-ref" ]; then
+  printf 'main\\n'
+  exit 0
+fi
+if [ "$1" = "-C" ] && [ "$3" = "rev-parse" ] && [ "$4" = "HEAD" ]; then
+  printf 'abc123def456\\n'
+  exit 0
+fi
+echo "unexpected git args: $*" >&2
+exit 1
+`,
+    );
+    fs.chmodSync(fakeGitSpy, 0o755);
+
+    await importGitHubDesignSystemProject(
+      'https://gitea.tagsamurai.local/Wangsit-Developer/wangs-ui-react.git',
+      tmpRoot,
+      userDesignSystemsRoot,
+      {
+        gitBin: fakeGitSpy,
+        githubToken: 'my_secret_gitea_token',
+        now: new Date('2026-05-18T10:00:00.000Z'),
+        importMode: 'normalized',
+        craftApplies: ['color'],
+        isReferenceOnly: true,
+      },
+    );
+
+    const spyContents = fs.readFileSync(fakeGitSpyPath, 'utf8');
+    expect(spyContents).toContain('https://oauth2:my_secret_gitea_token@gitea.tagsamurai.local/Wangsit-Developer/wangs-ui-react.git');
+  });
 });
+

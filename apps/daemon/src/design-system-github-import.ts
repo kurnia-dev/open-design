@@ -109,7 +109,11 @@ export async function importGitHubDesignSystemProject(
     cloneDirName = `${parsedGit.repo}-${importedAt.replace(/[^0-9a-z]/gi, '')}`;
     sourceType = 'git';
 
-    cloneArgs.push(parsedGit.cloneUrl);
+    let cloneUrl = parsedGit.cloneUrl;
+    if (options.githubToken && cloneUrl.toLowerCase().startsWith('http')) {
+      cloneUrl = cloneUrl.replace(/^(https?:\/\/)/i, `$1oauth2:${options.githubToken}@`);
+    }
+    cloneArgs.push(cloneUrl);
   }
 
   await mkdir(cloneRoot, { recursive: true });

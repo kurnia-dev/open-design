@@ -789,16 +789,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
 
-      const isGitHub = (() => {
-        try {
-          parseGitHubRepoUrl(gitUrl);
-          return true;
-        } catch {
-          return false;
-        }
-      })();
+      const tokenObj = await getGitHubToken(RUNTIME_DATA_DIR);
+      const isApplicable = tokenObj ? isTokenApplicableForUrl(gitUrl, tokenObj.providerUrl) : false;
+      const finalToken = isApplicable ? tokenObj?.accessToken : undefined;
 
-      const tokenObj = isGitHub ? await getGitHubToken(RUNTIME_DATA_DIR) : null;
       const wantsStream = req.headers.accept === 'text/event-stream' || body.stream === true;
 
       if (wantsStream) {
@@ -827,7 +821,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
               projectsRoot: PROJECTS_DIR,
               onProgress,
               isReferenceOnly: false,
-              ...(tokenObj?.accessToken ? { githubToken: tokenObj.accessToken } : {}),
+              ...(finalToken ? { githubToken: finalToken } : {}),
             },
           );
           const systems = await listAllDesignSystems();
@@ -862,7 +856,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           reservedIds: designSystemDirIdsFromCatalog(before),
           projectsRoot: PROJECTS_DIR,
           isReferenceOnly: false,
-          ...(tokenObj?.accessToken ? { githubToken: tokenObj.accessToken } : {}),
+          ...(finalToken ? { githubToken: finalToken } : {}),
         },
       );
       const systems = await listAllDesignSystems();
@@ -1005,3 +999,16 @@ function rewriteSkillAssetUrls(html: string, skillId: string) {
     },
   );
 }
+
+function isTokenApplicableForUrl(gitUrl: string, tokenProviderUrl: string | undefined): boolean {
+  try {
+    const gitHost = new URL(gitUrl).hostname.toLowerCase();
+    const providerHost = tokenProviderUrl
+      ? new URL(tokenProviderUrl).hostname.toLowerCase()
+      : 'github.com';
+    return gitHost === providerHost || gitHost === `www.${providerHost}` || providerHost === `www.${gitHost}`;
+  } catch {
+    return false;
+  }
+}
+

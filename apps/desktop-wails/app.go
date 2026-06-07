@@ -103,8 +103,12 @@ func (a *App) startSidecars() {
 	if err == nil {
 		exePath, err := os.Executable()
 		if err == nil {
-			// On macOS packaged bundle, resources are at ../Resources
-			resourcesDir := filepath.Join(filepath.Dir(exePath), "../Resources")
+			exeDir := filepath.Dir(exePath)
+			resourcesDir := filepath.Join(exeDir, "resources")
+			if _, err := os.Stat(filepath.Join(resourcesDir, "app")); err != nil {
+				// Fallback to macOS bundle structure
+				resourcesDir = filepath.Join(exeDir, "../Resources")
+			}
 			daemonEntry := filepath.Join(resourcesDir, "app/prebundled/daemon/daemon-sidecar.mjs")
 
 			if _, err := os.Stat(daemonEntry); err == nil {

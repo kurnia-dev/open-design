@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import { resolveSevenZipCommand } from "./custom-installer.js";
 import type { WinBuiltAppManifest, WinPackTiming, WinPaths } from "./types.js";
 
 const execFileAsync = promisify(execFile);
@@ -32,7 +33,6 @@ export async function buildWinPortableZip(
   paths: WinPaths,
   builtApp: WinBuiltAppManifest,
 ): Promise<WinPackTiming[]> {
-  if (process.platform !== "win32") throw new Error("Windows portable zip build must run on Windows");
   const timings: WinPackTiming[] = [];
   const runSegment = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
     const startedAt = Date.now();
@@ -100,10 +100,23 @@ export async function buildWinPortableZip(
     await rm(paths.setupZipPath, { force: true });
   });
   await runSegment("portable-zip:7z", async () => {
+    let command: string;
+    let args: string[];
+    try {
+      command = await resolveSevenZipCommand();
+      args = ["a", "-tzip", "-mx=5", paths.setupZipPath, "."];
+    } catch (err) {
+      if (process.platform !== "win32") {
+        command = "zip";
+        args = ["-r", "-q", paths.setupZipPath, "."];
+      } else {
+        throw err;
+      }
+    }
     await runExecSegment(
       "portable-zip:7z:process",
-      winResources.sevenZipExe,
-      ["a", "-tzip", "-mx=5", paths.setupZipPath, ".\\*"],
+      command,
+      args,
       {
         cwd: builtApp.unpackedRoot,
         outputPath: paths.setupZipPath,

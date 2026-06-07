@@ -10,6 +10,7 @@ import {
 
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import { resolveSevenZipCommand } from "./custom-installer.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
@@ -63,7 +64,6 @@ export async function buildWinLauncherPayloadArchive(
   paths: WinPaths,
   builtApp: WinBuiltAppManifest,
 ): Promise<WinPackTiming[]> {
-  if (process.platform !== "win32") throw new Error("Windows launcher payload build must run on Windows");
   const timings: WinPackTiming[] = [];
   const packagedVersion = await readPackagedVersion(config);
   const channel = resolveToolPackLauncherChannel(config);
@@ -110,9 +110,10 @@ export async function buildWinLauncherPayloadArchive(
     await cp(builtApp.unpackedRoot, payloadRoot, { recursive: true });
     await writeFile(join(stageRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   });
+  const sevenZipCommand = await resolveSevenZipCommand();
   await runSegment("launcher-payload:7z", async () => {
     await mkdir(dirname(paths.launcherPayloadPath), { recursive: true });
-    await execFileAsync(winResources.sevenZipExe, ["a", "-t7z", "-mx=5", paths.launcherPayloadPath, ".\\*"], {
+    await execFileAsync(sevenZipCommand, ["a", "-t7z", "-mx=5", paths.launcherPayloadPath, "."], {
       cwd: stageRoot,
       windowsHide: true,
     });

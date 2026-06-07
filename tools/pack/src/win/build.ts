@@ -14,6 +14,13 @@ import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
 import { runElectronBuilder } from "./builder.js";
 import {
+  buildWinNsisBasePayload,
+  buildWinNsisOverlayPayload,
+  buildCustomWinNsisInstaller,
+} from "./custom-installer.js";
+import { runWailsWinBuilder } from "./wails.js";
+import { buildWinPortableZip } from "./zip.js";
+import {
   readBuiltAppManifest,
   readPackagedVersion,
 } from "./manifest.js";
@@ -107,15 +114,45 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   const tarballs = await runPhase("workspace-tarballs", async () => collectWorkspaceTarballs(config, paths, cache));
   const packagedAppKey = await createWinPackagedAppCacheKey(config, tarballs.key, tarballs.tarballs);
   let packagedAppRoot: string | null = null;
-  await runPhase("electron-builder", async () => {
-    const builderSegments = await runElectronBuilder(config, paths, cache, packagedAppKey, async () => {
-      if (packagedAppRoot != null) return packagedAppRoot;
+  const isWails = config.builder === "wails";
+
+  if (isWails) {
+    await runPhase("wails-builder", async () => {
       const packagedApp = await prepareWinPackagedApp(config, paths, tarballs, cache);
-      packagedAppRoot = packagedApp.appRoot;
-      return packagedAppRoot;
-    }, resourceTree);
-    segments.push(...builderSegments);
-  });
+      await runWailsWinBuilder(config, paths, packagedApp.appRoot);
+    });
+
+    const builtApp = await readBuiltAppManifest(paths);
+    if (builtApp == null) throw new Error("cannot package Wails app without a built app manifest");
+
+    if (shouldBuildWinPortableZip(config.to)) {
+      await runPhase("portable-zip", async () => {
+        segments.push(...await buildWinPortableZip(config, paths, builtApp));
+      });
+    }
+
+    if (shouldBuildWinNsisInstaller(config.to)) {
+      await runPhase("nsis-payload-base", async () => {
+        segments.push(...await buildWinNsisBasePayload(paths, builtApp));
+      });
+      await runPhase("nsis-payload-overlay", async () => {
+        segments.push(...await buildWinNsisOverlayPayload(paths, builtApp));
+      });
+      await runPhase("nsis-installer", async () => {
+        segments.push(...await buildCustomWinNsisInstaller(config, paths));
+      });
+    }
+  } else {
+    await runPhase("electron-builder", async () => {
+      const builderSegments = await runElectronBuilder(config, paths, cache, packagedAppKey, async () => {
+        if (packagedAppRoot != null) return packagedAppRoot;
+        const packagedApp = await prepareWinPackagedApp(config, paths, tarballs, cache);
+        packagedAppRoot = packagedApp.appRoot;
+        return packagedAppRoot;
+      }, resourceTree);
+      segments.push(...builderSegments);
+    });
+  }
   await runPhase("latest-yml", async () => {
     await writeLocalLatestYml(config, paths);
   });

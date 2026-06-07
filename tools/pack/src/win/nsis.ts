@@ -121,6 +121,10 @@ export async function ensureNsisPersianLanguageAlias(config: ToolPackConfig): Pr
     process.env.ProgramFiles == null ? undefined : join(process.env.ProgramFiles, "NSIS"),
     "C:\\Program Files (x86)\\NSIS",
     "C:\\Program Files\\NSIS",
+    "/opt/homebrew",
+    "/opt/homebrew/share/nsis",
+    "/usr/share/nsis",
+    "/usr/local/share/nsis",
   ].filter((entry): entry is string => entry != null && entry.length > 0);
   let updated = false;
   for (const cacheRoot of cacheRoots) {

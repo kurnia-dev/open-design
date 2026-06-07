@@ -119,12 +119,15 @@ async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
   const candidates = [
     "makensis.exe",
     "makensis",
+    "/opt/homebrew/bin/makensis",
+    "/usr/local/bin/makensis",
     "C:\\Program Files (x86)\\NSIS\\makensis.exe",
     "C:\\Program Files\\NSIS\\makensis.exe",
   ];
+  const versionFlag = process.platform === "win32" ? "/VERSION" : "-VERSION";
   for (const candidate of candidates) {
     try {
-      await execFileAsync(candidate, ["/VERSION"], { windowsHide: true });
+      await execFileAsync(candidate, [versionFlag], { windowsHide: true });
       return candidate;
     } catch {
       // Keep probing known locations.
@@ -207,6 +210,11 @@ if ($ids) {
 `;
 }
 
+function toWinPath(p: string): string {
+  if (process.platform === "win32") return p;
+  return "C:" + p.replace(/\//g, "\\");
+}
+
 async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths): Promise<void> {
   const identity = resolveWinInstallIdentity(config);
   const productName = escapeNsisString(identity.displayName);
@@ -217,7 +225,8 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths): Pr
   const appPathsKey = escapeNsisString(identity.appPathsKey);
   const namespace = escapeNsisString(config.namespace);
   const localDataRoot = `$APPDATA\\${escapeNsisString(PRODUCT_NAME)}\\namespaces\\${escapeNsisString(sanitizeNamespace(config.namespace))}`;
-  const nsisLogPath = escapeNsisString(paths.nsisLogPath);
+  const nsisLogPath = escapeNsisString(toWinPath(paths.nsisLogPath));
+  const nsisLogDir = escapeNsisString(toWinPath(dirname(paths.nsisLogPath)));
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
 
   await mkdir(dirname(paths.installerScriptPath), { recursive: true });
@@ -326,7 +335,7 @@ Var LX
 Function LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDir}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -353,7 +362,7 @@ FunctionEnd
 Function un.LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${escapeNsisString(dirname(paths.nsisLogPath))}"
+  CreateDirectory "${nsisLogDir}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -762,8 +771,25 @@ SectionEnd
 }
 
 function assertWinInstallerBuildPlatform(): void {
-  if (process.platform !== "win32") throw new Error("Windows installer build must run on Windows");
+  // Relaxed to support cross-compilation from macOS/Linux
 }
+
+export async function resolveSevenZipCommand(): Promise<string> {
+  if (process.platform === "win32") {
+    return winResources.sevenZipExe;
+  }
+  const candidates = ["7z", "7za"];
+  for (const candidate of candidates) {
+    try {
+      await execFileAsync(candidate, ["--help"], { windowsHide: true });
+      return candidate;
+    } catch {
+      // ignore
+    }
+  }
+  throw new Error("7z or 7za command line tool is required to pack Windows installer payloads on macOS/Linux. Please install it (e.g. `brew install p7zip`).");
+}
+
 
 function logWinInstallerProgress(message: string, fields: Record<string, unknown> = {}): void {
   const suffix = Object.entries(fields)
@@ -858,10 +884,11 @@ async function buildWinNsisPayloadArchive(
   await runSegment(`${phasePrefix}:input-snapshot`, async () => {
     Object.assign(payloadSnapshotDetails, await collectPathSnapshot(builtApp.unpackedRoot));
   }, payloadSnapshotDetails);
+  const sevenZipCommand = await runSegment(`${phasePrefix}:resolve-7z`, async () => resolveSevenZipCommand());
   await runSegment(phasePrefix, async () => {
     await runExecSegment(
       `${phasePrefix}:process`,
-      winResources.sevenZipExe,
+      sevenZipCommand,
       archiveArgs,
       { cwd: builtApp.unpackedRoot, outputPath },
     );
@@ -894,7 +921,7 @@ export async function buildWinNsisBasePayload(
       "-mx=1",
       "-ms=off",
       paths.installerBasePayloadPath,
-      ".\\*",
+      ".",
       ...WIN_NSIS_OVERLAY_RELATIVE_PATHS.map((relativePath) => `-x!${normalizeArchivePath(relativePath)}`),
     ],
   );
@@ -920,17 +947,18 @@ export async function buildWinNsisOverlayPayload(
     await runSegment("nsis:payload-overlay-7z:stage", async () => {
       await stageWinNsisOverlayPayload(builtApp, stageRoot);
     });
+    const sevenZipCommand = await runSegment("nsis:payload-overlay-7z:resolve-7z", async () => resolveSevenZipCommand());
     await runSegment("nsis:payload-overlay-7z", async () => {
       await runExecSegment(
         "nsis:payload-overlay-7z:process",
-        winResources.sevenZipExe,
+        sevenZipCommand,
         [
           "a",
           "-t7z",
           "-mx=1",
           "-ms=off",
           paths.installerOverlayPayloadPath,
-          ".\\*",
+          ".",
         ],
         { cwd: stageRoot, outputPath: paths.installerOverlayPayloadPath },
       );
@@ -965,15 +993,15 @@ export async function buildCustomWinNsisInstaller(
       "nsis:makensis:process",
       makensisCommand,
       [
-        "/V2",
-        `/DAPP_VERSION=${packagedVersion}`,
-        `/DOUTPUT_EXE=${paths.setupPath}`,
-        `/DPAYLOAD_BASE_7Z=${paths.installerBasePayloadPath}`,
-        `/DPAYLOAD_OVERLAY_7Z=${paths.installerOverlayPayloadPath}`,
-        `/DSEVEN_Z_EXE=${winResources.sevenZipExe}`,
-        `/DSEVEN_Z_DLL=${winResources.sevenZipDll}`,
-        `/DAPP_ICON=${paths.winIconPath}`,
-        `/DRUNNING_INSTANCES_PS1=${join(dirname(paths.installerScriptPath), "running-instances.ps1")}`,
+        "-V2",
+        `-DAPP_VERSION=${packagedVersion}`,
+        `-DOUTPUT_EXE=${paths.setupPath}`,
+        `-DPAYLOAD_BASE_7Z=${paths.installerBasePayloadPath}`,
+        `-DPAYLOAD_OVERLAY_7Z=${paths.installerOverlayPayloadPath}`,
+        `-DSEVEN_Z_EXE=${winResources.sevenZipExe}`,
+        `-DSEVEN_Z_DLL=${winResources.sevenZipDll}`,
+        `-DAPP_ICON=${paths.winIconPath}`,
+        `-DRUNNING_INSTANCES_PS1=${join(dirname(paths.installerScriptPath), "running-instances.ps1")}`,
         paths.installerScriptPath,
       ],
       { cwd: dirname(paths.installerScriptPath), outputPath: paths.setupPath },

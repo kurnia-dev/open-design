@@ -3519,6 +3519,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         ...customProviderFetchInit(providerUrl),
       });
       if (!profileResp.ok) {
+        const errText = await profileResp.text().catch(() => '');
+        console.error(`[project-routes] GET /api/github/auth-status - token validation failed. Status: ${profileResp.status} ${profileResp.statusText}. Response: ${errText}`);
         if (profileResp.status === 401) {
           if (!headerAccessToken) {
             await clearGitHubToken(dataDir);
@@ -3559,6 +3561,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         providerUrl
       });
     } catch (err: any) {
+      console.error('[project-routes] GET /api/github/auth-status error:', err);
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
     }
   });
@@ -3596,6 +3599,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       });
 
       if (!userResp.ok) {
+        const errText = await userResp.text().catch(() => '');
+        console.error(`[project-routes] GET /api/github/owners - Failed to fetch user profile. Status: ${userResp.status} ${userResp.statusText}. Response: ${errText}`);
         return sendApiError(res, userResp.status, 'BAD_REQUEST', `Failed to fetch user profile: ${userResp.statusText}`);
       }
 
@@ -3615,7 +3620,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (orgsResp.ok) {
         orgs = await orgsResp.json() as any[];
       } else {
-        console.warn(`[project-routes] Failed to fetch user orgs: ${orgsResp.statusText}`);
+        const errText = await orgsResp.text().catch(() => '');
+        console.error(`[project-routes] GET /api/github/owners - Failed to fetch user orgs. Status: ${orgsResp.status} ${orgsResp.statusText}. Response: ${errText}`);
       }
 
       const owners = [
@@ -3651,6 +3657,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
       }
 
+      const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim().toLowerCase() : null;
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 50;
+
       const providerUrl = tokenObj?.providerUrl;
       const getUrl = (pathStr: string) => {
         if (!providerUrl || providerUrl.includes('github.com')) {
@@ -3660,20 +3670,96 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return `${cleanBase}/api/v1${pathStr}`;
       };
 
-      const reposResp = await fetch(getUrl('/user/repos?per_page=100&sort=updated'), {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Accept': 'application/vnd.github+json',
-          ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
-        },
-        ...customProviderFetchInit(providerUrl),
-      });
+      const isGitHub = !providerUrl || providerUrl.includes('github.com');
+      let rawRepos: any[] = [];
 
-      if (!reposResp.ok) {
-        return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
+      if (q) {
+        // Fetch all repositories to perform server-side filtering
+        let currentPage = 1;
+        let actualPageSize: number | null = null;
+        const fetchPageSize = 100;
+
+        while (true) {
+          const queryParams = isGitHub
+            ? `per_page=${fetchPageSize}&page=${currentPage}&sort=updated`
+            : `limit=${fetchPageSize}&page=${currentPage}`;
+
+          const url = getUrl(`/user/repos?${queryParams}`);
+
+          const reposResp = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Accept': 'application/vnd.github+json',
+              ...(isGitHub ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
+              'User-Agent': 'Open-Design-Daemon',
+            },
+            ...customProviderFetchInit(providerUrl),
+          });
+
+          if (!reposResp.ok) {
+            const respText = await reposResp.text().catch(() => '');
+            return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
+          }
+
+          const pageRepos = (await reposResp.json()) as any[];
+          if (!Array.isArray(pageRepos) || pageRepos.length === 0) {
+            break;
+          }
+
+          if (actualPageSize === null) {
+            actualPageSize = pageRepos.length;
+          }
+
+          rawRepos.push(...pageRepos);
+
+          if (pageRepos.length < actualPageSize) {
+            break;
+          }
+          currentPage++;
+
+          if (currentPage > 10) {
+            console.warn(`[project-routes] GET /api/github/repos (search mode) - Reached pagination guard limit of 10 pages`);
+            break;
+          }
+        }
+
+        // Filter by query q
+        rawRepos = rawRepos.filter((repo) => {
+          const fullName = (repo.full_name || '').toLowerCase();
+          const desc = (repo.description || '').toLowerCase();
+          return fullName.includes(q) || desc.includes(q);
+        });
+
+        // Slice for pagination
+        const startIndex = (page - 1) * limit;
+        rawRepos = rawRepos.slice(startIndex, startIndex + limit);
+      } else {
+        // Standard single page fetch
+        const queryParams = isGitHub
+          ? `per_page=${limit}&page=${page}&sort=updated`
+          : `limit=${limit}&page=${page}`;
+
+        const url = getUrl(`/user/repos?${queryParams}`);
+
+        const reposResp = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/vnd.github+json',
+            ...(isGitHub ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
+            'User-Agent': 'Open-Design-Daemon',
+          },
+          ...customProviderFetchInit(providerUrl),
+        });
+
+        if (!reposResp.ok) {
+          const respText = await reposResp.text().catch(() => '');
+          console.error(`[project-routes] GET /api/github/repos (pagination mode) - Failed to fetch repos. Status: ${reposResp.status} ${reposResp.statusText}. Response: ${respText}`);
+          return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
+        }
+
+        rawRepos = (await reposResp.json()) as any[];
       }
 
-      const rawRepos = await reposResp.json() as any[];
       const repos = rawRepos.map((repo) => ({
         fullName: repo.full_name,
         cloneUrl: repo.clone_url,
@@ -3730,6 +3816,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       } else if (checkResp.ok) {
         return res.json({ available: false });
       } else {
+        const errText = await checkResp.text().catch(() => '');
+        console.error(`[project-routes] GET /api/github/repo-check - Failed to check repo. Status: ${checkResp.status} ${checkResp.statusText}. Response: ${errText}`);
         return sendApiError(res, checkResp.status, 'BAD_REQUEST', `Failed to check repo: ${checkResp.statusText}`);
       }
     } catch (err: any) {
@@ -3776,6 +3864,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       });
 
       if (!repoResp.ok) {
+        const errText = await repoResp.text().catch(() => '');
+        console.error(`[project-routes] GET /api/github/repo-info - Failed to fetch repo. Status: ${repoResp.status} ${repoResp.statusText}. Response: ${errText}`);
         return sendApiError(res, repoResp.status, 'BAD_REQUEST', `Failed to fetch repo: ${repoResp.statusText}`);
       }
 
@@ -3850,6 +3940,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       });
 
       if (!profileResp.ok) {
+        const errText = await profileResp.text().catch(() => '');
+        console.error(`[project-routes] POST /api/github/connect - Token validation failed. Status: ${profileResp.status} ${profileResp.statusText}. Response: ${errText}`);
         return sendApiError(res, profileResp.status, 'BAD_REQUEST', `GitHub token validation failed: ${profileResp.statusText}`);
       }
 
@@ -3931,7 +4023,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const data = await resp.json() as any;
-      console.log('GitHub Token Response:', data);
 
       if (data.error === 'authorization_pending') {
         return res.json({ pending: true });

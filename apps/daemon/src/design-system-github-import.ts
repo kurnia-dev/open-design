@@ -118,6 +118,7 @@ export async function importGitHubDesignSystemProject(
 
   try {
     options.onProgress?.('Cloning Git repository...');
+    console.log("cloneArgs", cloneArgs)
     await execGit(gitBin, cloneArgs, undefined, 120_000);
     const [detectedBranch, commit] = await Promise.all([
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),

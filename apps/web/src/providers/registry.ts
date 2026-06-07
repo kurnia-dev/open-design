@@ -2481,8 +2481,9 @@ export async function fetchGitHubAuthStatus(): Promise<GitHubAuthStatusResponse>
   return (await resp.json()) as GitHubAuthStatusResponse;
 }
 
-export async function fetchGitHubRepos(): Promise<GitHubReposResponse> {
-  const resp = await fetch('/api/github/repos');
+export async function fetchGitHubRepos(page = 1, limit = 50, q = ''): Promise<GitHubReposResponse> {
+  const qParam = q ? `&q=${encodeURIComponent(q)}` : '';
+  const resp = await fetch(`/api/github/repos?page=${page}&limit=${limit}${qParam}`);
   if (!resp.ok) {
     throw new Error(`Failed to fetch GitHub repos (${resp.status})`);
   }

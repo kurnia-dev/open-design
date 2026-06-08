@@ -1,4 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { createTabToTracking } from '@open-design/contracts/analytics';
 import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -77,37 +78,37 @@ const DESIGN_PLATFORMS: Array<{
   labelKey: keyof Dict;
   hintKey: keyof Dict;
 }> = [
-  {
-    value: 'responsive',
-    labelKey: 'newproj.platform.responsive.label',
-    hintKey: 'newproj.platform.responsive.hint',
-  },
-  {
-    value: 'web-desktop',
-    labelKey: 'newproj.platform.webDesktop.label',
-    hintKey: 'newproj.platform.webDesktop.hint',
-  },
-  {
-    value: 'mobile-ios',
-    labelKey: 'newproj.platform.mobileIos.label',
-    hintKey: 'newproj.platform.mobileIos.hint',
-  },
-  {
-    value: 'mobile-android',
-    labelKey: 'newproj.platform.mobileAndroid.label',
-    hintKey: 'newproj.platform.mobileAndroid.hint',
-  },
-  {
-    value: 'tablet',
-    labelKey: 'newproj.platform.tablet.label',
-    hintKey: 'newproj.platform.tablet.hint',
-  },
-  {
-    value: 'desktop-app',
-    labelKey: 'newproj.platform.desktopApp.label',
-    hintKey: 'newproj.platform.desktopApp.hint',
-  },
-];
+    {
+      value: 'responsive',
+      labelKey: 'newproj.platform.responsive.label',
+      hintKey: 'newproj.platform.responsive.hint',
+    },
+    {
+      value: 'web-desktop',
+      labelKey: 'newproj.platform.webDesktop.label',
+      hintKey: 'newproj.platform.webDesktop.hint',
+    },
+    {
+      value: 'mobile-ios',
+      labelKey: 'newproj.platform.mobileIos.label',
+      hintKey: 'newproj.platform.mobileIos.hint',
+    },
+    {
+      value: 'mobile-android',
+      labelKey: 'newproj.platform.mobileAndroid.label',
+      hintKey: 'newproj.platform.mobileAndroid.hint',
+    },
+    {
+      value: 'tablet',
+      labelKey: 'newproj.platform.tablet.label',
+      hintKey: 'newproj.platform.tablet.hint',
+    },
+    {
+      value: 'desktop-app',
+      labelKey: 'newproj.platform.desktopApp.label',
+      hintKey: 'newproj.platform.desktopApp.hint',
+    },
+  ];
 
 export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
 export type MediaSurface = 'image' | 'video' | 'audio';
@@ -243,9 +244,9 @@ export function buildDesignSystemCreateSelection(
 ): { primary: string | null; inspirations: string[] } {
   return showDesignSystemPicker
     ? {
-        primary: selectedIds[0] ?? null,
-        inspirations: selectedIds.slice(1),
-      }
+      primary: selectedIds[0] ?? null,
+      inspirations: selectedIds.slice(1),
+    }
     : { primary: null, inspirations: [] };
 }
 
@@ -1038,7 +1039,7 @@ export function NewProjectPanel({
               ? t('newproj.createFromTemplate')
               : tab === 'live-artifact'
                 ? t('newproj.createLiveArtifact')
-              : t('newproj.create')}
+                : t('newproj.create')}
           </span>
         </button>
         {onImportClaudeDesign ? (
@@ -1113,6 +1114,52 @@ function displayFolderName(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() ?? path;
 }
 
+function useDropdownPosition(
+  open: boolean,
+  triggerRef: React.RefObject<HTMLElement | null>,
+  popoverRef: React.RefObject<HTMLElement | null>
+) {
+  const [anchor, setAnchor] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return undefined;
+    function updateAnchor() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const gap = 6;
+      const margin = 12;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+      const spaceAbove = rect.top - gap - margin;
+      const openUp = spaceBelow < 320 && spaceAbove > spaceBelow;
+      if (openUp) {
+        setAnchor({
+          bottom: window.innerHeight - rect.top + gap,
+          left: rect.left,
+          width: rect.width,
+          maxHeight: Math.max(200, spaceAbove),
+        });
+      } else {
+        setAnchor({
+          top: rect.bottom + gap,
+          left: rect.left,
+          width: rect.width,
+          maxHeight: Math.max(200, spaceBelow),
+        });
+      }
+    }
+    updateAnchor();
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    return () => {
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [open, triggerRef]);
+
+  return anchor;
+}
+
 function PlatformPicker({
   value,
   onChange,
@@ -1123,7 +1170,10 @@ function PlatformPicker({
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const listboxId = useId();
+  const anchor = useDropdownPosition(open, triggerRef, popoverRef);
 
   function togglePlatform(next: NewProjectPlatform) {
     const active = value.includes(next);
@@ -1137,6 +1187,7 @@ function PlatformPicker({
     if (!open) return;
     function onPointer(e: MouseEvent) {
       if (wrapRef.current?.contains(e.target as Node)) return;
+      if (popoverRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -1166,6 +1217,7 @@ function PlatformPicker({
     >
       <label className="newproj-label">Target platforms</label>
       <button
+        ref={triggerRef}
         type="button"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
         onClick={() => setOpen((v) => !v)}
@@ -1188,13 +1240,23 @@ function PlatformPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
+      {open && anchor && typeof document !== 'undefined' ? createPortal(
         <div
+          ref={popoverRef}
           className="ds-picker-popover"
           id={listboxId}
           role="listbox"
           aria-label="Target platforms"
           aria-multiselectable="true"
+          style={{
+            position: 'fixed',
+            top: anchor.top !== undefined ? `${anchor.top}px` : undefined,
+            bottom: anchor.bottom !== undefined ? `${anchor.bottom}px` : undefined,
+            left: `${anchor.left}px`,
+            width: `${anchor.width}px`,
+            maxHeight: `${anchor.maxHeight}px`,
+            zIndex: 1000,
+          }}
         >
           <div className="ds-picker-list">
             {DESIGN_PLATFORMS.map((option) => {
@@ -1222,7 +1284,8 @@ function PlatformPicker({
               );
             })}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
@@ -1569,17 +1632,16 @@ function TemplatePicker({
       ) : (
         <div className="template-list">
           {templates.map((tpl) => {
-            const fallbackDesc = `${t('newproj.savedTemplate')} · ${tpl.files.length} ${
-              tpl.files.length === 1
+            const fallbackDesc = `${t('newproj.savedTemplate')} · ${tpl.files.length} ${tpl.files.length === 1
                 ? t('newproj.fileSingular')
                 : t('newproj.filePlural')
-            }`;
+              }`;
             return (
               <TemplateOption
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
-                onDelete={onDelete ? () => setConfirmDelete({ id: tpl.id, name: tpl.name }) : () => {}}
+                onDelete={onDelete ? () => setConfirmDelete({ id: tpl.id, name: tpl.name }) : () => { }}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1663,6 +1725,9 @@ function PromptTemplatePicker({
     useState<PromptTemplateSummary | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const anchor = useDropdownPosition(open, triggerRef, popoverRef);
 
   const surfaceScoped = useMemo(
     () => templates.filter((tpl) => tpl.surface === surface),
@@ -1692,6 +1757,7 @@ function PromptTemplatePicker({
     if (!open) return;
     function onPointer(e: MouseEvent) {
       if (wrapRef.current?.contains(e.target as Node)) return;
+      if (popoverRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -1751,6 +1817,7 @@ function PromptTemplatePicker({
     <div className="newproj-section ds-picker prompt-template-picker" ref={wrapRef}>
       <label className="newproj-label">{t('newproj.promptTemplateLabel')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="prompt-template-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${value ? '' : ' empty'}`}
@@ -1770,8 +1837,21 @@ function PromptTemplatePicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && anchor && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={popoverRef}
+          className="ds-picker-popover"
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: anchor.top !== undefined ? `${anchor.top}px` : undefined,
+            bottom: anchor.bottom !== undefined ? `${anchor.bottom}px` : undefined,
+            left: `${anchor.left}px`,
+            width: `${anchor.width}px`,
+            maxHeight: `${anchor.maxHeight}px`,
+            zIndex: 1000,
+          }}
+        >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -1842,7 +1922,8 @@ function PromptTemplatePicker({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
       {error ? (
         <div
@@ -1994,6 +2075,45 @@ function DesignSystemPicker({
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const [anchor, setAnchor] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return undefined;
+    function updateAnchor() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const gap = 6;
+      const margin = 12;
+      const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+      const spaceAbove = rect.top - gap - margin;
+      const openUp = spaceBelow < 320 && spaceAbove > spaceBelow;
+      if (openUp) {
+        setAnchor({
+          bottom: window.innerHeight - rect.top + gap,
+          left: rect.left,
+          width: rect.width,
+          maxHeight: Math.max(200, spaceAbove),
+        });
+      } else {
+        setAnchor({
+          top: rect.bottom + gap,
+          left: rect.left,
+          width: rect.width,
+          maxHeight: Math.max(200, spaceBelow),
+        });
+      }
+    }
+    updateAnchor();
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    return () => {
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [open]);
 
   const byId = useMemo(() => {
     const map = new Map<string, DesignSystemSummary>();
@@ -2044,6 +2164,7 @@ function DesignSystemPicker({
     if (!open) return;
     function onPointer(e: MouseEvent) {
       if (wrapRef.current?.contains(e.target as Node)) return;
+      if (popoverRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2103,6 +2224,7 @@ function DesignSystemPicker({
     <div className="newproj-section ds-picker" data-testid="design-system-picker" ref={wrapRef}>
       <label className="newproj-label">{t('newproj.designSystem')}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="design-system-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -2133,8 +2255,21 @@ function DesignSystemPicker({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && anchor && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={popoverRef}
+          className="ds-picker-popover"
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: anchor.top !== undefined ? `${anchor.top}px` : undefined,
+            bottom: anchor.bottom !== undefined ? `${anchor.bottom}px` : undefined,
+            left: `${anchor.left}px`,
+            width: `${anchor.width}px`,
+            maxHeight: `${anchor.maxHeight}px`,
+            zIndex: 1000,
+          }}
+        >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2226,7 +2361,8 @@ function DesignSystemPicker({
               </button>
             </div>
           ) : null}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
@@ -2334,35 +2470,35 @@ function fallbackSwatches(seed: string): string[] {
 
 function MediaProjectOptions(props:
   | {
-      surface: 'image';
-      imageModel: string;
-      imageAspect: MediaAspect;
-      mediaProviders?: Record<string, MediaProviderCredentials>;
-      onImageModel: (value: string) => void;
-      onImageAspect: (value: MediaAspect) => void;
-    }
+    surface: 'image';
+    imageModel: string;
+    imageAspect: MediaAspect;
+    mediaProviders?: Record<string, MediaProviderCredentials>;
+    onImageModel: (value: string) => void;
+    onImageAspect: (value: MediaAspect) => void;
+  }
   | {
-      surface: 'video';
-      videoModel: string;
-      videoAspect: MediaAspect;
-      videoLength: number;
-      mediaProviders?: Record<string, MediaProviderCredentials>;
-      onVideoModel: (value: string) => void;
-      onVideoAspect: (value: MediaAspect) => void;
-      onVideoLength: (value: number) => void;
-    }
+    surface: 'video';
+    videoModel: string;
+    videoAspect: MediaAspect;
+    videoLength: number;
+    mediaProviders?: Record<string, MediaProviderCredentials>;
+    onVideoModel: (value: string) => void;
+    onVideoAspect: (value: MediaAspect) => void;
+    onVideoLength: (value: number) => void;
+  }
   | {
-      surface: 'audio';
-      audioKind: AudioKind;
-      audioModel: string;
-      audioDuration: number;
-      voice: string;
-      mediaProviders?: Record<string, MediaProviderCredentials>;
-      onAudioKind: (value: AudioKind) => void;
-      onAudioModel: (value: string) => void;
-      onAudioDuration: (value: number) => void;
-      onVoice: (value: string) => void;
-    }
+    surface: 'audio';
+    audioKind: AudioKind;
+    audioModel: string;
+    audioDuration: number;
+    voice: string;
+    mediaProviders?: Record<string, MediaProviderCredentials>;
+    onAudioKind: (value: AudioKind) => void;
+    onAudioModel: (value: string) => void;
+    onAudioDuration: (value: number) => void;
+    onVoice: (value: string) => void;
+  }
 ) {
   const t = useT();
   const aihubmixImageModels = useAIHubMixImageModels();
@@ -2494,6 +2630,9 @@ function MediaModelCards({
   const [query, setQuery] = useState('');
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const anchor = useDropdownPosition(open, triggerRef, popoverRef);
 
   // Group models by provider once. The trigger row needs the same provider
   // metadata (label + status) to render the selected model's caption, so we
@@ -2580,6 +2719,7 @@ function MediaModelCards({
     if (!open) return;
     function onPointer(e: MouseEvent) {
       if (wrapRef.current?.contains(e.target as Node)) return;
+      if (popoverRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -2617,6 +2757,7 @@ function MediaModelCards({
     <div className="newproj-section ds-picker model-picker" ref={wrapRef}>
       <label className="newproj-label">{label}</label>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="model-picker-trigger"
         className={`ds-picker-trigger${open ? ' open' : ''}${selected ? '' : ' empty'}`}
@@ -2635,8 +2776,21 @@ function MediaModelCards({
           style={{ transform: open ? 'rotate(180deg)' : undefined }}
         />
       </button>
-      {open ? (
-        <div className="ds-picker-popover" role="listbox">
+      {open && anchor && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={popoverRef}
+          className="ds-picker-popover"
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: anchor.top !== undefined ? `${anchor.top}px` : undefined,
+            bottom: anchor.bottom !== undefined ? `${anchor.bottom}px` : undefined,
+            left: `${anchor.left}px`,
+            width: `${anchor.width}px`,
+            maxHeight: `${anchor.maxHeight}px`,
+            zIndex: 1000,
+          }}
+        >
           <div className="ds-picker-head">
             <input
               ref={searchRef}
@@ -2693,7 +2847,8 @@ function MediaModelCards({
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
@@ -2956,11 +3111,11 @@ function buildPromptTemplateMetadata(
       aspect: summary.aspect,
       source: summary.source
         ? {
-            repo: summary.source.repo,
-            license: summary.source.license,
-            author: summary.source.author,
-            url: summary.source.url,
-          }
+          repo: summary.source.repo,
+          license: summary.source.license,
+          author: summary.source.author,
+          url: summary.source.url,
+        }
         : undefined,
     },
   };

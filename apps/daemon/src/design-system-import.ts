@@ -643,7 +643,7 @@ export async function startDevScript(dir: string): Promise<void> {
                 if (parts.length >= 5 && parts[3] === 'LISTENING') {
                   const localAddress = parts[1];
                   const pidStr = parts[4];
-                  if (localAddress.endsWith(`:${port}`)) {
+                  if (localAddress && pidStr && localAddress.endsWith(`:${port}`)) {
                     const pid = Number(pidStr);
                     if (!isNaN(pid) && pid > 0) {
                       pids.add(pid);
@@ -671,7 +671,7 @@ export async function startDevScript(dir: string): Promise<void> {
           if (pids.size > 0) {
             for (const pid of pids) {
               console.log(`[design-system-import] Port ${port} is in use by PID ${pid}. Terminating it.`);
-              try { process.kill(pid, 'SIGKILL'); } catch {}
+              try { process.kill(pid, 'SIGKILL'); } catch { }
             }
             await new Promise((resolve) => setTimeout(resolve, 500));
           }

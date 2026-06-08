@@ -1295,7 +1295,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      console.error(
+        `[project-routes] Error in POST /api/projects for project id: ${req.body?.id}, designSystemId: ${req.body?.designSystemId}:`,
+        err
+      );
+      sendApiError(
+        res,
+        500,
+        'INTERNAL_SERVER_ERROR',
+        err instanceof Error ? err.message : String(err)
+      );
     }
   });
 

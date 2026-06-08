@@ -56,10 +56,11 @@ const MONO_ICONS = new Set([
 
 export function AgentIcon({ id, size = 36, className }: Props) {
   const cls = 'agent-icon' + (className ? ' ' + className : '');
-  const ext = ICON_EXT[id];
+  const assetId = (id.startsWith('antigravity') || id.startsWith('agy')) ? 'antigravity' : id;
+  const ext = ICON_EXT[assetId];
   if (ext) {
-    if (ext === 'svg' && MONO_ICONS.has(id)) {
-      const src = `/agent-icons/${id}.svg`;
+    if (ext === 'svg' && MONO_ICONS.has(assetId)) {
+      const src = `/agent-icons/${assetId}.svg`;
       const style: CSSProperties = {
         width: size,
         height: size,
@@ -76,7 +77,7 @@ export function AgentIcon({ id, size = 36, className }: Props) {
     }
     return (
       <img
-        src={`/agent-icons/${id}.${ext}`}
+        src={`/agent-icons/${assetId}.${ext}`}
         alt=""
         width={size}
         height={size}

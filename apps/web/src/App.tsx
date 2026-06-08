@@ -1185,20 +1185,25 @@ function AppInner() {
       const fidelity = fidelityToTracking(input.metadata?.fidelity ?? null);
       const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
         kind === 'template' ? 'template' : 'blank';
-      const result = await createProject({
-        name: input.name,
-        skillId: input.skillId,
-        designSystemId: input.designSystemId,
-        pendingPrompt: derivedPendingPrompt,
-        metadata: input.metadata,
-        ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
-        ...(input.pluginId ? { pluginId: input.pluginId } : {}),
-        ...(input.appliedPluginSnapshotId
-          ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
-          : {}),
-        ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
-      });
-      if (!result) {
+      let result;
+      try {
+        result = await createProject({
+          name: input.name,
+          skillId: input.skillId,
+          designSystemId: input.designSystemId,
+          pendingPrompt: derivedPendingPrompt,
+          metadata: input.metadata,
+          ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
+          ...(input.pluginId ? { pluginId: input.pluginId } : {}),
+          ...(input.appliedPluginSnapshotId
+            ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
+            : {}),
+          ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+        });
+        if (!result) {
+          throw new Error('CREATE_REQUEST_FAILED');
+        }
+      } catch (err) {
         trackProjectCreateResult(
           analytics.track,
           {
@@ -1209,11 +1214,11 @@ function AppInner() {
             project_kind: projectKindToTracking(kind),
             fidelity,
             result: 'failed',
-            error_code: 'CREATE_REQUEST_FAILED',
+            error_code: err instanceof Error ? err.message : 'CREATE_REQUEST_FAILED',
           },
           { requestId: input.requestId },
         );
-        return false;
+        throw err;
       }
       const pendingFiles = Array.isArray(input.pendingFiles)
         ? input.pendingFiles.filter((file): file is File => file instanceof File)

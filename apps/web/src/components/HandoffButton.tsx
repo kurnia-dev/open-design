@@ -68,6 +68,7 @@ const CLI_ORDER = [
   'kilo',
   'vibe',
   'antigravity',
+  'antigravity-ide',
   'aider',
   'trae-cli',
   'pi',
@@ -92,7 +93,8 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
   { id: 'kiro', name: 'Kiro CLI', bin: 'kiro-cli', available: false },
   { id: 'kilo', name: 'Kilo', bin: 'kilo', available: false },
   { id: 'vibe', name: 'Mistral Vibe CLI', bin: 'vibe-acp', available: false },
-  { id: 'antigravity', name: 'Antigravity', bin: 'agy', available: false },
+  { id: 'antigravity', name: 'Antigravity Chat (Standalone)', bin: 'agy', available: false },
+  { id: 'antigravity-ide', name: 'Antigravity IDE Chat', bin: 'antigravity-ide chat', available: false },
   { id: 'aider', name: 'Aider', bin: 'aider', available: false },
   { id: 'trae-cli', name: 'Trae CLI', bin: 'traecli', available: false },
   { id: 'pi', name: 'Pi', bin: 'pi', available: false },
@@ -147,18 +149,23 @@ function writePreferredFramework(id: string): void {
 }
 
 function cliDisplayName(agent: Pick<CliTarget, 'id' | 'name'>): string {
-  return agent.id === 'amr' ? 'Open Design AMR' : agent.name;
+  if (agent.id === 'amr') return 'Open Design AMR';
+  if (agent.id === 'antigravity') return 'Antigravity Chat (Standalone)';
+  if (agent.id === 'antigravity-ide') return 'Antigravity IDE Chat';
+  return agent.name;
 }
 
-function mergeCliTargets(agents: AgentInfo[] | undefined): CliTarget[] {
+function mergeCliTargets(agents: AgentInfo[] | undefined, isAntigravityIdeInstalled?: boolean): CliTarget[] {
   const byId = new Map<string, CliTarget>();
   for (const target of FALLBACK_CLI_TARGETS) {
-    byId.set(target.id, target);
+    const available = target.id === 'antigravity-ide' ? !!isAntigravityIdeInstalled : target.available;
+    byId.set(target.id, { ...target, available });
   }
   for (const agent of agents ?? []) {
+    const fallback = byId.get(agent.id);
     byId.set(agent.id, {
       id: agent.id,
-      name: cliDisplayName(agent),
+      name: fallback?.name ?? cliDisplayName(agent),
       bin: agent.bin,
       available: agent.available,
       version: agent.version,
@@ -345,7 +352,8 @@ export function HandoffButton({
   const primaryTitle = primary
     ? t('handoff.openInTarget', { target: primary.label })
     : t('handoff.action');
-  const cliTargets = useMemo(() => mergeCliTargets(agents), [agents]);
+  const isAntigravityIdeInstalled = editors.some((e) => e.id === 'antigravity' && e.available);
+  const cliTargets = useMemo(() => mergeCliTargets(agents, isAntigravityIdeInstalled), [agents, isAntigravityIdeInstalled]);
   const availableCliTargets = cliTargets.filter((cli) => cli.available);
   const unavailableCliTargets = cliTargets.filter((cli) => !cli.available);
   const selectedFramework =

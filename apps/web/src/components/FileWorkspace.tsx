@@ -2156,7 +2156,7 @@ export function FileWorkspace({
                 {designSystemProject.devServerUrl}
               </span>
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
                 onClick={() => {
                   const iframe = document.getElementById('dev-server-preview-iframe') as HTMLIFrameElement | null;

@@ -92,12 +92,19 @@ function qoderLogo(size: number) {
 function antigravityLogo(size: number) {
   const s = size * 0.78;
   return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect width="24" height="24" rx="5" fill="#f8fafd" />
-      <path d="M6.5 15.4c1.5 2.4 5.1 3.2 8 1.8 2.9-1.4 4.2-4.5 2.7-6.9" stroke="#4285f4" strokeWidth="2.1" strokeLinecap="round" />
-      <path d="M17.5 8.6c-1.5-2.4-5.1-3.2-8-1.8-2.9 1.4-4.2 4.5-2.7 6.9" stroke="#ea4335" strokeWidth="2.1" strokeLinecap="round" />
-      <path d="M8.2 8.3 12 12l3.8 3.7" stroke="#34a853" strokeWidth="2.1" strokeLinecap="round" />
-      <circle cx="12" cy="12" r="2" fill="#fbbc04" />
+    <svg width={s} height={s} viewBox="-2 -1 28 28" aria-hidden="true">
+      <path
+        d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z"
+        fill="url(#ag)"
+      />
+      <defs>
+        <linearGradient id="ag" x1="2" y1="12" x2="22" y2="12" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#4285F4" />
+          <stop offset=".33" stopColor="#EA4335" />
+          <stop offset=".66" stopColor="#FBBC04" />
+          <stop offset="1" stopColor="#34A853" />
+        </linearGradient>
+      </defs>
     </svg>
   );
 }
@@ -117,6 +124,7 @@ const EDITORS: Record<string, EditorVisual> = {
   zed: { bg: '#1348DC', fg: '#ffffff', glyph: simplePath(zedPath) },
   qoder: { bg: '#ffb15e', fg: '#1f2937', glyph: qoderLogo },
   antigravity: { bg: '#ffffff', fg: '#1f2937', glyph: antigravityLogo },
+  'antigravity-ide': { bg: '#ffffff', fg: '#1f2937', glyph: antigravityLogo },
   webstorm: { bg: '#000000', fg: '#ffffff', glyph: simplePath(webstormPath) },
   idea: { bg: '#000000', fg: '#ffffff', glyph: simplePath(ideaPath) },
   xcode: { bg: '#147EFB', fg: '#ffffff', glyph: simplePath(xcodePath) },

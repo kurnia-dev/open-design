@@ -83,14 +83,28 @@ export async function createProject(input: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...input }),
     });
-    if (!resp.ok) return null;
-    return (await resp.json()) as {
+    if (!resp.ok) {
+      let errText = '';
+      try {
+        errText = await resp.text();
+      } catch {}
+      let errorMessage = '';
+      try {
+        const errorJson = JSON.parse(errText);
+        if (errorJson && typeof errorJson === 'object' && errorJson.error && typeof errorJson.error.message === 'string') {
+          errorMessage = errorJson.error.message;
+        }
+      } catch {}
+      throw new Error(errorMessage || `Failed to create project (HTTP ${resp.status})`);
+    }
+    const result = (await resp.json()) as {
       project: Project;
       conversationId: string;
       appliedPluginSnapshotId?: string;
     };
-  } catch {
-    return null;
+    return result;
+  } catch (err) {
+    throw err;
   }
 }
 

@@ -586,6 +586,7 @@ export async function installDependencies(dir: string): Promise<void> {
       cwd: dir,
       timeout: 300_000, // 5 minutes
       maxBuffer: 10 * 1024 * 1024,
+      shell: process.platform === 'win32',
     });
   } catch (err) {
     // Non-fatal: the project is still usable without node_modules for
@@ -695,6 +696,7 @@ export async function startDevScript(dir: string): Promise<void> {
       cwd: resolvedDir,
       detached: true,
       stdio: ['ignore', 'ignore', 'pipe'],
+      shell: process.platform === 'win32',
     });
 
     child.stderr?.on('data', (chunk) => {

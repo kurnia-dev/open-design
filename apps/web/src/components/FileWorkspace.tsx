@@ -2130,6 +2130,25 @@ export function FileWorkspace({
             generating={questionsGenerating}
             onSubmit={(text) => onSubmitQuestionForm?.(text)}
           />
+        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+          <DesignSystemProjectPanel
+            projectId={projectId}
+            system={designSystemProject}
+            files={visibleFiles}
+            streaming={Boolean(streaming)}
+            activityEvents={designSystemActivityEvents}
+            onOpenFile={openFile}
+            onUploadAssets={() => fileInputRef.current?.click()}
+            defaultDesignSystemId={defaultDesignSystemId}
+            onSetDefaultDesignSystem={onSetDefaultDesignSystem}
+            onDesignSystemsRefresh={onDesignSystemsRefresh}
+            onNeedsWork={onDesignSystemNeedsWork}
+            designSystemReview={designSystemReview}
+            onReviewDecision={onDesignSystemReviewDecision}
+            onUseDesignSystem={onUseDesignSystem}
+            onConnectRepo={onConnectRepo}
+            githubConnected={githubConnected}
+          />
         ) : activeTab === DEV_SERVER_PREVIEW_TAB && designSystemProject?.devServerUrl ? (
           <div className="dev-server-preview" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: 'var(--bg, #0c0d0e)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid var(--border-subtle, #202224)', background: 'var(--chrome-bg, #121315)' }}>

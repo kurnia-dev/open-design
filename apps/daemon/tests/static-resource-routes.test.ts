@@ -93,6 +93,7 @@ describe('static resource mutation routes', () => {
     ['POST', '/api/design-systems/install'],
     ['POST', '/api/design-systems/import/local'],
     ['POST', '/api/design-systems/import/github'],
+    ['POST', '/api/design-systems/import/git'],
     ['POST', '/api/design-systems/import/shadcn'],
     ['DELETE', '/api/design-systems/demo-system'],
   ])('rejects cross-origin %s %s before catalog or filesystem work', async (method, route) => {

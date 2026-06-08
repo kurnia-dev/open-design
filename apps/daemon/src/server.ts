@@ -223,6 +223,7 @@ import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
+import { installDependencies, startDevScript } from './design-system-import.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure } from './run-failure-classification.js';
@@ -784,10 +785,10 @@ export function resolveChatExtraAllowedDirs({
   const candidates = isCodex
     ? [codexGeneratedImagesDir]
     : [
-        skillsDir,
-        designSystemsDir,
-        ...(Array.isArray(linkedDirs) ? linkedDirs : []),
-      ];
+      skillsDir,
+      designSystemsDir,
+      ...(Array.isArray(linkedDirs) ? linkedDirs : []),
+    ];
   return Array.from(
     new Set(
       candidates.filter(
@@ -873,10 +874,10 @@ export function normalizeCommentAttachments(input) {
       const memberCount =
         selectionKind === 'pod'
           ? (podMembers.length > 0
-              ? podMembers.length
-              : Number.isFinite(raw.memberCount)
-                ? Math.max(0, Math.round(raw.memberCount))
-                : 0)
+            ? podMembers.length
+            : Number.isFinite(raw.memberCount)
+              ? Math.max(0, Math.round(raw.memberCount))
+              : 0)
           : 0;
       return {
         id: cleanString(raw.id) || `comment-${index + 1}`,
@@ -1426,7 +1427,7 @@ export function registerStaticSpaFallback(app, staticDir) {
 function defaultMarketplaceSeedConfig(id) {
   return {
     trust: id === OFFICIAL_MARKETPLACE_ID ? 'official' : 'restricted',
-    url:   marketplaceManifestUrlForRegistry(id),
+    url: marketplaceManifestUrlForRegistry(id),
   };
 }
 
@@ -1481,17 +1482,17 @@ function createMarketplaceFetcher(seedId, bundledMarketplaceEntries) {
       const manifestText = await marketplaceSeedManifestText(registryId, bundledMarketplaceEntries);
       if (manifestText != null) {
         return {
-          ok:     true,
+          ok: true,
           status: 200,
-          text:   async () => manifestText,
+          text: async () => manifestText,
         };
       }
     }
     const response = await fetch(url, { redirect: 'follow' });
     return {
-      ok:     response.ok,
+      ok: response.ok,
       status: response.status,
-      text:   () => response.text(),
+      text: () => response.text(),
     };
   };
 }
@@ -1734,7 +1735,7 @@ function emitLiveArtifactEvent(grant, action, artifact) {
   if (action === 'created' && grant?.runId) {
     const handle = activeChatRunHandles.get(grant.runId);
     if (handle?.noteArtifactRegistered) {
-      try { handle.noteArtifactRegistered(); } catch {}
+      try { handle.noteArtifactRegistered(); } catch { }
     }
   }
   return emitted;
@@ -2865,10 +2866,10 @@ function pinAssistantMessageOnRunCreate(db, run) {
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
     saved &&
-      saved.runId &&
-      typeof saved.runStatus === 'string' &&
-      TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
-      body?.telemetryFinalized === true,
+    saved.runId &&
+    typeof saved.runStatus === 'string' &&
+    TERMINAL_RUN_STATUSES.has(saved.runStatus) &&
+    body?.telemetryFinalized === true,
   );
 }
 
@@ -3120,7 +3121,7 @@ async function checkCloudflarePagesDeploymentLinks(existing) {
         ? 'Custom domain is ready.'
         : failedByApi
           ? 'Cloudflare Pages reported a custom-domain error.'
-        : customResult.statusMessage || customDomain.statusMessage || 'Custom domain is still being prepared.',
+          : customResult.statusMessage || customDomain.statusMessage || 'Custom domain is still being prepared.',
     };
   }
   const cloudflarePages = {
@@ -4168,8 +4169,8 @@ async function runPluginShareTask(task, folder) {
   task.result = {
     message: url
       ? (task.action === 'publish-github'
-          ? `Published plugin to ${url}.`
-          : `Opened Open Design PR flow at ${url}.`)
+        ? `Published plugin to ${url}.`
+        : `Opened Open Design PR flow at ${url}.`)
       : share.successMessage,
     ...(url ? { url } : {}),
     log: stepLog,
@@ -4427,7 +4428,7 @@ export function applyClaudeStreamJsonRunBookkeeping(
   run.turnCompletedCleanly = true;
   if (run.stdinOpen) {
     if (run.child?.stdin && !run.child.stdin.destroyed) {
-      try { run.child.stdin.end(); } catch {}
+      try { run.child.stdin.end(); } catch { }
     }
     run.stdinOpen = false;
   }
@@ -4690,21 +4691,21 @@ export async function startServer({
     const existing = getProject(db, projectId);
     const project = existing
       ? updateProject(db, projectId, {
-          name: summary.title,
-          designSystemId: id,
-          metadata: { ...existing.metadata, ...metadata },
-          updatedAt: now,
-        })
+        name: summary.title,
+        designSystemId: id,
+        metadata: { ...existing.metadata, ...metadata },
+        updatedAt: now,
+      })
       : insertProject(db, {
-          id: projectId,
-          name: summary.title,
-          skillId: null,
-          designSystemId: id,
-          pendingPrompt: null,
-          metadata,
-          createdAt: now,
-          updatedAt: now,
-        });
+        id: projectId,
+        name: summary.title,
+        skillId: null,
+        designSystemId: id,
+        pendingPrompt: null,
+        metadata,
+        createdAt: now,
+        updatedAt: now,
+      });
     if (!project) return null;
 
     const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, id);
@@ -4732,6 +4733,20 @@ export async function startServer({
     }
     await removeLegacyDesignSystemWorkspaceArtifacts(project);
     await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
+    console.log("ensureUserDesignSystemWorkspaceProject: project updated");
+    const dirId = id.startsWith('user:') ? id.slice('user:'.length) : id;
+    const systemDir = path.join(USER_DESIGN_SYSTEMS_DIR, dirId);
+    void (async () => {
+      try {
+        console.log("ensureUserDesignSystemWorkspaceProject: installing dependencies");
+        await installDependencies(systemDir);
+        console.log("ensureUserDesignSystemWorkspaceProject: dependencies installed");
+        await startDevScript(systemDir);
+        console.log("ensureUserDesignSystemWorkspaceProject: dev script started");
+      } catch (err) {
+        console.warn(`[ensureUserDesignSystemWorkspaceProject] setup failed:`, err);
+      }
+    })();
     const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
     return { project, files: projectFiles };
   }
@@ -4903,7 +4918,7 @@ export async function startServer({
   if (mediaReconcile.interrupted > 0 || mediaReconcile.deleted > 0) {
     console.warn(
       `[media] reconcileMediaTasksOnBoot interrupted ${mediaReconcile.interrupted} task(s), ` +
-        `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
+      `deleted ${mediaReconcile.deleted} expired terminal task(s)`,
     );
   }
   mediaTasks.clear();
@@ -4928,22 +4943,22 @@ export async function startServer({
       bundledRoot: BUNDLED_PLUGINS_DIR,
       marketplaceProvenance: {
         sourceMarketplaceId: OFFICIAL_MARKETPLACE_ID,
-        marketplaceTrust:    'official',
-        entryNamePrefix:     'open-design',
+        marketplaceTrust: 'official',
+        entryNamePrefix: 'open-design',
       },
     });
     bundledMarketplaceEntries = result.registered.map((plugin) => ({
-      name:        `open-design/${plugin.id}`,
-      title:       plugin.title,
-      title_i18n:  plugin.manifest.title_i18n,
+      name: `open-design/${plugin.id}`,
+      title: plugin.title,
+      title_i18n: plugin.manifest.title_i18n,
       description: plugin.manifest.description,
       description_i18n: plugin.manifest.description_i18n,
-      version:     plugin.version,
-      source:      bundledPluginRegistrySource(plugin.source),
-      publisher:   { id: 'open-design', url: 'https://open-design.ai' },
-      homepage:    plugin.manifest.homepage,
-      license:     plugin.manifest.license,
-      tags:        plugin.manifest.tags,
+      version: plugin.version,
+      source: bundledPluginRegistrySource(plugin.source),
+      publisher: { id: 'open-design', url: 'https://open-design.ai' },
+      homepage: plugin.manifest.homepage,
+      license: plugin.manifest.license,
+      tags: plugin.manifest.tags,
       capabilitiesSummary: Array.isArray(plugin.manifest.od?.capabilities)
         ? plugin.manifest.od.capabilities
         : undefined,
@@ -5011,7 +5026,7 @@ export async function startServer({
       orbitService.configure(config.orbit);
       return detectAgents(config.agentCliEnv ?? {});
     })
-    .catch(() => detectAgents().catch(() => {}));
+    .catch(() => detectAgents().catch(() => { }));
 
   await recoverStaleLiveArtifactRefreshes({ projectsRoot: PROJECTS_DIR }).catch((error) => {
     console.warn('[od] Failed to recover stale live artifact refreshes:', error);
@@ -5274,7 +5289,7 @@ export async function startServer({
       res.json({
         ok: true,
         beforeBytes: before.sizeBytes,
-        afterBytes:  after.sizeBytes,
+        afterBytes: after.sizeBytes,
         reclaimedBytes: Math.max(0, before.sizeBytes - after.sizeBytes),
         elapsedMs,
       });
@@ -6098,7 +6113,7 @@ export async function startServer({
   app.delete('/api/projects/:id', async (req, res) => {
     try {
       dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => { });
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -6134,12 +6149,12 @@ export async function startServer({
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt) => {
         sse.send('file-changed', evt);
       }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
+      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => { });
       const cleanup = () => {
         if (sub) {
           const { unsubscribe } = sub;
           sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
+          Promise.resolve(unsubscribe()).catch(() => { });
         }
         const currentSinks = activeProjectEventSinks.get(req.params.id);
         currentSinks?.delete(projectEventSink);
@@ -6148,7 +6163,7 @@ export async function startServer({
       res.on('close', cleanup);
       res.on('finish', cleanup);
     } catch (err) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
+      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => { });
       if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
@@ -7318,7 +7333,7 @@ export async function startServer({
         if (!od.pipeline || !Array.isArray(od.pipeline.stages) || od.pipeline.stages.length === 0) continue;
         const taskKind = (od.taskKind ?? 'new-generation') as ScenarioEntry['taskKind'];
         if (taskKind !== 'new-generation' && taskKind !== 'figma-migration' &&
-            taskKind !== 'code-migration' && taskKind !== 'tune-collab') continue;
+          taskKind !== 'code-migration' && taskKind !== 'tune-collab') continue;
         const entry: ScenarioEntry = { id: row.id, taskKind, pipeline: od.pipeline };
         const existing = byTaskKind.get(taskKind);
         if (!existing || entry.id === `od-${taskKind}`) {
@@ -7531,9 +7546,9 @@ export async function startServer({
       try {
         const { recordPluginEvent } = await import('./plugins/events.js');
         recordPluginEvent({
-          kind:     'plugin.trust-changed',
+          kind: 'plugin.trust-changed',
           pluginId: req.params.id,
-          details:  { action, capabilities: accepted, total: next.length },
+          details: { action, capabilities: accepted, total: next.length },
         });
       } catch {
         // ignore — event recording never blocks the trust mutation.
@@ -7710,13 +7725,13 @@ export async function startServer({
       const ext = path.extname(contentPath).toLowerCase();
       const ct =
         ext === '.html' ? 'text/html; charset=utf-8'
-        : ext === '.js'  ? 'application/javascript; charset=utf-8'
-        : ext === '.css' ? 'text/css; charset=utf-8'
-        : ext === '.json' ? 'application/json; charset=utf-8'
-        : ext === '.svg' ? 'image/svg+xml'
-        : ext === '.png' ? 'image/png'
-        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-        : 'application/octet-stream';
+          : ext === '.js' ? 'application/javascript; charset=utf-8'
+            : ext === '.css' ? 'text/css; charset=utf-8'
+              : ext === '.json' ? 'application/json; charset=utf-8'
+                : ext === '.svg' ? 'image/svg+xml'
+                  : ext === '.png' ? 'image/png'
+                    : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+                      : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       if (ext === '.html' && typeof contentRel === 'string') {
         buf = Buffer.from(
@@ -8002,13 +8017,13 @@ export async function startServer({
       const ext = path.extname(resolved).toLowerCase();
       const ct =
         ext === '.html' ? 'text/html; charset=utf-8'
-        : ext === '.js'  ? 'application/javascript; charset=utf-8'
-        : ext === '.css' ? 'text/css; charset=utf-8'
-        : ext === '.json' ? 'application/json; charset=utf-8'
-        : ext === '.svg' ? 'image/svg+xml'
-        : ext === '.png' ? 'image/png'
-        : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-        : 'application/octet-stream';
+          : ext === '.js' ? 'application/javascript; charset=utf-8'
+            : ext === '.css' ? 'text/css; charset=utf-8'
+              : ext === '.json' ? 'application/json; charset=utf-8'
+                : ext === '.svg' ? 'image/svg+xml'
+                  : ext === '.png' ? 'image/png'
+                    : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+                      : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
       res.send(buf);
     } catch (err) {
@@ -8043,9 +8058,9 @@ export async function startServer({
           const text = await fsp.readFile(fullPath, 'utf8');
           const heading = text.split('\n').find((line) => line.startsWith('# '));
           out.push({
-            id:     slug,
-            label:  heading ? heading.replace(/^#+\s*/, '').trim() : slug,
-            bytes:  Buffer.byteLength(text, 'utf8'),
+            id: slug,
+            label: heading ? heading.replace(/^#+\s*/, '').trim() : slug,
+            bytes: Buffer.byteLength(text, 'utf8'),
           });
         } catch {
           // Skip unreadable files; surface what we can.
@@ -8100,7 +8115,7 @@ export async function startServer({
         `SELECT status, project_id, run_id, applied_at FROM applied_plugin_snapshots`,
       ).all() as Array<{ status: 'fresh' | 'stale'; project_id: string | null; run_id: string | null; applied_at: number }>;
       res.json({
-        plugins:   pluginInventoryStats(installed),
+        plugins: pluginInventoryStats(installed),
         snapshots: snapshotInventoryStats(inventoryRows),
         generatedAt: Date.now(),
       });
@@ -8215,9 +8230,9 @@ export async function startServer({
       try {
         const { recordPluginEvent } = await import('./plugins/events.js');
         recordPluginEvent({
-          kind:     'plugin.marketplace-refreshed',
+          kind: 'plugin.marketplace-refreshed',
           pluginId: '',
-          details:  {
+          details: {
             marketplaceId: req.params.id,
             marketplaceVersion: result.row.version,
             specVersion: result.row.specVersion,
@@ -8313,7 +8328,7 @@ export async function startServer({
           target,
           outDir,
           ...(typeof body.snapshotId === 'string' ? { snapshotId: body.snapshotId } : {}),
-          ...(typeof body.projectId  === 'string' ? { projectId:  body.projectId  } : {}),
+          ...(typeof body.projectId === 'string' ? { projectId: body.projectId } : {}),
         });
         res.json({ ok: true, ...result });
       } catch (err) {
@@ -8345,9 +8360,9 @@ export async function startServer({
         try {
           const { recordPluginEvent } = await import('./plugins/events.js');
           recordPluginEvent({
-            kind:     'plugin.snapshot-pruned',
+            kind: 'plugin.snapshot-pruned',
             pluginId: '',
-            details:  { removed: result.removed, ...(before ? { before } : {}) },
+            details: { removed: result.removed, ...(before ? { before } : {}) },
           });
         } catch { /* best-effort */ }
       }
@@ -8458,8 +8473,8 @@ export async function startServer({
     try {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const snapshotId = typeof body.snapshotId === 'string' ? body.snapshotId : '';
-      const surfaceId  = typeof body.surfaceId  === 'string' ? body.surfaceId  : '';
-      const persist    = body.persist === 'run' || body.persist === 'conversation' || body.persist === 'project'
+      const surfaceId = typeof body.surfaceId === 'string' ? body.surfaceId : '';
+      const persist = body.persist === 'run' || body.persist === 'conversation' || body.persist === 'project'
         ? body.persist
         : 'project';
       const kind = body.kind === 'form' || body.kind === 'choice' || body.kind === 'oauth-prompt'
@@ -8469,14 +8484,14 @@ export async function startServer({
         return res.status(400).json({ error: 'snapshotId and surfaceId are required' });
       }
       const row = prefillProjectSurface(db, {
-        projectId:        req.params.projectId,
+        projectId: req.params.projectId,
         pluginSnapshotId: snapshotId,
         surfaceId,
         kind,
         persist,
-        value:            'value' in body ? body.value : null,
-        schema:           body.schema,
-        expiresAt:        typeof body.expiresAt === 'number' ? body.expiresAt : null,
+        value: 'value' in body ? body.value : null,
+        schema: body.schema,
+        expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : null,
       });
       res.json({ ok: true, surface: row });
     } catch (err) {
@@ -8546,17 +8561,17 @@ export async function startServer({
       const snapshot = getSnapshot(db, snapshotId);
       if (!snapshot) return res.status(404).json({ error: 'snapshot not found' });
       res.json({
-        ok:        true,
-        runId:     req.params.runId,
+        ok: true,
+        runId: req.params.runId,
         snapshotId,
         snapshot,
         // The caller re-launches the agent by re-applying these inputs;
         // the digest match guarantees byte-equality (§8.2.1).
         rerun: {
-          pluginId:             snapshot.pluginId,
-          pluginSpecVersion:    snapshot.pluginSpecVersion,
-          pluginVersion:        snapshot.pluginVersion,
-          inputs:               snapshot.inputs,
+          pluginId: snapshot.pluginId,
+          pluginSpecVersion: snapshot.pluginSpecVersion,
+          pluginVersion: snapshot.pluginVersion,
+          inputs: snapshot.inputs,
           manifestSourceDigest: snapshot.manifestSourceDigest,
         },
       });
@@ -9250,20 +9265,20 @@ export async function startServer({
           : '';
       const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
         ? await deployToCloudflarePages({
-            config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
-              projectName: cloudflarePagesProjectName,
-            },
-            files,
-            projectId: req.params.id,
-            cloudflarePages,
-            priorMetadata: prior?.providerMetadata,
-          })
+          config: {
+            ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+            projectName: cloudflarePagesProjectName,
+          },
+          files,
+          projectId: req.params.id,
+          cloudflarePages,
+          priorMetadata: prior?.providerMetadata,
+        })
         : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+          config: await readDeployConfig(VERCEL_PROVIDER_ID),
+          files,
+          projectId: req.params.id,
+        });
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {
@@ -9485,7 +9500,7 @@ export async function startServer({
           statusMessage: result.reachable
             ? 'Public link is ready.'
             : result.statusMessage ||
-              'Vercel is still preparing the public link.',
+            'Vercel is still preparing the public link.',
           reachableAt: result.reachable ? now : existing.reachableAt,
           updatedAt: now,
         });
@@ -10082,7 +10097,7 @@ export async function startServer({
             {},
             uploadProject?.metadata,
           );
-          fs.promises.unlink(req.file.path).catch(() => {});
+          fs.promises.unlink(req.file.path).catch(() => { });
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
           const body = { file: meta };
           return res.json(body);
@@ -10269,9 +10284,9 @@ export async function startServer({
     }
   });
 
-	  // Native OS folder picker dialog. Returns { path: string | null }.
-	  app.post('/api/dialog/open-folder', async (req, res) => {
-	    if (!isLocalSameOrigin(req, resolvedPort)) {
+  // Native OS folder picker dialog. Returns { path: string | null }.
+  app.post('/api/dialog/open-folder', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10474,9 +10489,9 @@ export async function startServer({
         : null;
     const adHocSkillIds = Array.isArray(skillIds)
       ? skillIds
-          .map((s) => (typeof s === 'string' ? s.trim() : ''))
-          .filter(Boolean)
-          .filter((id) => resolveSkillId(id) !== effectiveCanonicalSkillId)
+        .map((s) => (typeof s === 'string' ? s.trim() : ''))
+        .filter(Boolean)
+        .filter((id) => resolveSkillId(id) !== effectiveCanonicalSkillId)
       : [];
 
     let skillBody;
@@ -10939,10 +10954,10 @@ export async function startServer({
     if (!snapshot?.pipeline?.stages?.length) return;
     const env = { maxIterations: readPluginEnvKnobs().maxDevloopIterations };
     const emitPipeline = (evt) => {
-      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
+      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */ }
     };
     const emitGenui = (evt) => {
-      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */}
+      try { runs.emit(run, evt.kind, evt); } catch {/* ignore */ }
     };
     const projectIdForRun = run.projectId
       ?? snapshot.resolvedContext?.items?.[0]?.id
@@ -10954,36 +10969,36 @@ export async function startServer({
     if (runnerMode === 'stub') {
       runStage = ({ iteration }) => ({
         signals: {
-          'critique.score':  iteration >= 0 ? 4 : 0,
-          'preview.ok':      true,
-          'user.confirmed':  true,
+          'critique.score': iteration >= 0 ? 4 : 0,
+          'preview.ok': true,
+          'user.confirmed': true,
         },
       });
     } else {
       registerBuiltInAtomWorkers();
       runStage = async ({ stage, iteration, snapshot: stageSnapshot }) => {
         const outcome = await runStageWithRegistry({
-          db:             dbHandle,
-          runId:          run.id,
-          projectId:      projectIdForRun,
+          db: dbHandle,
+          runId: run.id,
+          projectId: projectIdForRun,
           conversationId: run.conversationId ?? null,
           stage,
           iteration,
-          snapshot:       stageSnapshot,
+          snapshot: stageSnapshot,
         });
         return {
-          signals:         outcome.signals,
+          signals: outcome.signals,
           critiqueSummary: outcome.critiqueSummary,
         };
       };
     }
     void runPipelineForRun({
       db: dbHandle,
-      runId:           run.id,
-      projectId:       projectIdForRun,
-      conversationId:  run.conversationId ?? null,
+      runId: run.id,
+      projectId: projectIdForRun,
+      conversationId: run.conversationId ?? null,
       snapshot,
-      pipeline:        snapshot.pipeline,
+      pipeline: snapshot.pipeline,
       env,
       runStage,
       emitPipeline,
@@ -10991,9 +11006,9 @@ export async function startServer({
     }).catch((err) => {
       try {
         runs.emit(run, 'pipeline_stage_failed', {
-          runId:      run.id,
+          runId: run.id,
           snapshotId: snapshot.snapshotId,
-          message:    String(err?.message ?? err),
+          message: String(err?.message ?? err),
         });
       } catch { /* ignore */ }
     });
@@ -11182,9 +11197,8 @@ export async function startServer({
       ? formatDesignFilesWorkspaceHint(cwd, existingProjectFiles, existingProjectFolders)
       : '';
     const linkedDirsHint = linkedDirs.length > 0
-      ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${
-          linkedDirs.map((d) => `- \`${d}\``).join('\n')
-        }`
+      ? `\n\nLinked code folders (read-only reference code the user wants you to see):\n${linkedDirs.map((d) => `- \`${d}\``).join('\n')
+      }`
       : '';
     const attachmentHint = formatProjectAttachmentHint(safeAttachments);
     // Plan §3.A3 / spec §9: thread plugin context onto every tool token
@@ -11204,12 +11218,12 @@ export async function startServer({
     }
     const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
-          runId,
-          projectId,
-          allowedEndpoints: CHAT_TOOL_ENDPOINTS,
-          allowedOperations: CHAT_TOOL_OPERATIONS,
-          ...(pluginGrantContext ?? {}),
-        })
+        runId,
+        projectId,
+        allowedEndpoints: CHAT_TOOL_ENDPOINTS,
+        allowedOperations: CHAT_TOOL_OPERATIONS,
+        ...(pluginGrantContext ?? {}),
+      })
       : null;
     let toolTokenRevoked = false;
     const revokeToolToken = (reason) => {
@@ -11412,9 +11426,9 @@ export async function startServer({
     const agentResumeCtx =
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
-            conversationId: run.conversationId,
-            agentId: def.id,
-          })
+          conversationId: run.conversationId,
+          agentId: def.id,
+        })
         : { resumeSessionId: null as string | null, newSessionId: undefined as string | undefined, isResuming: false, storedStablePromptHash: null as string | null };
     const userRequestPrompt = composeChatUserRequestForAgent(
       message,
@@ -11923,18 +11937,18 @@ export async function startServer({
       const launchPath = agentLaunch.launchPath ?? resolvedBin;
       const modelProbeEnv = launchPath
         ? applyAgentLaunchEnv(
-            spawnEnvForAgent(
-              def.id,
-              {
-                ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
-                ...(def.env || {}),
-              },
-              configuredAgentEnv,
-              undefined,
-              { resolvedBin: agentLaunch.selectedPath },
-            ),
-            agentLaunch,
-          )
+          spawnEnvForAgent(
+            def.id,
+            {
+              ...createAgentRuntimeEnv(process.env, daemonUrl, toolTokenGrant),
+              ...(def.env || {}),
+            },
+            configuredAgentEnv,
+            undefined,
+            { resolvedBin: agentLaunch.selectedPath },
+          ),
+          agentLaunch,
+        )
         : null;
       let liveModels = [];
       try {
@@ -12017,17 +12031,17 @@ export async function startServer({
     // this field ignore it.
     const hasPriorAssistantTurn = run.conversationId
       ? Boolean(
-          db
-            .prepare(
-              `SELECT 1 FROM messages
+        db
+          .prepare(
+            `SELECT 1 FROM messages
                WHERE conversation_id = ?
                  AND role = 'assistant'
                  AND COALESCE(content, '') <> ''
                  AND id <> COALESCE(?, '')
                LIMIT 1`,
-            )
-            .get(run.conversationId, run.assistantMessageId ?? ''),
-        )
+          )
+          .get(run.conversationId, run.assistantMessageId ?? ''),
+      )
       : false;
 
     // Antigravity's `agy` is silent on stdout/stderr in print mode for
@@ -12052,9 +12066,9 @@ export async function startServer({
     let antigravityModelLockRelease: (() => void) | null = null;
     const antigravityConcreteModel =
       def.id === 'antigravity'
-      && typeof agentOptions.model === 'string'
-      && agentOptions.model.length > 0
-      && agentOptions.model !== 'default'
+        && typeof agentOptions.model === 'string'
+        && agentOptions.model.length > 0
+        && agentOptions.model !== 'default'
         ? agentOptions.model
         : null;
     if (antigravityConcreteModel) {
@@ -12132,7 +12146,7 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    let persistDeliveredAgentSessionState = () => {};
+    let persistDeliveredAgentSessionState = () => { };
     if (def.resumesSessionViaCli === true && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
@@ -12350,7 +12364,7 @@ export async function startServer({
       send('error', createSseErrorPayload(
         'AGENT_UNAVAILABLE',
         `Agent "${def.name}" (\`${def.bin}\`) is not installed or not on PATH. ` +
-          'Install it and refresh the agent list (GET /api/agents) before retrying.',
+        'Install it and refresh the agent list (GET /api/agents) before retrying.',
         { retryable: true },
       ));
       return design.runs.finish(run, 'failed', 1, null);
@@ -12384,9 +12398,9 @@ export async function startServer({
       OD_DAEMON_URL: daemonUrl,
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
-            OD_PROJECT_ID: projectId,
-            OD_PROJECT_DIR: cwd,
-          }
+          OD_PROJECT_ID: projectId,
+          OD_PROJECT_DIR: cwd,
+        }
         : {}),
     };
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
@@ -12596,12 +12610,12 @@ export async function startServer({
               userMessage: userMsg,
               assistantMessage: captured,
             },
-              {
-                projectRoot: PROJECT_ROOT,
-                chatAgentId: typeof agentId === 'string' ? agentId : null,
-                chatModel: typeof safeModel === 'string' ? safeModel : null,
-              },
-            ),
+            {
+              projectRoot: PROJECT_ROOT,
+              chatAgentId: typeof agentId === 'string' ? agentId : null,
+              chatModel: typeof safeModel === 'string' ? safeModel : null,
+            },
+          ),
         )
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
@@ -12880,8 +12894,8 @@ export async function startServer({
         createSseErrorPayload(
           'ROLE_MARKER_HALLUCINATION',
           `Run terminated: model emitted fabricated role marker (\`${marker}\`). ` +
-            'No further tokens or tool calls accepted from this turn. ' +
-            'See https://github.com/nexu-io/open-design/issues/3247.',
+          'No further tokens or tool calls accepted from this turn. ' +
+          'See https://github.com/nexu-io/open-design/issues/3247.',
           { retryable: true },
         ),
       );
@@ -12982,7 +12996,7 @@ export async function startServer({
         //   - usage (session result at EOF in single-shot mode).
         try {
           applyClaudeStreamJsonRunBookkeeping(run, ev);
-        } catch {}
+        } catch { }
       });
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
@@ -13157,355 +13171,355 @@ export async function startServer({
     });
     child.on('close', async (code, signal) => {
       try {
-      clearInactivityWatchdog();
-      if (watchdogRetryRestarted) {
-        // The inactivity watchdog already failed this attempt and the same-run
-        // retry restarted on a fresh child. Finalization and event-sink / run-
-        // handle ownership (keyed by the shared runId) now belong to the new
-        // attempt, so this stalled child's close must not re-run them — doing
-        // so would re-finalize the run and delete the new attempt's sink.
-        // Revoke only THIS attempt's tool token (idempotent, keyed by its own
-        // token string) and bail; the `finally` block still cleans up logs.
+        clearInactivityWatchdog();
+        if (watchdogRetryRestarted) {
+          // The inactivity watchdog already failed this attempt and the same-run
+          // retry restarted on a fresh child. Finalization and event-sink / run-
+          // handle ownership (keyed by the shared runId) now belong to the new
+          // attempt, so this stalled child's close must not re-run them — doing
+          // so would re-finalize the run and delete the new attempt's sink.
+          // Revoke only THIS attempt's tool token (idempotent, keyed by its own
+          // token string) and bail; the `finally` block still cleans up logs.
+          revokeToolToken('child_exit');
+          return;
+        }
         revokeToolToken('child_exit');
-        return;
-      }
-      revokeToolToken('child_exit');
-      unregisterChatAgentEventSink();
-      if (acpSession?.hasFatalError()) {
-        return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
-      }
-      if (agentStreamError) {
-        return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
-      }
-      if (
-        code !== 0 &&
-        !run.cancelRequested
-      ) {
-        if (def.id === 'amr') {
-          const amrFailure = classifyAmrAccountFailure(
+        unregisterChatAgentEventSink();
+        if (acpSession?.hasFatalError()) {
+          return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+        }
+        if (agentStreamError) {
+          return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+        }
+        if (
+          code !== 0 &&
+          !run.cancelRequested
+        ) {
+          if (def.id === 'amr') {
+            const amrFailure = classifyAmrAccountFailure(
+              `${agentStderrTail}\n${agentStdoutTail}`,
+            );
+            if (amrFailure) {
+              sendAmrAccountFailure(amrFailure);
+              return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+            }
+          }
+          const authFailure = classifyAgentAuthFailure(
+            agentId,
             `${agentStderrTail}\n${agentStdoutTail}`,
           );
-          if (amrFailure) {
-            sendAmrAccountFailure(amrFailure);
+          if (authFailure?.status === 'missing') {
+            send('error', createSseErrorPayload(
+              'AGENT_AUTH_REQUIRED',
+              authFailure.message ?? cursorAuthGuidance(),
+              { retryable: true },
+            ));
             return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
           }
         }
-        const authFailure = classifyAgentAuthFailure(
-          agentId,
-          `${agentStderrTail}\n${agentStdoutTail}`,
-        );
-        if (authFailure?.status === 'missing') {
+        if (
+          code !== 0 &&
+          !run.cancelRequested &&
+          def.resumesSessionViaCli === true &&
+          agentResumeCtx.isResuming &&
+          run.conversationId &&
+          isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
+        ) {
+          // The stored session id no longer resolves (pruned / machine moved
+          // / ~/.claude cleared). Drop it so the next turn starts a fresh
+          // session seeded with the full transcript, and surface a retryable
+          // error rather than a confusing hard failure.
+          clearAgentSession(db, run.conversationId, def.id);
           send('error', createSseErrorPayload(
-            'AGENT_AUTH_REQUIRED',
-            authFailure.message ?? cursorAuthGuidance(),
+            'AGENT_EXECUTION_FAILED',
+            'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
             { retryable: true },
           ));
-          return finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+          return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
         }
-      }
-      if (
-        code !== 0 &&
-        !run.cancelRequested &&
-        def.resumesSessionViaCli === true &&
-        agentResumeCtx.isResuming &&
-        run.conversationId &&
-        isClaudeResumeFailure(`${agentStderrTail}\n${agentStdoutTail}`)
-      ) {
-        // The stored session id no longer resolves (pruned / machine moved
-        // / ~/.claude cleared). Drop it so the next turn starts a fresh
-        // session seeded with the full transcript, and surface a retryable
-        // error rather than a confusing hard failure.
-        clearAgentSession(db, run.conversationId, def.id);
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'The previous Claude session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
-          { retryable: true },
-        ));
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
-      }
-      // Empty-output guard: a clean `code === 0` exit with no visible
-      // output means the run silently finished without producing anything.
-      // Surface an explicit failure so the chat shows a clear reason.
-      if (
-        code === 0 &&
-        !run.cancelRequested &&
-        trackingSubstantiveOutput &&
-        !agentProducedOutput
-      ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
-      }
-      if (
-        code === 0 &&
-        !run.cancelRequested &&
-        isPluginAuthoringRun(db, run) &&
-        !(await hasGeneratedPluginArtifacts(cwd)) &&
-        !emittedRenderableQuestionForm(clarifyingQuestionText)
-      ) {
-        send('error', createSseErrorPayload(
-          'AGENT_EXECUTION_FAILED',
-          'Plugin authoring ended before generating the required generated-plugin artifacts.',
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', code, signal);
-      }
-      // Plain-stream auth-failure guard: plain adapters (today
-      // antigravity, deepseek's TUI variants) may exit cleanly with
-      // visible stdout that's actually an auth prompt — agy prints
-      // "Authentication required. Please visit the URL to log in:
-      // <URL>" + "Error: authentication timed out." rather than
-      // failing with a non-zero exit. Without this guard the chat
-      // shows that raw prompt as the agent's "reply", and the user
-      // has no way to actually complete OAuth from inside the chat.
-      // Override the apparent success with a proper
-      // AGENT_AUTH_REQUIRED error carrying actionable guidance.
-      if (
-        code === 0 &&
-        !run.cancelRequested &&
-        !trackingSubstantiveOutput &&
-        childStdoutSeen
-      ) {
-        const authFailure = classifyAgentAuthFailure(
-          agentId,
-          `${agentStderrTail}\n${agentStdoutTail}`,
-        );
-        if (authFailure?.status === 'missing') {
+        // Empty-output guard: a clean `code === 0` exit with no visible
+        // output means the run silently finished without producing anything.
+        // Surface an explicit failure so the chat shows a clear reason.
+        if (
+          code === 0 &&
+          !run.cancelRequested &&
+          trackingSubstantiveOutput &&
+          !agentProducedOutput
+        ) {
           send('error', createSseErrorPayload(
-            'AGENT_AUTH_REQUIRED',
-            authFailure.message ?? `${def.name} authentication required. Please re-authenticate and retry.`,
+            'AGENT_EXECUTION_FAILED',
+            'Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.',
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', code, signal);
+        }
+        if (
+          code === 0 &&
+          !run.cancelRequested &&
+          isPluginAuthoringRun(db, run) &&
+          !(await hasGeneratedPluginArtifacts(cwd)) &&
+          !emittedRenderableQuestionForm(clarifyingQuestionText)
+        ) {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'Plugin authoring ended before generating the required generated-plugin artifacts.',
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', code, signal);
+        }
+        // Plain-stream auth-failure guard: plain adapters (today
+        // antigravity, deepseek's TUI variants) may exit cleanly with
+        // visible stdout that's actually an auth prompt — agy prints
+        // "Authentication required. Please visit the URL to log in:
+        // <URL>" + "Error: authentication timed out." rather than
+        // failing with a non-zero exit. Without this guard the chat
+        // shows that raw prompt as the agent's "reply", and the user
+        // has no way to actually complete OAuth from inside the chat.
+        // Override the apparent success with a proper
+        // AGENT_AUTH_REQUIRED error carrying actionable guidance.
+        if (
+          code === 0 &&
+          !run.cancelRequested &&
+          !trackingSubstantiveOutput &&
+          childStdoutSeen
+        ) {
+          const authFailure = classifyAgentAuthFailure(
+            agentId,
+            `${agentStderrTail}\n${agentStdoutTail}`,
+          );
+          if (authFailure?.status === 'missing') {
+            send('error', createSseErrorPayload(
+              'AGENT_AUTH_REQUIRED',
+              authFailure.message ?? `${def.name} authentication required. Please re-authenticate and retry.`,
+              { retryable: true },
+            ));
+            return finishWithRetryDecision('failed', 0, signal);
+          }
+        }
+        // Plain-stream empty-output guard: plain agents send raw stdout
+        // chunks without structured event tracking. Detect auth failures
+        // and quota / upstream errors when exit 0 but no stdout was
+        // seen. agy in print mode is silent on stdout/stderr for both
+        // missing-auth AND quota-exhausted failures; the daemon piped
+        // agy's `--log-file` to `agentLogFilePath` precisely so this
+        // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
+        // for quota, "not logged into Antigravity" for auth) and route
+        // to the right user-facing guidance.
+        if (
+          code === 0 &&
+          !run.cancelRequested &&
+          !trackingSubstantiveOutput &&
+          !childStdoutSeen
+        ) {
+          let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
+          if (def.id === 'antigravity' && agentLogFilePath) {
+            try {
+              const logContent = await fs.promises.readFile(agentLogFilePath, 'utf8');
+              // Keep the last 8 KB — quota / auth lines all land near the
+              // tail (after the spawn / model-config preamble).
+              combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
+            } catch {
+              // Missing log file (agy didn't write it, mounted tmpfs is
+              // read-only, etc.) is fine — fall through to the generic
+              // empty-output message.
+            }
+          }
+          const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
+          const serviceFailure = !authFailure
+            ? classifyAgentServiceFailure(combinedDetail)
+            : null;
+          const isAntigravityQuota =
+            def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
+          // Antigravity-only fallback: if neither classifier matched but
+          // the run was silent, lean on the empirical observation that
+          // an empty agy print-mode exit almost always means
+          // missing-OAuth (the only other silent path is quota, which
+          // the log-file check above already caught).
+          const useAntigravityAuthFallback =
+            !authFailure && !serviceFailure && def.id === 'antigravity';
+          const errorCode =
+            authFailure || useAntigravityAuthFallback
+              ? 'AGENT_AUTH_REQUIRED'
+              : isAntigravityQuota
+                ? 'RATE_LIMITED'
+                : 'AGENT_EXECUTION_FAILED';
+          const msg = authFailure
+            ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
+            : isAntigravityQuota
+              ? antigravityQuotaGuidance()
+              : useAntigravityAuthFallback
+                ? antigravityAuthGuidance()
+                : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
+          send('error', createSseErrorPayload(
+            errorCode,
+            msg,
             { retryable: true },
           ));
           return finishWithRetryDecision('failed', 0, signal);
         }
-      }
-      // Plain-stream empty-output guard: plain agents send raw stdout
-      // chunks without structured event tracking. Detect auth failures
-      // and quota / upstream errors when exit 0 but no stdout was
-      // seen. agy in print mode is silent on stdout/stderr for both
-      // missing-auth AND quota-exhausted failures; the daemon piped
-      // agy's `--log-file` to `agentLogFilePath` precisely so this
-      // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
-      // for quota, "not logged into Antigravity" for auth) and route
-      // to the right user-facing guidance.
-      if (
-        code === 0 &&
-        !run.cancelRequested &&
-        !trackingSubstantiveOutput &&
-        !childStdoutSeen
-      ) {
-        let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
-        if (def.id === 'antigravity' && agentLogFilePath) {
-          try {
-            const logContent = await fs.promises.readFile(agentLogFilePath, 'utf8');
-            // Keep the last 8 KB — quota / auth lines all land near the
-            // tail (after the spawn / model-config preamble).
-            combinedDetail = `${combinedDetail}\n${logContent.slice(-8192)}`;
-          } catch {
-            // Missing log file (agy didn't write it, mounted tmpfs is
-            // read-only, etc.) is fine — fall through to the generic
-            // empty-output message.
-          }
-        }
-        const authFailure = classifyAgentAuthFailure(agentId, combinedDetail);
-        const serviceFailure = !authFailure
-          ? classifyAgentServiceFailure(combinedDetail)
-          : null;
-        const isAntigravityQuota =
-          def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
-        // Antigravity-only fallback: if neither classifier matched but
-        // the run was silent, lean on the empirical observation that
-        // an empty agy print-mode exit almost always means
-        // missing-OAuth (the only other silent path is quota, which
-        // the log-file check above already caught).
-        const useAntigravityAuthFallback =
-          !authFailure && !serviceFailure && def.id === 'antigravity';
-        const errorCode =
-          authFailure || useAntigravityAuthFallback
-            ? 'AGENT_AUTH_REQUIRED'
-            : isAntigravityQuota
-              ? 'RATE_LIMITED'
-              : 'AGENT_EXECUTION_FAILED';
-        const msg = authFailure
-          ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
-          : isAntigravityQuota
-            ? antigravityQuotaGuidance()
-            : useAntigravityAuthFallback
-              ? antigravityAuthGuidance()
-              : `${def.name} returned an empty response. This may indicate an expired session — try re-authenticating the agent.`;
-        send('error', createSseErrorPayload(
-          errorCode,
-          msg,
-          { retryable: true },
-        ));
-        return finishWithRetryDecision('failed', 0, signal);
-      }
-      // ACP agents that don't shut down on stdin.end() (e.g. Devin for
-      // Terminal) are forced to exit via SIGTERM from attachAcpSession after
-      // a clean prompt completion. Without an override, the chat run would
-      // be marked `failed` because `code === 0` fails (code is null on a
-      // signal exit). `completedSuccessfully()` reports whether the ACP
-      // session resolved without a fatal error or abort.
-      //
-      // Scope the override narrowly to the exact forced-shutdown shape this
-      // PR introduces: code is null AND signal is SIGTERM AND the ACP
-      // session reported clean completion. Any other post-response failure
-      // (non-zero exit code, SIGKILL, SIGSEGV, etc.) still propagates as
-      // `failed`, preserving the existing close-status behavior for genuine
-      // post-response process problems.
-      const acpCleanCompletion =
-        typeof acpSession?.completedSuccessfully === 'function' &&
-        acpSession.completedSuccessfully();
-      const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
-      const status = classifyChatRunCloseStatus({
-        cancelRequested: !!run.cancelRequested,
-        code,
-        signal,
-        acpCleanCompletion,
-        artifactQuietShutdownRequested,
-        turnCompletedCleanly: !!run.turnCompletedCleanly,
-        artifactProducedThisRun:
-          runArtifactSideEffects.artifactWriteSeen ||
-          runArtifactSideEffects.liveArtifactSeen,
-      });
-      // Skip the close-handler failure emit when the run is already
-      // terminal: the inactivity watchdog (failForInactivity) finishes the
-      // run — sending its error and clearing run.clients/eventsLogStream —
-      // before SIGTERM, so re-emitting here would double-send the error and
-      // reopen the closed events-log stream. The run is finalized below
-      // regardless (finish() no-ops once terminal).
-      if (status === 'failed' && !design.runs.isTerminal(run.status)) {
-        const diagnostic = diagnoseClaudeCliFailure({
-          agentId: def.id,
-          exitCode: code,
+        // ACP agents that don't shut down on stdin.end() (e.g. Devin for
+        // Terminal) are forced to exit via SIGTERM from attachAcpSession after
+        // a clean prompt completion. Without an override, the chat run would
+        // be marked `failed` because `code === 0` fails (code is null on a
+        // signal exit). `completedSuccessfully()` reports whether the ACP
+        // session resolved without a fatal error or abort.
+        //
+        // Scope the override narrowly to the exact forced-shutdown shape this
+        // PR introduces: code is null AND signal is SIGTERM AND the ACP
+        // session reported clean completion. Any other post-response failure
+        // (non-zero exit code, SIGKILL, SIGSEGV, etc.) still propagates as
+        // `failed`, preserving the existing close-status behavior for genuine
+        // post-response process problems.
+        const acpCleanCompletion =
+          typeof acpSession?.completedSuccessfully === 'function' &&
+          acpSession.completedSuccessfully();
+        const runArtifactSideEffects = scanRunEventsForRetrySideEffects(run.events);
+        const status = classifyChatRunCloseStatus({
+          cancelRequested: !!run.cancelRequested,
+          code,
           signal,
-          stderrTail: agentStderrTail,
-          stdoutTail: agentStdoutTail,
-          env: spawnedAgentEnv,
-          resolvedBin: agentLaunch.selectedPath,
+          acpCleanCompletion,
+          artifactQuietShutdownRequested,
+          turnCompletedCleanly: !!run.turnCompletedCleanly,
+          artifactProducedThisRun:
+            runArtifactSideEffects.artifactWriteSeen ||
+            runArtifactSideEffects.liveArtifactSeen,
         });
-        // A non-zero exit whose output reads as an auth / quota / upstream
-        // problem (typical of Claude Code, codex, …) gets the specific code
-        // rather than the generic execution-failed bucket; the human-readable
-        // message still prefers the richer CLI diagnostic when we have one.
-        const serviceCode = classifyAgentServiceFailure(
-          `${agentStderrTail}\n${agentStdoutTail}`,
-        );
-        if (diagnostic) {
-          send('error', createSseErrorPayload(
-            serviceCode ?? 'AGENT_EXECUTION_FAILED',
-            diagnostic.message,
-            { retryable: diagnostic.retryable, details: { detail: diagnostic.detail } },
-          ));
-        } else if (serviceCode) {
-          const detail = (agentStderrTail || agentStdoutTail || '').trim();
-          send('error', createSseErrorPayload(
-            serviceCode,
-            detail || 'The model service returned an error.',
-            { retryable: true },
-          ));
-        } else {
-          // OpenCode swallows provider failures in headless mode: a 429
-          // usage-limit is marked retryable and retried silently with
-          // nothing on stdout/stderr, so the run only dies via the
-          // inactivity watchdog and the checks above find no signal. The
-          // real reason is recorded only in OpenCode's own session log,
-          // so recover it before falling back to the generic rewrite.
-          // See issue #982.
-          const openCodeFailure =
-            def.id === 'opencode'
-              ? readOpenCodeServiceFailure(spawnedAgentEnv, { since: run.createdAt })
-              : null;
-          if (openCodeFailure) {
+        // Skip the close-handler failure emit when the run is already
+        // terminal: the inactivity watchdog (failForInactivity) finishes the
+        // run — sending its error and clearing run.clients/eventsLogStream —
+        // before SIGTERM, so re-emitting here would double-send the error and
+        // reopen the closed events-log stream. The run is finalized below
+        // regardless (finish() no-ops once terminal).
+        if (status === 'failed' && !design.runs.isTerminal(run.status)) {
+          const diagnostic = diagnoseClaudeCliFailure({
+            agentId: def.id,
+            exitCode: code,
+            signal,
+            stderrTail: agentStderrTail,
+            stdoutTail: agentStdoutTail,
+            env: spawnedAgentEnv,
+            resolvedBin: agentLaunch.selectedPath,
+          });
+          // A non-zero exit whose output reads as an auth / quota / upstream
+          // problem (typical of Claude Code, codex, …) gets the specific code
+          // rather than the generic execution-failed bucket; the human-readable
+          // message still prefers the richer CLI diagnostic when we have one.
+          const serviceCode = classifyAgentServiceFailure(
+            `${agentStderrTail}\n${agentStdoutTail}`,
+          );
+          if (diagnostic) {
             send('error', createSseErrorPayload(
-              openCodeFailure.code,
-              openCodeFailure.message,
+              serviceCode ?? 'AGENT_EXECUTION_FAILED',
+              diagnostic.message,
+              { retryable: diagnostic.retryable, details: { detail: diagnostic.detail } },
+            ));
+          } else if (serviceCode) {
+            const detail = (agentStderrTail || agentStdoutTail || '').trim();
+            send('error', createSseErrorPayload(
+              serviceCode,
+              detail || 'The model service returned an error.',
               { retryable: true },
             ));
           } else {
-            const rewritten = rewriteKnownAgentStreamError(
-              def.id,
-              (agentStderrTail || agentStdoutTail || '').trim(),
-              `${agentStderrTail}\n${agentStdoutTail}`,
-            );
-            if (rewritten !== 'Agent stream error') {
+            // OpenCode swallows provider failures in headless mode: a 429
+            // usage-limit is marked retryable and retried silently with
+            // nothing on stdout/stderr, so the run only dies via the
+            // inactivity watchdog and the checks above find no signal. The
+            // real reason is recorded only in OpenCode's own session log,
+            // so recover it before falling back to the generic rewrite.
+            // See issue #982.
+            const openCodeFailure =
+              def.id === 'opencode'
+                ? readOpenCodeServiceFailure(spawnedAgentEnv, { since: run.createdAt })
+                : null;
+            if (openCodeFailure) {
               send('error', createSseErrorPayload(
-                'AGENT_EXECUTION_FAILED',
-                rewritten,
+                openCodeFailure.code,
+                openCodeFailure.message,
                 { retryable: true },
               ));
+            } else {
+              const rewritten = rewriteKnownAgentStreamError(
+                def.id,
+                (agentStderrTail || agentStdoutTail || '').trim(),
+                `${agentStderrTail}\n${agentStdoutTail}`,
+              );
+              if (rewritten !== 'Agent stream error') {
+                send('error', createSseErrorPayload(
+                  'AGENT_EXECUTION_FAILED',
+                  rewritten,
+                  { retryable: true },
+                ));
+              }
             }
           }
         }
-      }
-      // Reconcile any HTML artifacts that were written during this run
-      // without a manifest sidecar (e.g. agent used write_file instead of
-      // create_artifact, or the run terminated between HTML write and
-      // sidecar write). Only files modified after the run started are
-      // touched — pre-existing HTML in imported-folder projects must not
-      // receive spurious manifests. Best-effort; must not block finalisation.
-      // See issue #2893.
-      if (run.projectId) {
-        (async () => {
-          try {
-            const project = getProject(db, run.projectId);
-            const files = await listFiles(PROJECTS_DIR, run.projectId, {
-              metadata: project?.metadata,
-            });
-            const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
-            for (const f of files) {
-              const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
-              if (ext !== '.html' && ext !== '.htm') continue;
-              try {
-                const filePath = path.join(dir, f.name);
-                const st = await fs.promises.stat(filePath);
-                if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
-                await reconcileHtmlArtifactManifest(
-                  PROJECTS_DIR,
-                  run.projectId,
-                  f.name,
-                  project?.metadata,
-                );
-              } catch { /* per-file best-effort */ }
-            }
-          } catch { /* project-level best-effort */ }
-        })();
-      }
-      // Flush buffered plain-text stdout (antigravity) that was not
-      // suppressed by the auth-prompt guard above. Send each chunk in
-      // order before finishing so the assistant text arrives before the
-      // run's `finished` event. Stamp first-token timing here — and only
-      // here — using the first chunk's arrival time, so the OAuth-prompt
-      // path (which returns before this flush) never records a TTFT for
-      // output the user never saw (PR #3412).
-      if (plaintextStdoutBuffer.length > 0 && firstBufferedStdoutAt !== null) {
-        noteFirstTokenAt(firstBufferedStdoutAt);
-      }
-      for (const chunk of plaintextStdoutBuffer) {
-        send('stdout', { chunk });
-      }
-      // Capture the pi session file path for conversational continuity.
-      // The session path is discovered by attachPiRpcSession when it
-      // processes agent_end; persist it under (conversationId, agentId) so
-      // another conversation in the same cwd cannot inherit this history.
-      if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
-        const sessionPath = acpSession.getLastSessionPath();
-        if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
-          persistCapturedAgentSession(db, {
-            conversationId: run.conversationId,
-            agentId: def.id,
-            sessionId: sessionPath,
-            stablePromptHash: currentStableHash,
-          });
+        // Reconcile any HTML artifacts that were written during this run
+        // without a manifest sidecar (e.g. agent used write_file instead of
+        // create_artifact, or the run terminated between HTML write and
+        // sidecar write). Only files modified after the run started are
+        // touched — pre-existing HTML in imported-folder projects must not
+        // receive spurious manifests. Best-effort; must not block finalisation.
+        // See issue #2893.
+        if (run.projectId) {
+          (async () => {
+            try {
+              const project = getProject(db, run.projectId);
+              const files = await listFiles(PROJECTS_DIR, run.projectId, {
+                metadata: project?.metadata,
+              });
+              const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+              for (const f of files) {
+                const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+                if (ext !== '.html' && ext !== '.htm') continue;
+                try {
+                  const filePath = path.join(dir, f.name);
+                  const st = await fs.promises.stat(filePath);
+                  if (!isRunTouchedProjectFile(st.mtimeMs, runStartTimeMs)) continue;
+                  await reconcileHtmlArtifactManifest(
+                    PROJECTS_DIR,
+                    run.projectId,
+                    f.name,
+                    project?.metadata,
+                  );
+                } catch { /* per-file best-effort */ }
+              }
+            } catch { /* project-level best-effort */ }
+          })();
         }
-      }
-      if (status === 'succeeded') {
-        persistDeliveredAgentSessionState();
-      }
-      finishWithRetryDecision(status, code, signal);
+        // Flush buffered plain-text stdout (antigravity) that was not
+        // suppressed by the auth-prompt guard above. Send each chunk in
+        // order before finishing so the assistant text arrives before the
+        // run's `finished` event. Stamp first-token timing here — and only
+        // here — using the first chunk's arrival time, so the OAuth-prompt
+        // path (which returns before this flush) never records a TTFT for
+        // output the user never saw (PR #3412).
+        if (plaintextStdoutBuffer.length > 0 && firstBufferedStdoutAt !== null) {
+          noteFirstTokenAt(firstBufferedStdoutAt);
+        }
+        for (const chunk of plaintextStdoutBuffer) {
+          send('stdout', { chunk });
+        }
+        // Capture the pi session file path for conversational continuity.
+        // The session path is discovered by attachPiRpcSession when it
+        // processes agent_end; persist it under (conversationId, agentId) so
+        // another conversation in the same cwd cannot inherit this history.
+        if (acpSession && typeof acpSession.getLastSessionPath === 'function') {
+          const sessionPath = acpSession.getLastSessionPath();
+          if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
+            persistCapturedAgentSession(db, {
+              conversationId: run.conversationId,
+              agentId: def.id,
+              sessionId: sessionPath,
+              stablePromptHash: currentStableHash,
+            });
+          }
+        }
+        if (status === 'succeeded') {
+          persistDeliveredAgentSessionState();
+        }
+        finishWithRetryDecision(status, code, signal);
       } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
@@ -13513,7 +13527,7 @@ export async function startServer({
         // is read inside the empty-output guard above before this finally
         // runs, so the read always happens before the unlink.
         if (agentLogFilePath) {
-          fs.promises.unlink(agentLogFilePath).catch(() => {});
+          fs.promises.unlink(agentLogFilePath).catch(() => { });
         }
       }
     });
@@ -13901,13 +13915,13 @@ export async function startServer({
         // fallback must bind to the seeded default conversation instead.
         const defaultConv = Array.isArray(convs) && convs.length > 0
           ? [...convs].sort((a, b) => {
-              const aCreated = Number(a?.createdAt);
-              const bCreated = Number(b?.createdAt);
-              if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-                return aCreated - bCreated;
-              }
-              return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
-            })[0]
+            const aCreated = Number(a?.createdAt);
+            const bCreated = Number(b?.createdAt);
+            if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+              return aCreated - bCreated;
+            }
+            return String(a?.id ?? '').localeCompare(String(b?.id ?? ''));
+          })[0]
           : null;
         if (defaultConv && typeof defaultConv.id === 'string' && defaultConv.id) {
           meta.conversationId = defaultConv.id;
@@ -13970,9 +13984,9 @@ export async function startServer({
       assistantMessageId: run.assistantMessageId ?? null,
       ...(resolvedSnapshot?.ok
         ? {
-            appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
-            pluginId: resolvedSnapshot.snapshot.pluginId,
-          }
+          appliedPluginSnapshotId: resolvedSnapshot.snapshotId,
+          pluginId: resolvedSnapshot.snapshot.pluginId,
+        }
         : {}),
     };
     res.status(202).json(body);
@@ -14326,9 +14340,9 @@ export async function startServer({
               : {}),
             ...(usageAnalytics.cache_creation_input_tokens !== undefined
               ? {
-                  cache_creation_input_tokens:
-                    usageAnalytics.cache_creation_input_tokens,
-                }
+                cache_creation_input_tokens:
+                  usageAnalytics.cache_creation_input_tokens,
+              }
               : {}),
             ...(usageAnalytics.uncached_input_tokens !== undefined
               ? { uncached_input_tokens: usageAnalytics.uncached_input_tokens }
@@ -14409,7 +14423,7 @@ export async function startServer({
         );
         if (mapped) sse.send(mapped.kind, mapped, id);
       },
-      end:     () => sse.end(),
+      end: () => sse.end(),
       cleanup: () => sse.cleanup?.(),
     };
     run.clients.add(adapterClient);
@@ -14496,15 +14510,15 @@ export async function startServer({
     const contextMetadata = {
       ...(routineContext.pluginIds?.length
         ? {
-            contextPlugins: routineContext.pluginIds.map((id) => {
-              const plugin = getInstalledPlugin(db, id);
-              return {
-                id,
-                title: plugin?.title ?? id,
-                ...(plugin?.manifest?.description ? { description: plugin.manifest.description } : {}),
-              };
-            }),
-          }
+          contextPlugins: routineContext.pluginIds.map((id) => {
+            const plugin = getInstalledPlugin(db, id);
+            return {
+              id,
+              title: plugin?.title ?? id,
+              ...(plugin?.manifest?.description ? { description: plugin.manifest.description } : {}),
+            };
+          }),
+        }
         : {}),
       ...(routineContext.mcpServerIds?.length
         ? { contextMcpServers: routineContext.mcpServerIds.map((id) => ({ id })) }
@@ -14645,9 +14659,9 @@ export async function startServer({
       mediaExecution: defaultMediaExecutionPolicy(),
       ...(resolvedRoutineSnapshot?.ok
         ? {
-            appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,
-            pluginId: resolvedRoutineSnapshot.snapshot.pluginId,
-          }
+          appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,
+          pluginId: resolvedRoutineSnapshot.snapshot.pluginId,
+        }
         : {}),
     });
     const persistPreparedRun = async (routineRun = null) => {

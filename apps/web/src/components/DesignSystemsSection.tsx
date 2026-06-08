@@ -5,6 +5,7 @@ import type { AppConfig, DesignSystemGenerationJob, DesignSystemSummary } from '
 import {
   fetchDesignSystems,
   importGitHubDesignSystem,
+  importGitDesignSystem,
   importLocalDesignSystem,
   importShadcnDesignSystem,
   updateDesignSystemDraft,
@@ -60,7 +61,7 @@ export function DesignSystemsSection({
   // moved on cannot clobber a newer session's modal state.
   const renameSessionRef = useRef(0);
   const [importPath, setImportPath] = useState('');
-  const [importSource, setImportSource] = useState<'local' | 'github' | 'shadcn'>('local');
+  const [importSource, setImportSource] = useState<'local' | 'github' | 'git' | 'shadcn'>('local');
   const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
   const [craftApplies, setCraftApplies] = useState<string[]>([]);
   const [addOpen, setAddOpen] = useState(false);
@@ -232,9 +233,11 @@ export function DesignSystemsSection({
     const result =
       importSource === 'github'
         ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions })
-        : importSource === 'shadcn'
-          ? await importShadcnDesignSystem({ reference: importTarget, ...importOptions })
-          : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
+        : importSource === 'git'
+          ? await importGitDesignSystem({ gitUrl: importTarget, ...importOptions })
+          : importSource === 'shadcn'
+            ? await importShadcnDesignSystem({ reference: importTarget, ...importOptions })
+            : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
     setImporting(false);
     if ('error' in result) {
       setImportError(result.error.message);
@@ -339,6 +342,16 @@ export function DesignSystemsSection({
                   </button>
                   <button
                     type="button"
+                    className={importSource === 'git' ? 'active' : ''}
+                    onClick={() => {
+                      setImportSource('git');
+                      clearImportFeedback();
+                    }}
+                  >
+                    {t('settings.designSystemsSourceGit')}
+                  </button>
+                  <button
+                    type="button"
                     className={importSource === 'shadcn' ? 'active' : ''}
                     onClick={() => {
                       setImportSource('shadcn');
@@ -412,9 +425,11 @@ export function DesignSystemsSection({
                 <span className="library-import-option-label">
                   {importSource === 'github'
                     ? t('settings.designSystemsGithubUrl')
-                    : importSource === 'shadcn'
-                      ? t('settings.designSystemsShadcnReference')
-                      : t('settings.designSystemsProjectPath')}
+                    : importSource === 'git'
+                      ? t('settings.designSystemsGitUrl')
+                      : importSource === 'shadcn'
+                        ? t('settings.designSystemsShadcnReference')
+                        : t('settings.designSystemsProjectPath')}
                 </span>
                 <div className="library-install-row">
                   <input
@@ -423,9 +438,11 @@ export function DesignSystemsSection({
                     placeholder={
                       importSource === 'github'
                         ? 'https://github.com/owner/repo'
-                        : importSource === 'shadcn'
-                          ? 'shadcn/ui/theme-zinc'
-                          : '/path/to/project'
+                        : importSource === 'git'
+                          ? 'https://example.com/owner/repo.git'
+                          : importSource === 'shadcn'
+                            ? 'shadcn/ui/theme-zinc'
+                            : '/path/to/project'
                     }
                     value={importPath}
                     onChange={(e) => {
@@ -442,9 +459,11 @@ export function DesignSystemsSection({
                       ? t('settings.libraryLoading')
                       : importSource === 'github'
                         ? t('settings.designSystemsImportGithub')
-                        : importSource === 'shadcn'
-                          ? t('settings.designSystemsImportShadcn')
-                          : t('settings.designSystemsImportProject')}
+                        : importSource === 'git'
+                          ? t('settings.designSystemsImportGit')
+                          : importSource === 'shadcn'
+                            ? t('settings.designSystemsImportShadcn')
+                            : t('settings.designSystemsImportProject')}
                   </button>
                 </div>
               </div>

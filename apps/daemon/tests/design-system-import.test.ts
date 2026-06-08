@@ -277,4 +277,66 @@ describe('importLocalDesignSystemProject', () => {
       },
     });
   });
+
+  it('imports a git project without manifest.json and keeps all git project files while scaffolding', async () => {
+    fs.mkdirSync(path.join(sourceRoot, '.git'));
+    fs.writeFileSync(path.join(sourceRoot, '.git', 'HEAD'), 'ref: refs/heads/main');
+    fs.writeFileSync(path.join(sourceRoot, 'src', 'custom-source-file.ts'), 'console.log("hello");');
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+
+    expect(result.id).toBe('kami-app');
+    expect(fs.existsSync(path.join(result.dir, '.git', 'HEAD'))).toBe(true);
+    expect(fs.readFileSync(path.join(result.dir, 'src', 'custom-source-file.ts'), 'utf8')).toBe('console.log("hello");');
+    expect(fs.existsSync(path.join(result.dir, 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'DESIGN.md'))).toBe(true);
+  });
+
+  it('imports a project with an existing manifest.json as-is without scaffolding', async () => {
+    fs.writeFileSync(
+      path.join(sourceRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'some-existing-id',
+        name: 'custom-manifest-name',
+        category: 'My Category',
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+        },
+      }),
+    );
+    fs.writeFileSync(path.join(sourceRoot, 'DESIGN.md'), '# custom-manifest-name\nCustom content');
+    fs.writeFileSync(path.join(sourceRoot, 'tokens.css'), ':root { --accent: #fff; }');
+    fs.writeFileSync(path.join(sourceRoot, 'extra-file.txt'), 'extra');
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+      source: {
+        type: 'github',
+        url: 'https://github.com/test/repo.git',
+        commit: 'abcdef',
+        importedAt: '2026-05-18T09:00:00.000Z',
+      },
+    });
+
+    expect(result.id).toBe('custom-manifest-name');
+    expect(fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8')).toBe('# custom-manifest-name\nCustom content');
+    expect(fs.readFileSync(path.join(result.dir, 'extra-file.txt'), 'utf8')).toBe('extra');
+    expect(fs.existsSync(path.join(result.dir, 'USAGE.md'))).toBe(false);
+
+    const updatedManifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8'));
+    expect(updatedManifest).toMatchObject({
+      schemaVersion: 'od-design-system-project/v1',
+      id: 'custom-manifest-name',
+      name: 'custom-manifest-name',
+      source: {
+        type: 'github',
+        url: 'https://github.com/test/repo.git',
+        commit: 'abcdef',
+      },
+    });
+  });
 });

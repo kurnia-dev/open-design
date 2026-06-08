@@ -998,6 +998,7 @@ export function DesignSystemDetailView({
     async function syncWorkspaceProject() {
       setWorkspaceLoadError(null);
       const resolved = await resolveDesignSystemWorkspaceProject(currentSystem);
+      debugger;
       if (cancelled) return;
       if (!resolved) {
         setWorkspaceLoadError('Could not open the design system workspace.');
@@ -1840,7 +1841,7 @@ export function DesignSystemDetailView({
             // count for the newly active row. Fall back to the persisted
             // `conversation.messageCount` for a stable list count instead.
             onSelectConversation={setActiveConversationId}
-            onDeleteConversation={() => {}}
+            onDeleteConversation={() => { }}
             onNewConversation={createProjectChatConversation}
           />
         </div>
@@ -3527,11 +3528,11 @@ function emitSourceIngestResult(
     result: TrackingDesignSystemSourceIngestResult;
     hasFallback: boolean;
     fallbackType:
-      | 'none'
-      | 'native_github_auth'
-      | 'local_git_clone'
-      | 'manual_upload'
-      | 'unknown';
+    | 'none'
+    | 'native_github_auth'
+    | 'local_git_clone'
+    | 'manual_upload'
+    | 'unknown';
     repoHost: TrackingDesignSystemRepoHost;
     fileCount: number;
     totalBytes: number | null;

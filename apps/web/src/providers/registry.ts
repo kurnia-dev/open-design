@@ -8,6 +8,8 @@ import type {
   ConnectorStatusResponse,
   ImportGitHubDesignSystemRequest,
   ImportGitHubDesignSystemResponse,
+  ImportGitDesignSystemRequest,
+  ImportGitDesignSystemResponse,
   ImportShadcnDesignSystemRequest,
   ImportShadcnDesignSystemResponse,
   OpenDesignGithubLatestReleaseResponse,
@@ -740,6 +742,26 @@ export async function importGitHubDesignSystem(
     });
     if (!resp.ok) return { error: await readImportError(resp) };
     return (await resp.json()) as ImportGitHubDesignSystemResponse;
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
+export async function importGitDesignSystem(
+  input: ImportGitDesignSystemRequest,
+): Promise<ImportGitDesignSystemResponse | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/design-systems/import/git', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return { error: await readImportError(resp) };
+    return (await resp.json()) as ImportGitDesignSystemResponse;
   } catch (err) {
     return {
       error: {

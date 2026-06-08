@@ -1,4 +1,6 @@
-import { copyFile, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
+import { execFile, spawn } from 'node:child_process';
+import { copyFile, cp, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import path from 'node:path';
 
 import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
@@ -11,6 +13,8 @@ import {
   type DesignTokenContractReport,
 } from './design-token-contract.js';
 import { extractCssCustomProperties } from './design-token-evidence.js';
+
+const execFileAsync = promisify(execFile);
 
 export type LocalDesignSystemImportResult = {
   id: string;
@@ -30,25 +34,32 @@ export type LocalDesignSystemImportOptions = {
 
 export type DesignSystemProjectSource =
   | {
-      type: 'local';
-      path: string;
-      importedAt?: string;
-    }
+    type: 'local';
+    path: string;
+    importedAt?: string;
+  }
   | {
-      type: 'github';
-      url: string;
-      branch?: string;
-      commit?: string;
-      importedAt?: string;
-    }
+    type: 'github';
+    url: string;
+    branch?: string;
+    commit?: string;
+    importedAt?: string;
+  }
   | {
-      type: 'shadcn';
-      reference: string;
-      registryUrl?: string;
-      item?: string;
-      homepage?: string;
-      importedAt?: string;
-    };
+    type: 'git';
+    url: string;
+    branch?: string;
+    commit?: string;
+    importedAt?: string;
+  }
+  | {
+    type: 'shadcn';
+    reference: string;
+    registryUrl?: string;
+    item?: string;
+    homepage?: string;
+    importedAt?: string;
+  };
 
 type ProjectScan = {
   sourceRoot: string;
@@ -128,13 +139,57 @@ export async function importLocalDesignSystemProject(
   }
 
   const scan = await scanProject(sourceRoot);
-  const displayName = cleanDisplayName(options.name ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot));
+  const isGitProject =
+    options.source?.type === 'github' ||
+    options.source?.type === 'git' ||
+    (await exists(path.join(sourceRoot, '.git')));
+  const hasManifest = await exists(path.join(sourceRoot, 'manifest.json'));
+
+  let manifestName: string | undefined;
+  if (hasManifest) {
+    try {
+      const content = await readFile(path.join(sourceRoot, 'manifest.json'), 'utf8');
+      const parsed = JSON.parse(content) as Record<string, any>;
+      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+        manifestName = parsed.name;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const displayName = cleanDisplayName(options.name ?? manifestName ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot));
   const id = await nextAvailableSlug(userDesignSystemsRoot, slugify(displayName), options.reservedIds);
   const outDir = path.join(userDesignSystemsRoot, id);
   await mkdir(outDir, { recursive: true });
+
+  if (isGitProject || hasManifest) {
+    await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
+    await installDependencies(outDir);
+    await startDevScript(outDir);
+  }
   const importMode = normalizeImportMode(options.importMode);
   const craftApplies = normalizeCraftList(options.craftApplies);
   const now = options.now ?? new Date();
+
+  if (hasManifest) {
+    const manifestPath = path.join(outDir, 'manifest.json');
+    try {
+      const content = await readFile(manifestPath, 'utf8');
+      const parsed = JSON.parse(content) as Record<string, any>;
+      parsed.id = id;
+      parsed.source = options.source ?? {
+        type: 'local',
+        path: sourceRoot,
+        importedAt: now.toISOString(),
+      };
+      await writeFile(manifestPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    } catch (err) {
+      throw new LocalDesignSystemImportError('INTERNAL_ERROR', `failed to update manifest.json: ${String(err)}`);
+    }
+    const files = await getFileList(outDir);
+    return { id, dir: outDir, files };
+  }
 
   const files = [
     'USAGE.md',
@@ -462,11 +517,11 @@ function renderManifest(
     ...(scan.assets.length > 0 ? { assetsDir: 'assets' } : {}),
     ...(scan.fonts.length > 0
       ? {
-          fonts: scan.fonts.map((font) => ({
-            family: cleanDisplayName(path.basename(font.relPath, path.extname(font.relPath))),
-            file: `fonts/${slugify(path.basename(font.relPath, path.extname(font.relPath)))}${path.extname(font.relPath).toLowerCase()}`,
-          })),
-        }
+        fonts: scan.fonts.map((font) => ({
+          family: cleanDisplayName(path.basename(font.relPath, path.extname(font.relPath))),
+          file: `fonts/${slugify(path.basename(font.relPath, path.extname(font.relPath)))}${path.extname(font.relPath).toLowerCase()}`,
+        })),
+      }
       : {}),
     preview: {
       dir: 'preview',
@@ -489,9 +544,97 @@ function renderManifest(
   };
 }
 
+// ─── dependency install helpers ─────────────────────────────────────────────
+
+/**
+ * `cp` filter that skips `node_modules` trees so we don't copy gigabytes of
+ * dependencies when cloning or mirroring a local project. `installDependencies`
+ * re-creates them in the destination after the copy finishes.
+ */
+function skipNodeModules(src: string): boolean {
+  const parts = src.split(path.sep);
+  return !parts.includes('node_modules');
+}
+
+/**
+ * Sniffs the project's lockfile to pick the right package manager.
+ * Falls back to `npm` when no lockfile is present.
+ */
+async function detectPackageManager(dir: string): Promise<string> {
+  const [hasPnpm, hasYarn] = await Promise.all([
+    exists(path.join(dir, 'pnpm-lock.yaml')),
+    exists(path.join(dir, 'yarn.lock')),
+  ]);
+  if (hasPnpm) return 'pnpm';
+  if (hasYarn) return 'yarn';
+  return 'npm';
+}
+
+/**
+ * Runs `<pm> install` in `dir` if a `package.json` is present.
+ * Uses a 5-minute timeout to accommodate large monorepos.
+ * Errors are non-fatal: a warning is printed and import continues.
+ */
+export async function installDependencies(dir: string): Promise<void> {
+  const pkgPath = path.join(dir, 'package.json');
+  if (!(await exists(pkgPath))) return;
+
+  const pm = await detectPackageManager(dir);
+  try {
+    await execFileAsync(pm, ['install'], {
+      cwd: dir,
+      timeout: 300_000, // 5 minutes
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } catch (err) {
+    // Non-fatal: the project is still usable without node_modules for
+    // documentation/token extraction purposes.
+    console.warn(
+      `[design-system-import] ${pm} install failed in ${dir} — continuing without node_modules:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+/**
+ * Starts the `dev` script if present in `package.json`.
+ * Spawns it as a detached background process so it continues running.
+ */
+export async function startDevScript(dir: string): Promise<void> {
+  console.log("Checking pakcage json", dir)
+  const pkgPath = path.join(dir, 'package.json');
+  if (!(await exists(pkgPath))) return;
+  console.log("Package json exists")
+
+  try {
+    const pkgContent = await readFile(pkgPath, 'utf8');
+    const pkg = JSON.parse(pkgContent) as Record<string, any>;
+    if (!pkg.scripts || !pkg.scripts.dev) return;
+
+    const pm = await detectPackageManager(dir);
+    console.log(`[design-system-import] Starting dev server using ${pm} run dev in ${dir}`);
+
+    const child = spawn(pm, ['run', 'dev'], {
+      cwd: dir,
+      detached: true,
+      stdio: 'ignore',
+    });
+
+    child.unref();
+  } catch (err) {
+    console.warn(
+      `[design-system-import] Failed to start dev server in ${dir}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
 function normalizeImportMode(value: unknown): 'normalized' | 'hybrid' | 'verbatim' {
   return value === 'normalized' || value === 'verbatim' || value === 'hybrid' ? value : 'hybrid';
 }
+
 
 function normalizeCraftList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -955,4 +1098,37 @@ function escapeHtml(value: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function exists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getFileList(dir: string, baseDir: string = dir): Promise<string[]> {
+  const files: string[] = [];
+  const queue = [dir];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    let entries = [];
+    try {
+      entries = await readdir(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const absPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(absPath);
+      } else if (entry.isFile()) {
+        files.push(path.relative(baseDir, absPath).split(path.sep).join('/'));
+      }
+    }
+  }
+  return files;
 }

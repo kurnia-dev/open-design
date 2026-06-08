@@ -6367,6 +6367,7 @@ async function runDesignSystems(args) {
   if (args[0] === 'rename') return runDesignSystemRename(args.slice(1));
   if (args[0] === 'import-local') return runDesignSystemImportLocal(args.slice(1));
   if (args[0] === 'import-github') return runDesignSystemImportGithub(args.slice(1));
+  if (args[0] === 'import-git') return runDesignSystemImportGit(args.slice(1));
   if (args[0] === 'import-shadcn') return runDesignSystemImportShadcn(args.slice(1));
   if (args[0] === 'rebuild-token-contract') return runDesignSystemTokenContractRebuild(args.slice(1));
   if (!args[0] || isDesignSystemsHelpArg(args[0])) {
@@ -6409,6 +6410,38 @@ Imports a local project directory as an editable Open Design design system.
     baseDir: pathModule.resolve(localPath),
   });
   return postDesignSystemImport(flags, '/api/design-systems/import/local', body);
+}
+
+// od design-systems import-git <url> [--branch <branch>] [--name <name>]
+//   [--import-mode <mode>] [--craft <slug,slug>] [--json] [--daemon-url <url>]
+async function runDesignSystemImportGit(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od design-systems import-git <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
+  od design-systems import-git --url <url> [--branch <branch>] [--json]
+
+Imports a Git repository as an editable Open Design design system.
+
+  <url>                  Repository root URL, e.g. https://example.com/owner/repo.git or git@...
+  --url <url>            URL alternative for scripts that prefer named flags.
+  --branch <branch>      Branch, tag, or ref to clone.
+  --name <name>          Display name override for the imported system.
+  --import-mode <mode>   normalized | hybrid | verbatim (default hybrid).
+  --craft <slugs>        Comma-separated craft sections to apply (e.g. color,type).`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const stringFlags = new Set([...LIBRARY_STRING_FLAGS, 'url', 'branch', 'name', 'import-mode', 'craft']);
+  const flags = parseFlags(args, { string: stringFlags, boolean: LIBRARY_BOOLEAN_FLAGS });
+  const url = typeof flags.url === 'string' ? flags.url : positionalArgs(args, stringFlags)[0];
+  if (!url) {
+    console.error('Usage: od design-systems import-git <url>');
+    process.exit(2);
+  }
+  const body = designSystemImportRequestBody(flags, {
+    url,
+    ...(typeof flags.branch === 'string' ? { branch: flags.branch } : {}),
+  });
+  return postDesignSystemImport(flags, '/api/design-systems/import/git', body);
 }
 
 // od design-systems import-github <url> [--branch <branch>] [--name <name>]

@@ -564,6 +564,24 @@ export interface ImportGitHubDesignSystemResponse {
   tokenContractRebuild?: DesignSystemTokenContractRebuildJobResponse;
 }
 
+export interface ImportGitDesignSystemRequest {
+  /** Git repository URL, e.g. https://example.com/owner/repo.git or git@... */
+  gitUrl: string;
+  /** Optional branch to clone. Defaults to the repository default branch. */
+  branch?: string;
+  /** Optional display name override for the generated design-system project. */
+  name?: string;
+  /** Import structure mode. Defaults to hybrid for real project imports. */
+  importMode?: 'normalized' | 'hybrid' | 'verbatim';
+  /** Craft sections that should actively apply when this system is used. */
+  craftApplies?: string[];
+}
+
+export interface ImportGitDesignSystemResponse {
+  designSystem: DesignSystemSummary;
+  tokenContractRebuild?: DesignSystemTokenContractRebuildJobResponse;
+}
+
 export interface ImportShadcnDesignSystemRequest {
   /**
    * shadcn registry item reference. Accepts either the shadcn CLI

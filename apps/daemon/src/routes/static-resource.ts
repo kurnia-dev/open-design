@@ -19,7 +19,7 @@ import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
 } from '../design-system-import.js';
-import { importGitHubDesignSystemProject } from '../design-system-github-import.js';
+import { importGitHubDesignSystemProject, importGitDesignSystemProject } from '../design-system-github-import.js';
 import { importShadcnDesignSystemProject } from '../design-system-shadcn-import.js';
 import { renderDesignSystemPreview } from '../design-system-preview.js';
 import { renderDesignSystemShowcase } from '../design-system-showcase.js';
@@ -759,6 +759,51 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
       res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
+      if (err instanceof LocalDesignSystemImportError) {
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.post('/api/design-systems/import/git', async (req, res) => {
+    if (!requireLocalOrigin(req, res)) return;
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const gitUrl =
+        typeof body.gitUrl === 'string'
+          ? body.gitUrl
+          : typeof body.url === 'string'
+            ? body.url
+            : '';
+      const before = await listAllDesignSystems();
+      const importMode = normalizeDesignSystemImportMode(body.importMode);
+      const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
+      const result = await importGitDesignSystemProject(
+        gitUrl,
+        path.join(PROJECT_ROOT, '.tmp'),
+        USER_DESIGN_SYSTEMS_DIR,
+        {
+          ...(typeof body.name === 'string' ? { name: body.name } : {}),
+          ...(typeof body.branch === 'string' ? { branch: body.branch } : {}),
+          ...(importMode ? { importMode } : {}),
+          ...(craftApplies ? { craftApplies } : {}),
+          reservedIds: designSystemDirIdsFromCatalog(before),
+        },
+      );
+      const systems = await listAllDesignSystems();
+      const designSystem = findUserDesignSystemInCatalog(systems, result.id);
+      if (!designSystem) {
+        return sendApiError(
+          res,
+          500,
+          'INTERNAL_ERROR',
+          `imported Git design system was not found in catalog: ${result.dir}`,
+        );
+      }
+      res.status(201).json(await importedDesignSystemResponse(designSystem));
+    } catch (err: any) {
+      console.error('[static-resource] git import failed:', err);
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
       }

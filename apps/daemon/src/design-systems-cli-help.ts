@@ -7,6 +7,7 @@ export const DESIGN_SYSTEMS_USAGE = `Usage:
   od design-systems show <id>                  Print one entry.
   od design-systems rename <id> --title <new>  Rename an editable design system.
   od design-systems import-local <path>        Import a local project.
+  od design-systems import-git <url>           Import a Git repo.
   od design-systems import-github <url>        Import a public GitHub repo.
   od design-systems import-shadcn <reference>  Import a shadcn registry item.
   od design-systems rebuild-token-contract <id>  Start a token contract rebuild review.`;

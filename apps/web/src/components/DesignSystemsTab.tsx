@@ -19,6 +19,7 @@ import {
 import {
   deleteDesignSystemDraft,
   fetchDesignSystemShowcase,
+  importGitDesignSystem,
   updateDesignSystemDraft,
 } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
@@ -139,6 +140,49 @@ export function DesignSystemsTab({
   const [designSystemCollection, setDesignSystemCollection] = useState<DesignSystemCollection>('mine');
   const [templateCollection, setTemplateCollection] = useState<TemplateCollection>('mine');
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importMode, setImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
+  const [craftApplies, setCraftApplies] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const toggleCraftSlug = (current: string[], slug: string, enabled: boolean) => {
+    const next = new Set(current);
+    if (enabled) next.add(slug);
+    else next.delete(slug);
+    return Array.from(next);
+  };
+
+  async function handleGitImport(e: React.FormEvent) {
+    e.preventDefault();
+    const targetUrl = importUrl.trim();
+    if (!targetUrl || importing) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const result = await importGitDesignSystem({
+        gitUrl: targetUrl,
+        importMode,
+        craftApplies,
+      });
+
+      debugger;
+      if ('error' in result) {
+        setImportError(result.error.message);
+      } else {
+        setImportUrl('');
+        setImportOpen(false);
+        setCraftApplies([]);
+        await onSystemsRefresh?.();
+      }
+    } catch (err: any) {
+      setImportError(err.message || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  }
   const [category, setCategory] = useState<string>('All');
   // Cache fetched showcase HTML across re-renders so cards never re-flicker
   // when the user filters / scrolls back. null = "in flight"; undefined =
@@ -460,231 +504,239 @@ export function DesignSystemsTab({
 
       {primaryCollection === 'design-system' && designSystemCollection === 'mine' ? (
         <section className="ds-settings-card" aria-label={t('dsManager.yourSystemsAria')}>
-        <div className="ds-settings-card__head">
-          <div>
-            <span className="ds-manager-eyebrow">{t('dsManager.eyebrowDesignSystems')}</span>
-            <h2>{t('dsManager.yourSystemsHeading')}</h2>
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">{t('dsManager.eyebrowDesignSystems')}</span>
+              <h2>{t('dsManager.yourSystemsHeading')}</h2>
+            </div>
+            <select
+              aria-label={t('dsManager.filterAria')}
+              value={userFilter}
+              onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
+            >
+              <option value="all">{t('dsManager.filterAll')}</option>
+              <option value="published">{t('dsManager.filterPublished')}</option>
+              <option value="draft">{t('dsManager.filterDraft')}</option>
+            </select>
           </div>
-          <select
-            aria-label={t('dsManager.filterAria')}
-            value={userFilter}
-            onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
-          >
-            <option value="all">{t('dsManager.filterAll')}</option>
-            <option value="published">{t('dsManager.filterPublished')}</option>
-            <option value="draft">{t('dsManager.filterDraft')}</option>
-          </select>
-        </div>
 
-        {onCreate ? (
-          <button type="button" className="ds-create-row" onClick={onCreate}>
+          {onCreate ? (
+            <button type="button" className="ds-create-row" onClick={onCreate}>
+              <span>
+                <strong>{t('dsManager.createTitle')}</strong>
+                <small>{t('dsManager.createBody')}</small>
+              </span>
+              <span className="ds-create-row__action">{t('dsManager.createAction')}</span>
+            </button>
+          ) : null}
+
+          <button type="button" className="ds-create-row" onClick={() => setImportOpen(true)}>
             <span>
-              <strong>{t('dsManager.createTitle')}</strong>
-              <small>{t('dsManager.createBody')}</small>
+              <strong>{t('dsManager.importGitTitle')}</strong>
+              <small>{t('dsManager.importGitBody')}</small>
             </span>
-            <span className="ds-create-row__action">{t('dsManager.createAction')}</span>
+            <span className="ds-create-row__action">{t('dsManager.importGitAction')}</span>
           </button>
-        ) : null}
 
-        {userSystems.length === 0 ? (
-          <div className="ds-user-empty">
-            {t('dsManager.emptyMine')}
-          </div>
-        ) : (
-          <div className="ds-user-list">
-            {userSystems.map((system) => {
-              const status = system.status ?? 'draft';
-              const canUseInProjects = status === 'published';
-              const selected = canUseInProjects && system.id === selectedId;
-              const busy = busyId === system.id;
-              return (
-                <div className="ds-user-row" key={system.id}>
-                  <button
-                    type="button"
-                    className="ds-user-row__open"
-                    onClick={() => onOpenSystem?.(system.id)}
-                  >
-                    <span className="ds-user-row__title">
-                      <span>{system.title}</span>
-                      {selected ? <span className="ds-card-badge">{t('dsManager.badgeDefault')}</span> : null}
-                    </span>
-                    <span className="ds-user-row__meta">
-                      {t('dsManager.rowMetaUpdated', { date: formatShortDate(system.updatedAt) })}
-                    </span>
-                  </button>
-                  <div className="ds-user-row__actions">
-                    {onOpenSystem ? (
-                      <button
-                        type="button"
-                        className="ghost compact"
-                        onClick={() => onOpenSystem(system.id)}
-                        disabled={busy}
-                      >
-                        {t('dsManager.edit')}
-                      </button>
-                    ) : null}
-                    {!selected && canUseInProjects ? (
-                      <button
-                        type="button"
-                        className="ghost compact"
-                        onClick={() => handleMakeDefaultClick(system)}
-                        disabled={busy}
-                      >
-                        {t('dsManager.makeDefault')}
-                      </button>
-                    ) : null}
+          {userSystems.length === 0 ? (
+            <div className="ds-user-empty">
+              {t('dsManager.emptyMine')}
+            </div>
+          ) : (
+            <div className="ds-user-list">
+              {userSystems.map((system) => {
+                const status = system.status ?? 'draft';
+                const canUseInProjects = status === 'published';
+                const selected = canUseInProjects && system.id === selectedId;
+                const busy = busyId === system.id;
+                return (
+                  <div className="ds-user-row" key={system.id}>
                     <button
                       type="button"
-                      className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
-                      aria-pressed={status === 'published'}
-                      onClick={() => void togglePublished(system)}
-                      disabled={busy}
+                      className="ds-user-row__open"
+                      onClick={() => onOpenSystem?.(system.id)}
                     >
-                      <span>{status === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
-                      <i aria-hidden />
+                      <span className="ds-user-row__title">
+                        <span>{system.title}</span>
+                        {selected ? <span className="ds-card-badge">{t('dsManager.badgeDefault')}</span> : null}
+                      </span>
+                      <span className="ds-user-row__meta">
+                        {t('dsManager.rowMetaUpdated', { date: formatShortDate(system.updatedAt) })}
+                      </span>
                     </button>
-                    {onOpenSystem ? (
-                      <Button
-                        size="icon"
-                        aria-label={t('dsManager.openSystemAria', { title: system.title })}
-                        onClick={() => onOpenSystem(system.id)}
+                    <div className="ds-user-row__actions">
+                      {onOpenSystem ? (
+                        <button
+                          type="button"
+                          className="ghost compact"
+                          onClick={() => onOpenSystem(system.id)}
+                          disabled={busy}
+                        >
+                          {t('dsManager.edit')}
+                        </button>
+                      ) : null}
+                      {!selected && canUseInProjects ? (
+                        <button
+                          type="button"
+                          className="ghost compact"
+                          onClick={() => handleMakeDefaultClick(system)}
+                          disabled={busy}
+                        >
+                          {t('dsManager.makeDefault')}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
+                        aria-pressed={status === 'published'}
+                        onClick={() => void togglePublished(system)}
+                        disabled={busy}
                       >
-                        <Icon name="external-link" />
-                      </Button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="icon-btn danger"
-                      aria-label={t('dsManager.deleteSystemAria', { title: system.title })}
-                      onClick={() => void deleteSystem(system)}
-                      disabled={busy}
-                    >
-                      <Icon name="close" />
-                    </button>
+                        <span>{status === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
+                        <i aria-hidden />
+                      </button>
+                      {onOpenSystem ? (
+                        <Button
+                          size="icon"
+                          aria-label={t('dsManager.openSystemAria', { title: system.title })}
+                          onClick={() => onOpenSystem(system.id)}
+                        >
+                          <Icon name="external-link" />
+                        </Button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="icon-btn danger"
+                        aria-label={t('dsManager.deleteSystemAria', { title: system.title })}
+                        onClick={() => void deleteSystem(system)}
+                        disabled={busy}
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
         </section>
       ) : null}
 
       {primaryCollection === 'design-system' && designSystemCollection === 'official' ? (
         <section className="ds-settings-card" aria-label={t('dsManager.presetsAria')}>
-        <div className="ds-settings-card__head">
-          <div>
-            <span className="ds-manager-eyebrow">{t('dsManager.eyebrowLibrary')}</span>
-            <h2>{t('dsManager.officialPresets')}</h2>
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">{t('dsManager.eyebrowLibrary')}</span>
+              <h2>{t('dsManager.officialPresets')}</h2>
+            </div>
           </div>
-        </div>
-        <div className="tab-panel-toolbar ds-manager-toolbar">
-          <input
-            data-testid="design-systems-search"
-            placeholder={t('ds.searchPlaceholder')}
-            value={filter}
-            onFocus={() => {
-              if (searchTrackedRef.current) return;
-              searchTrackedRef.current = true;
-              trackDesignSystemsTopClick(analytics.track, {
-                page_name: 'design_systems',
-                area: 'design_systems',
-                element: 'search_input',
-              });
-            }}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            data-testid="design-systems-category-select"
-            value={category}
-            onFocus={() => {
-              if (categoryTrackedRef.current) return;
-              categoryTrackedRef.current = true;
-              trackDesignSystemsTopClick(analytics.track, {
-                page_name: 'design_systems',
-                area: 'design_systems',
-                element: 'search_dropdown',
-              });
-            }}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {renderCategory(c)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div
-          className="examples-filter-row"
-          role="tablist"
-          aria-label={t('ds.surfaceLabel')}
-        >
-          <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
-          {/* Hide chips with no items in the active style/search filter, but
-              always keep "all" and the currently selected surface — otherwise a
-              transient search could remove the active chip and leave the grid
-              filtered with no chip showing aria-selected. */}
-          {SURFACE_PILLS.filter(
-            (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
-          ).map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              role="tab"
-              aria-selected={surfaceFilter === p.value}
-              data-testid={`design-systems-surface-${p.value}`}
-              className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
-              onClick={() => {
+          <div className="tab-panel-toolbar ds-manager-toolbar">
+            <input
+              data-testid="design-systems-search"
+              placeholder={t('ds.searchPlaceholder')}
+              value={filter}
+              onFocus={() => {
+                if (searchTrackedRef.current) return;
+                searchTrackedRef.current = true;
                 trackDesignSystemsTopClick(analytics.track, {
                   page_name: 'design_systems',
                   area: 'design_systems',
-                  element: 'filter_chip',
-                  filter_name: p.value,
+                  element: 'search_input',
                 });
-                setSurfaceFilter(p.value);
               }}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <select
+              data-testid="design-systems-category-select"
+              value={category}
+              onFocus={() => {
+                if (categoryTrackedRef.current) return;
+                categoryTrackedRef.current = true;
+                trackDesignSystemsTopClick(analytics.track, {
+                  page_name: 'design_systems',
+                  area: 'design_systems',
+                  element: 'search_dropdown',
+                });
+              }}
+              onChange={(e) => setCategory(e.target.value)}
             >
-              {t(p.labelKey)}
-              <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
-            </button>
-          ))}
-        </div>
-        {filtered.length === 0 ? (
-          <div className="tab-empty" data-testid="design-systems-empty">{t('ds.emptyNoMatch')}</div>
-        ) : (
-          <div className="ds-grid" data-testid="design-systems-grid">
-            {filtered.map((s) => (
-              <DesignSystemCard
-                key={s.id}
-                system={s}
-                active={s.id === selectedId}
-                thumbHtml={thumbs[s.id]}
-                onIntersect={() => loadThumb(s.id)}
-                onSelect={() => {
-                  trackDesignSystemsTemplateCardClick(analytics.track, {
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {renderCategory(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div
+            className="examples-filter-row"
+            role="tablist"
+            aria-label={t('ds.surfaceLabel')}
+          >
+            <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
+            {/* Hide chips with no items in the active style/search filter, but
+              always keep "all" and the currently selected surface — otherwise a
+              transient search could remove the active chip and leave the grid
+              filtered with no chip showing aria-selected. */}
+            {SURFACE_PILLS.filter(
+              (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
+            ).map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                role="tab"
+                aria-selected={surfaceFilter === p.value}
+                data-testid={`design-systems-surface-${p.value}`}
+                className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
+                onClick={() => {
+                  trackDesignSystemsTopClick(analytics.track, {
                     page_name: 'design_systems',
-                    area: 'templates_card',
-                    element: 'templates_card',
-                    templates_id: s.id,
-                    templates_type: s.source ?? 'library',
+                    area: 'design_systems',
+                    element: 'filter_chip',
+                    filter_name: p.value,
                   });
-                  onSelect(s.id);
+                  setSurfaceFilter(p.value);
                 }}
-                onPreview={() => {
-                  trackDesignSystemsTemplateCardClick(analytics.track, {
-                    page_name: 'design_systems',
-                    area: 'templates_card',
-                    element: 'templates_card',
-                    templates_id: s.id,
-                    templates_type: s.source ?? 'library',
-                  });
-                  onPreview(s.id);
-                }}
-              />
+              >
+                {t(p.labelKey)}
+                <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
+              </button>
             ))}
           </div>
-        )}
+          {filtered.length === 0 ? (
+            <div className="tab-empty" data-testid="design-systems-empty">{t('ds.emptyNoMatch')}</div>
+          ) : (
+            <div className="ds-grid" data-testid="design-systems-grid">
+              {filtered.map((s) => (
+                <DesignSystemCard
+                  key={s.id}
+                  system={s}
+                  active={s.id === selectedId}
+                  thumbHtml={thumbs[s.id]}
+                  onIntersect={() => loadThumb(s.id)}
+                  onSelect={() => {
+                    trackDesignSystemsTemplateCardClick(analytics.track, {
+                      page_name: 'design_systems',
+                      area: 'templates_card',
+                      element: 'templates_card',
+                      templates_id: s.id,
+                      templates_type: s.source ?? 'library',
+                    });
+                    onSelect(s.id);
+                  }}
+                  onPreview={() => {
+                    trackDesignSystemsTemplateCardClick(analytics.track, {
+                      page_name: 'design_systems',
+                      area: 'templates_card',
+                      element: 'templates_card',
+                      templates_id: s.id,
+                      templates_type: s.source ?? 'library',
+                    });
+                    onPreview(s.id);
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
 
@@ -732,6 +784,108 @@ export function DesignSystemsTab({
           body={t('dsManager.enterpriseTplBody')}
           comingSoonLabel={t('dsManager.comingSoonBadge')}
         />
+      ) : null}
+
+      {importOpen ? (
+        <div className="modal-backdrop" onClick={() => { if (!importing) setImportOpen(false); }}>
+          <form
+            className="modal"
+            style={{ maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleGitImport}
+          >
+            <h2 style={{ margin: 0, fontSize: '18px' }}>{t('dsManager.importGitTitle')}</h2>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {t('settings.designSystemsGitUrl')}
+              </label>
+              <input
+                type="text"
+                className="library-import-input"
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
+                placeholder="https://example.com/owner/repo.git"
+                value={importUrl}
+                autoFocus
+                disabled={importing}
+                onChange={(e) => setImportUrl(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {t('settings.designSystemsStructure')}
+              </label>
+              <select
+                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
+                value={importMode}
+                disabled={importing}
+                onChange={(e) => setImportMode(e.target.value as any)}
+              >
+                <option value="hybrid">{t('settings.designSystemsModeHybrid')}</option>
+                <option value="normalized">{t('settings.designSystemsModeNormalized')}</option>
+                <option value="verbatim">{t('settings.designSystemsModeVerbatim')}</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {t('settings.designSystemsCraft')}
+              </label>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={craftApplies.includes('color')}
+                    disabled={importing}
+                    onChange={(e) =>
+                      setCraftApplies((current) =>
+                        toggleCraftSlug(current, 'color', e.target.checked),
+                      )
+                    }
+                  />
+                  <span>{t('settings.designSystemsCraftColor')}</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={craftApplies.includes('accessibility-baseline')}
+                    disabled={importing}
+                    onChange={(e) =>
+                      setCraftApplies((current) =>
+                        toggleCraftSlug(current, 'accessibility-baseline', e.target.checked),
+                      )
+                    }
+                  />
+                  <span>{t('settings.designSystemsCraftAccessibility')}</span>
+                </label>
+              </div>
+            </div>
+
+            {importError ? (
+              <p className="library-install-error" style={{ margin: 0, color: 'var(--danger)', fontSize: '13px' }}>
+                {importError}
+              </p>
+            ) : null}
+
+            <div className="row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+              <button
+                type="button"
+                disabled={importing}
+                onClick={() => setImportOpen(false)}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="submit"
+                className="primary"
+                disabled={importing || !importUrl.trim()}
+              >
+                {importing ? t('settings.libraryLoading') : t('dsManager.importGitAction')}
+              </button>
+            </div>
+          </form>
+        </div>
       ) : null}
     </div>
   );
@@ -831,9 +985,9 @@ function DesignSystemCard({
       }}
     >
       <div
-      className="ds-card-thumb"
-      data-testid={`design-system-preview-${system.id}`}
-      onClick={(e) => {
+        className="ds-card-thumb"
+        data-testid={`design-system-preview-${system.id}`}
+        onClick={(e) => {
           e.stopPropagation();
           onPreview();
         }}

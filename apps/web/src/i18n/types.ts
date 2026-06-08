@@ -448,6 +448,7 @@ export interface Dict {
   'settings.designSystemsSource': string;
   'settings.designSystemsSourceLocal': string;
   'settings.designSystemsSourceGithub': string;
+  'settings.designSystemsSourceGit': string;
   'settings.designSystemsSourceShadcn': string;
   'settings.designSystemsShadcnReference': string;
   'settings.designSystemsImportShadcn': string;
@@ -459,8 +460,10 @@ export interface Dict {
   'settings.designSystemsCraftColor': string;
   'settings.designSystemsCraftAccessibility': string;
   'settings.designSystemsGithubUrl': string;
+  'settings.designSystemsGitUrl': string;
   'settings.designSystemsProjectPath': string;
   'settings.designSystemsImportGithub': string;
+  'settings.designSystemsImportGit': string;
   'settings.designSystemsImportProject': string;
   'settings.designSystemsImportedStatus': string;
   'settings.designSystemsViewImported': string;
@@ -1482,6 +1485,9 @@ export interface Dict {
   'dsManager.createTitle': string;
   'dsManager.createBody': string;
   'dsManager.createAction': string;
+  'dsManager.importGitTitle': string;
+  'dsManager.importGitBody': string;
+  'dsManager.importGitAction': string;
   'dsManager.emptyMine': string;
   'dsManager.badgeDefault': string;
   'dsManager.rowMetaUpdated': string;

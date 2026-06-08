@@ -58,7 +58,7 @@ export async function importGitHubDesignSystemProject(
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', 'HEAD']),
     ]);
     const sourceBranch = branch ?? normalizeDetachedBranch(detectedBranch);
-    return await importLocalDesignSystemProject(cloneDir, userDesignSystemsRoot, {
+    const result = await importLocalDesignSystemProject(cloneDir, userDesignSystemsRoot, {
       now: new Date(importedAt),
       fallbackName: parsed.repo,
       ...(options.name ? { name: options.name } : {}),
@@ -73,12 +73,94 @@ export async function importGitHubDesignSystemProject(
         ...(sourceBranch ? { branch: sourceBranch } : {}),
       },
     });
+    await rm(cloneDir, { recursive: true, force: true });
+    return result;
   } catch (err) {
     await rm(cloneDir, { recursive: true, force: true });
     if (err instanceof LocalDesignSystemImportError) throw err;
     throw new LocalDesignSystemImportError(
       'BAD_REQUEST',
       `could not import public GitHub repository: ${formatGitError(err)}`,
+    );
+  }
+}
+
+export type GitDesignSystemImportOptions = Pick<
+  LocalDesignSystemImportOptions,
+  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds'
+> & {
+  branch?: string;
+  gitBin?: string;
+};
+
+export function parseGitRepoUrl(input: string): { cloneUrl: string; repo: string } {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new LocalDesignSystemImportError('BAD_REQUEST', 'Git URL is required');
+  }
+  let repoName = 'git-repo';
+  let cleanUrl = trimmed.replace(/\/+$/, '');
+  const gitSuffixRegex = /\/([^/]+?)(?:\.git)?$/i;
+  const match = cleanUrl.match(gitSuffixRegex);
+  if (match && match[1]) {
+    repoName = match[1];
+  }
+  return {
+    cloneUrl: trimmed,
+    repo: repoName,
+  };
+}
+
+export async function importGitDesignSystemProject(
+  gitUrl: string,
+  tmpRoot: string,
+  userDesignSystemsRoot: string,
+  options: GitDesignSystemImportOptions = {},
+): Promise<LocalDesignSystemImportResult> {
+  const parsed = parseGitRepoUrl(gitUrl);
+  const importedAt = (options.now ?? new Date()).toISOString();
+  const cloneRoot = path.join(tmpRoot, 'git-design-system-imports');
+  await mkdir(cloneRoot, { recursive: true });
+  const cloneDir = path.join(
+    cloneRoot,
+    `${parsed.repo}-${importedAt.replace(/[^0-9a-z]/gi, '')}`,
+  );
+  const gitBin = options.gitBin ?? 'git';
+  const cloneArgs = ['clone', '--depth', '1'];
+  const branch = cleanBranch(options.branch);
+  if (branch) cloneArgs.push('--branch', branch);
+  cloneArgs.push(parsed.cloneUrl, cloneDir);
+
+  try {
+    await execGit(gitBin, cloneArgs, undefined, 120_000);
+    const [detectedBranch, commit] = await Promise.all([
+      readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),
+      readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', 'HEAD']),
+    ]);
+    const sourceBranch = branch ?? normalizeDetachedBranch(detectedBranch);
+    const result = await importLocalDesignSystemProject(cloneDir, userDesignSystemsRoot, {
+      now: new Date(importedAt),
+      fallbackName: parsed.repo,
+      ...(options.name ? { name: options.name } : {}),
+      ...(options.reservedIds ? { reservedIds: options.reservedIds } : {}),
+      ...(options.importMode ? { importMode: options.importMode } : {}),
+      ...(options.craftApplies ? { craftApplies: options.craftApplies } : {}),
+      source: {
+        type: 'git',
+        url: parsed.cloneUrl,
+        commit,
+        importedAt,
+        ...(sourceBranch ? { branch: sourceBranch } : {}),
+      },
+    });
+    await rm(cloneDir, { recursive: true, force: true });
+    return result;
+  } catch (err) {
+    await rm(cloneDir, { recursive: true, force: true });
+    if (err instanceof LocalDesignSystemImportError) throw err;
+    throw new LocalDesignSystemImportError(
+      'BAD_REQUEST',
+      `could not import Git repository: ${formatGitError(err)}`,
     );
   }
 }

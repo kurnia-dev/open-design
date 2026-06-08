@@ -1,5 +1,6 @@
-import { rm } from 'node:fs/promises';
+import { rm, writeFile, readFile, readdir, stat, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import type { Express, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
@@ -9,7 +10,7 @@ import {
 import { createProjectArtifactFile } from './artifact-create.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
-import { listDesignSystems } from './design-systems.js';
+import { listDesignSystems, readDesignSystemPackageInfo } from './design-systems.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
@@ -752,10 +753,275 @@ function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' ? 'chat' : 'design';
 }
 
+async function scanDirForPackages(dir: string): Promise<Array<{ name: string; path: string }>> {
+  const packages: Array<{ name: string; path: string }> = [];
+
+  const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
+  let hasWorkspace = false;
+  try {
+    const st = await stat(workspaceYamlPath);
+    hasWorkspace = st.isFile();
+  } catch {}
+
+  if (hasWorkspace) {
+    try {
+      const yamlContent = await readFile(workspaceYamlPath, 'utf8');
+      const lines = yamlContent.split(/\r?\n/);
+      let inPackages = false;
+      const globPatterns: string[] = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        if (trimmed.startsWith('packages:')) {
+          inPackages = true;
+          continue;
+        }
+        if (inPackages && /^[a-zA-Z]/.test(line)) {
+          inPackages = false;
+        }
+        if (inPackages) {
+          const match = trimmed.match(/^-\s*['"]?([^'"]+)['"]?/);
+          if (match && match[1]) {
+            globPatterns.push(match[1]);
+          }
+        }
+      }
+
+      for (const pattern of globPatterns) {
+        if (pattern.endsWith('/*')) {
+          const parentDir = path.join(dir, pattern.slice(0, -2));
+          try {
+            const entries = await readdir(parentDir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (entry.isDirectory()) {
+                const pkgPath = path.join(parentDir, entry.name);
+                const pkgJsonPath = path.join(pkgPath, 'package.json');
+                try {
+                  const pkgJsonRaw = await readFile(pkgJsonPath, 'utf8');
+                  const pkgJson = JSON.parse(pkgJsonRaw);
+                  if (pkgJson && pkgJson.name) {
+                    packages.push({ name: pkgJson.name, path: pkgPath });
+                  }
+                } catch {}
+              }
+            }
+          } catch {}
+        } else {
+          const pkgPath = path.join(dir, pattern);
+          const pkgJsonPath = path.join(pkgPath, 'package.json');
+          try {
+            const pkgJsonRaw = await readFile(pkgJsonPath, 'utf8');
+            const pkgJson = JSON.parse(pkgJsonRaw);
+            if (pkgJson && pkgJson.name) {
+              packages.push({ name: pkgJson.name, path: pkgPath });
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error(`[resolveDesignSystemNpmPackages] Error reading workspaces from ${dir}:`, err);
+    }
+  }
+
+  const rootPkgJsonPath = path.join(dir, 'package.json');
+  try {
+    const rootPkgJsonRaw = await readFile(rootPkgJsonPath, 'utf8');
+    const rootPkgJson = JSON.parse(rootPkgJsonRaw);
+    if (rootPkgJson && rootPkgJson.name) {
+      if (!packages.some(p => p.name === rootPkgJson.name)) {
+        packages.push({ name: rootPkgJson.name, path: dir });
+      }
+    }
+  } catch {}
+
+  return packages;
+}
+
+async function resolveDesignSystemNpmPackages(
+  designSystemId: string | undefined | null,
+  DESIGN_SYSTEMS_DIR: string,
+  USER_DESIGN_SYSTEMS_DIR: string,
+): Promise<Array<{ name: string; path: string }>> {
+  if (!designSystemId) return [];
+
+  try {
+    const info = designSystemId.startsWith('user:')
+      ? await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, designSystemId, { idPrefix: 'user:' })
+      : await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, designSystemId);
+
+    if (!info || !info.manifest) return [];
+
+    const manifest = info.manifest;
+    const sourcePath = (manifest as any).source?.path;
+    if (!sourcePath || typeof sourcePath !== 'string') {
+      const dirId = designSystemId.startsWith('user:') ? designSystemId.slice('user:'.length) : designSystemId;
+      const brandRoot = path.join(designSystemId.startsWith('user:') ? USER_DESIGN_SYSTEMS_DIR : DESIGN_SYSTEMS_DIR, dirId);
+      return await scanDirForPackages(brandRoot);
+    }
+
+    return await scanDirForPackages(sourcePath);
+  } catch (err) {
+    console.error(`[resolveDesignSystemNpmPackages] Error resolving packages for ${designSystemId}:`, err);
+    return [];
+  }
+}
+
+async function initializeReactViteProject(
+  dir: string,
+  projectName: string,
+  designSystemPackages: Array<{ name: string; path: string }>,
+) {
+  await mkdir(path.join(dir, 'src'), { recursive: true });
+
+  const dsDeps = designSystemPackages
+    .map(pkg => {
+      const relPath = path.relative(dir, pkg.path).replace(/\\/g, '/');
+      return `,\n    "${pkg.name}": "link:${relPath}"`;
+    })
+    .join('');
+
+  const packageJson = `{
+  "name": "${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"${dsDeps}
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react-swc": "^3.5.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1"
+  }
+}`;
+
+  const viteConfig = "import { defineConfig } from 'vite';\n" +
+    "import react from '@vitejs/plugin-react-swc';\n" +
+    "import tailwindcss from '@tailwindcss/vite';\n\n" +
+    "// https://vitejs.dev/config/\n" +
+    "export default defineConfig({\n" +
+    "  plugins: [\n" +
+    "    react(),\n" +
+    "    tailwindcss(),\n" +
+    "  ],\n" +
+    "});\n";
+
+  const tsConfig = "{\n" +
+    "  \"compilerOptions\": {\n" +
+    "    \"target\": \"ES2020\",\n" +
+    "    \"useDefineForClassFields\": true,\n" +
+    "    \"lib\": [\"DOM\", \"DOM.Iterable\", \"ScriptHost\", \"ES2020\"],\n" +
+    "    \"module\": \"ESNext\",\n" +
+    "    \"skipLibCheck\": true,\n\n" +
+    "    /* Bundler mode */\n" +
+    "    \"moduleResolution\": \"bundler\",\n" +
+    "    \"allowImportingTsExtensions\": true,\n" +
+    "    \"resolveJsonModule\": true,\n" +
+    "    \"isolatedModules\": true,\n" +
+    "    \"noEmit\": true,\n" +
+    "    \"jsx\": \"react-jsx\",\n\n" +
+    "    /* Linting */\n" +
+    "    \"strict\": true,\n" +
+    "    \"noUnusedLocals\": true,\n" +
+    "    \"noUnusedParameters\": true,\n" +
+    "    \"noFallthroughCasesInSwitch\": true\n" +
+    "  },\n" +
+    "  \"include\": [\"src\"]\n" +
+    "}";
+
+  const indexHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${projectName}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+`;
+
+  const mainTsx = "import React from 'react';\n" +
+    "import ReactDOM from 'react-dom/client';\n" +
+    "import App from './App.tsx';\n" +
+    "import './index.css';\n\n" +
+    "ReactDOM.createRoot(document.getElementById('root')!).render(\n" +
+    "  <React.StrictMode>\n" +
+    "    <App />\n" +
+    "  </React.StrictMode>,\n" +
+    ");\n";
+
+  const listItems = designSystemPackages
+    .map(pkg => `<li><strong>${pkg.name}</strong> (linked from <code>${pkg.path}</code>)</li>`)
+    .join('\n        ');
+
+  const appTsx = `import React from 'react';
+
+function App() {
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+      <h1>Design Project: ${projectName}</h1>
+      <p>This is a functional React + Vite + TypeScript project linked with the following design system packages:</p>
+      <ul>
+        ${listItems}
+      </ul>
+      <p>Edit <code>src/App.tsx</code> to start building!</p>
+    </div>
+  );
+}
+
+export default App;
+`;
+
+  const indexCss = "@import \"tailwindcss\";\n";
+
+  const viteEnvD = "/// <reference types=\"vite/client\" />\n";
+
+  await Promise.all([
+    writeFile(path.join(dir, 'package.json'), packageJson, 'utf8'),
+    writeFile(path.join(dir, 'vite.config.ts'), viteConfig, 'utf8'),
+    writeFile(path.join(dir, 'tsconfig.json'), tsConfig, 'utf8'),
+    writeFile(path.join(dir, 'index.html'), indexHtml, 'utf8'),
+    writeFile(path.join(dir, 'src/main.tsx'), mainTsx, 'utf8'),
+    writeFile(path.join(dir, 'src/App.tsx'), appTsx, 'utf8'),
+    writeFile(path.join(dir, 'src/index.css'), indexCss, 'utf8'),
+    writeFile(path.join(dir, 'src/vite-env.d.ts'), viteEnvD, 'utf8'),
+  ]);
+}
+
+function installDependencies(dir: string) {
+  try {
+    console.log('[project-routes] Running npm install in background for ' + dir);
+    const child = spawn('npm', ['install'], {
+      cwd: dir,
+      stdio: 'ignore',
+      detached: true,
+    });
+    child.on('error', (err) => {
+      console.error('[project-routes] Failed to start npm install in ' + dir + ':', err);
+    });
+    child.unref();
+  } catch (err) {
+    console.error('[project-routes] Error spawning npm install in ' + dir + ':', err);
+  }
+}
+
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
@@ -1189,6 +1455,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           createdAt: now,
           updatedAt: now,
         });
+
+        const kind = projectMetadata?.kind;
+        if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
+          try {
+            const projectDir = await ensureProject(PROJECTS_DIR, id, projectMetadata);
+            const designSystemPackages = await resolveDesignSystemNpmPackages(
+              normalizedDesignSystemId,
+              DESIGN_SYSTEMS_DIR,
+              USER_DESIGN_SYSTEMS_DIR,
+            );
+            await initializeReactViteProject(projectDir, name.trim(), designSystemPackages);
+            installDependencies(projectDir);
+          } catch (initErr) {
+            console.error(`[project-routes] Failed to initialize React Vite project:`, initErr);
+          }
+        }
       } catch (err) {
         if (externalProjectDir) {
           await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});

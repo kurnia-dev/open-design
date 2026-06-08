@@ -10480,6 +10480,14 @@ export async function startServer({
         ? designSystemId
         : project?.designSystemId;
     const metadata = project?.metadata;
+    const projectDir =
+      typeof projectId === 'string' && projectId
+        ? resolveProjectDir(PROJECTS_DIR, projectId, metadata)
+        : undefined;
+    const isReactVite =
+      typeof projectDir === 'string' && projectDir
+        ? fs.existsSync(path.join(projectDir, 'package.json'))
+        : false;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
     const loadAllSkills = async () => {
       allSkillsPromise ??= listAllSkillLikeEntries();
@@ -10925,6 +10933,7 @@ export async function startServer({
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
       projectInstructions,
+      isReactVite,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files

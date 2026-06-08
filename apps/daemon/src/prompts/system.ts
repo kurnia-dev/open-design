@@ -489,7 +489,22 @@ export interface ComposeInput {
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
+  isReactVite?: boolean | undefined;
 }
+
+const REACT_VITE_PROJECT_DIRECTIVE = `\
+## React + Vite + TypeScript Project Mode (CRITICAL)
+
+This project is a fully functional React + Vite + TypeScript application (not a single-file static HTML mockup). 
+
+You MUST follow these rules when editing or creating code files:
+1. **Source Folder**: All React components, logic, and entrypoints live under \`src/\`. The main entry component is \`src/App.tsx\` and the CSS is \`src/index.css\`. 
+2. **Component Creation**: Do not write components as inline scripts in \`index.html\`. Create modular component files (e.g. \`src/components/Button.tsx\`) and import them.
+3. **No Standalone Babel/Script Blocks**: Never use \`<script type="text/babel">\` or Babel-standalone. Use standard TypeScript/ES6 imports and exports.
+4. **Design System Imports**: This project has the design system package(s) linked in \`package.json\` dependencies. You must import components or helpers directly from the linked packages (e.g., \`import { Button } from '@mystaline/mysta-lib';\`). Check \`package.json\` to see which packages are available.
+5. **Vite Entry**: Keep \`index.html\` as the Vite entrypoint pointing to \`/src/main.tsx\`. Do not overwrite it with a self-contained single-page mockup unless explicitly requested.
+6. **Editing Files**: Use the edit tools to make precise modular edits to the files under \`src/\`.
+7. **Tailwind CSS v4**: The project is pre-configured with Tailwind CSS v4. Use standard Tailwind utility classes in JSX. Custom styles or custom theme extensions can be configured directly in \`src/index.css\` using Tailwind v4 directives (e.g. \`@theme { --color-primary: #...; }\`). Do not create a \`tailwind.config.js\` or \`postcss.config.js\` file.`;
 
 export function composeSystemPrompt({
   agentId,
@@ -525,6 +540,7 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
   mediaExecution,
+  isReactVite,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -589,6 +605,10 @@ export function composeSystemPrompt({
 
   if (!isMediaSurfaceEarly) {
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
+  }
+
+  if (isReactVite) {
+    parts.push(REACT_VITE_PROJECT_DIRECTIVE, '\n\n---\n\n');
   }
 
   parts.push(

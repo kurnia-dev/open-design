@@ -632,9 +632,42 @@ export async function startDevScript(dir: string): Promise<void> {
         const port = manifest.devServer.port;
         try {
           const { execSync } = await import('node:child_process');
-          const stdout = execSync(`lsof -t -i:${port}`).toString().trim();
-          if (stdout) {
-            const pids = stdout.split('\n').map(p => Number(p.trim())).filter(p => !isNaN(p));
+          const pids = new Set<number>();
+          if (process.platform === 'win32') {
+            try {
+              const stdout = execSync('netstat -ano').toString();
+              const lines = stdout.split('\n');
+              for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length >= 5 && parts[3] === 'LISTENING') {
+                  const localAddress = parts[1];
+                  const pidStr = parts[4];
+                  if (localAddress.endsWith(`:${port}`)) {
+                    const pid = Number(pidStr);
+                    if (!isNaN(pid) && pid > 0) {
+                      pids.add(pid);
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn(`[design-system-import] Failed to run netstat on Windows:`, err);
+            }
+          } else {
+            try {
+              const stdout = execSync(`lsof -t -i:${port}`).toString().trim();
+              if (stdout) {
+                const lines = stdout.split('\n').map(p => Number(p.trim())).filter(p => !isNaN(p));
+                for (const pid of lines) {
+                  pids.add(pid);
+                }
+              }
+            } catch {
+              // Ignored
+            }
+          }
+
+          if (pids.size > 0) {
             for (const pid of pids) {
               console.log(`[design-system-import] Port ${port} is in use by PID ${pid}. Terminating it.`);
               try { process.kill(pid, 'SIGKILL'); } catch {}
@@ -642,7 +675,7 @@ export async function startDevScript(dir: string): Promise<void> {
             await new Promise((resolve) => setTimeout(resolve, 500));
           }
         } catch (err) {
-          // Ignored if lsof fails or port not in use
+          // Ignored
         }
       }
     } catch {

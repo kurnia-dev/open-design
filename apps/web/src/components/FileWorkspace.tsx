@@ -1,3 +1,7 @@
+import { Button } from '@open-design/components';
+import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import { AnimatePresence } from 'motion/react';
 import {
   useCallback,
   useEffect,
@@ -7,89 +11,82 @@ import {
   type DragEvent as ReactDragEvent,
   type ReactNode,
 } from 'react';
-import { Button } from '@open-design/components';
-import type { TrackingProjectKind } from '@open-design/contracts/analytics';
-import { useAnalytics } from '../analytics/provider';
 import {
   trackFileManagerClick,
   trackFileUploadResult,
   trackPageView,
 } from '../analytics/events';
+import { useAnalytics } from '../analytics/provider';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
+import type { QuestionForm } from '../artifacts/question-form';
 import { useT } from '../i18n';
-import { isMacPlatform } from '../utils/platform';
 import {
   deleteProjectFile,
   fetchProjectFileText,
   fetchProjectFolders,
   projectFileUrl,
-  createProjectFolder,
-  deleteProjectFolder,
   renameProjectFile,
   updateDesignSystemDraft,
-  type UploadProjectFilesResult,
   uploadProjectFiles,
   writeProjectTextFile,
+  type UploadProjectFilesResult
 } from '../providers/registry';
 import { deriveFileOps, type FileOpEntry } from '../runtime/file-ops';
-import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
+import { buildGenerationPreviewState } from '../runtime/generation-preview';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
+import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
+import { createTerminal, killTerminal } from '../state/projects';
+import type { ChatMessage } from '../types';
 import {
-  type AgentEvent,
-  type AgentInfo,
-  type AppConfig,
-  type ChatAttachment,
-  type ChatCommentAttachment,
-  type Conversation,
   conversationIdFromSideChatTabId,
   isSideChatTabId,
   isTerminalTabId,
-  terminalIdFromTabId,
   liveArtifactSummaryToWorkspaceEntry,
-  type LiveArtifactSummary,
+  terminalIdFromTabId,
+  type AgentEvent,
+  type AgentInfo,
+  type AppConfig,
+  type ChatCommentAttachment,
+  type Conversation,
+  type DesignSystemSummary,
   type LiveArtifactEventItem,
+  type LiveArtifactSummary,
   type LiveArtifactWorkspaceEntry,
   type OpenTabsState,
-  type ProjectBrowserWorkspaceTab,
   type PreviewComment,
   type PreviewCommentTarget,
-  type DesignSystemSummary,
-  type ProjectMetadata,
+  type ProjectBrowserWorkspaceTab,
   type ProjectFile,
   type ProjectFolder,
+  type ProjectMetadata
 } from '../types';
-import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
-import { createTerminal, killTerminal } from '../state/projects';
-import type { QuestionForm } from '../artifacts/question-form';
-import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
-import { DesignBrowserPanel, labelFromUrl, type BrowserPageInfo } from './DesignBrowserPanel';
-import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
-import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
+import { isMacPlatform } from '../utils/platform';
+import { AmrGuidance } from './AmrGuidance';
 import { APP_CHROME_FILE_ACTIONS_ID } from './AppChromeHeader';
+import { DesignBrowserPanel, labelFromUrl, type BrowserPageInfo } from './DesignBrowserPanel';
+import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
+import { GenerationPreviewStage } from './GenerationPreviewStage';
 import { Icon, type IconName } from './Icon';
-import { Toast } from './Toast';
-import { TabLauncherMenu } from './workspace/TabLauncherMenu';
-import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
-import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
-import { TerminalViewer } from './workspace/TerminalViewer';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
+import { Toast } from './Toast';
+import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
+import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import {
   buildSketchDocument,
   isSketchJsonFileName,
   parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
-import { AnimatePresence } from 'motion/react';
-import { GenerationPreviewStage } from './GenerationPreviewStage';
-import { AmrGuidance } from './AmrGuidance';
-import { buildGenerationPreviewState } from '../runtime/generation-preview';
-import type { ChatMessage } from '../types';
+import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
+import { TabLauncherMenu } from './workspace/TabLauncherMenu';
+import { TerminalViewer } from './workspace/TerminalViewer';
+import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 
 interface Props {
   projectId: string;
@@ -231,6 +228,7 @@ interface SketchState {
 
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
+export const DEV_SERVER_PREVIEW_TAB = '__dev_server_preview__';
 const QUESTIONS_TAB = '__questions__';
 const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
@@ -442,7 +440,9 @@ export function FileWorkspace({
     fileManagerViewedProjectRef.current = projectId;
     trackPageView(analytics.track, { page_name: 'file_manager' });
   }, [projectId, analytics.track]);
-  const defaultRootTab = designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB;
+  const defaultRootTab = designSystemProject
+    ? (designSystemProject.devServerUrl ? DEV_SERVER_PREVIEW_TAB : DESIGN_SYSTEM_TAB)
+    : DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
   const persistedTabs = tabsState.tabs;
@@ -712,7 +712,7 @@ export function FileWorkspace({
   // back to the last remaining tab. Skip transient activeTab values
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === QUESTIONS_TAB) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
         setActiveTab(DESIGN_FILES_TAB);
@@ -733,9 +733,10 @@ export function FileWorkspace({
     if (!openRequest) return;
     const name = openRequest.name;
     if (!name) return;
-    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB) {
+    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB || name === DEV_SERVER_PREVIEW_TAB) {
       const nextActive =
-        name === DESIGN_SYSTEM_TAB && !designSystemProject
+        (name === DESIGN_SYSTEM_TAB && !designSystemProject) ||
+          (name === DEV_SERVER_PREVIEW_TAB && !designSystemProject?.devServerUrl)
           ? DESIGN_FILES_TAB
           : name;
       onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
@@ -845,6 +846,10 @@ export function FileWorkspace({
       setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
       return;
     }
+    if (tabId === DEV_SERVER_PREVIEW_TAB) {
+      setPersistedActive(designSystemProject?.devServerUrl ? DEV_SERVER_PREVIEW_TAB : DESIGN_FILES_TAB);
+      return;
+    }
     if (tabId === DESIGN_FILES_TAB) {
       setPersistedActive(DESIGN_FILES_TAB);
       return;
@@ -894,7 +899,7 @@ export function FileWorkspace({
 
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB) return;
     if (activeTab === QUESTIONS_TAB) {
       setActiveTab(defaultRootTab);
       return;
@@ -1091,7 +1096,7 @@ export function FileWorkspace({
   // The Design Files entry is already sticky-pinned, so we only scroll
   // for real workspace tabs. Issue #775.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === QUESTIONS_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === QUESTIONS_TAB) return;
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
@@ -1425,6 +1430,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === DEV_SERVER_PREVIEW_TAB
       || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
@@ -1446,6 +1452,7 @@ export function FileWorkspace({
     if (
       activeTab === DESIGN_FILES_TAB
       || activeTab === DESIGN_SYSTEM_TAB
+      || activeTab === DEV_SERVER_PREVIEW_TAB
       || activeTab === QUESTIONS_TAB
       || isBrowserTabId(activeTab)
     ) return null;
@@ -1458,6 +1465,14 @@ export function FileWorkspace({
         id: 'workspace:design-system',
         kind: 'design-system',
         label: 'Design System',
+        tabId: activeTab,
+      };
+    }
+    if (activeTab === DEV_SERVER_PREVIEW_TAB && designSystemProject?.devServerUrl) {
+      return {
+        id: 'workspace:dev-server-preview',
+        kind: 'preview',
+        label: 'Dev Preview',
         tabId: activeTab,
       };
     }
@@ -1564,6 +1579,7 @@ export function FileWorkspace({
   const workspaceTabIds = useMemo(() => {
     const ids: string[] = [];
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
+    if (designSystemProject?.devServerUrl) ids.push(DEV_SERVER_PREVIEW_TAB);
     ids.push(DESIGN_FILES_TAB);
     if (showQuestionsTab) ids.push(QUESTIONS_TAB);
     for (const entry of orderedWorkspaceTabs) {
@@ -1589,6 +1605,15 @@ export function FileWorkspace({
         kind: 'design-system',
         label: 'Design System',
         tabId: DESIGN_SYSTEM_TAB,
+      });
+    }
+
+    if (designSystemProject?.devServerUrl) {
+      push({
+        id: 'workspace:dev-server-preview',
+        kind: 'preview',
+        label: 'Dev Preview',
+        tabId: DEV_SERVER_PREVIEW_TAB,
       });
     }
 
@@ -1739,6 +1764,7 @@ export function FileWorkspace({
     && projectFolders.length === 0;
   const showGenerationPreview = Boolean(generationPreview)
     && activeTab !== DESIGN_SYSTEM_TAB
+    && activeTab !== DEV_SERVER_PREVIEW_TAB
     && (activeTab !== DESIGN_FILES_TAB || designFilesTabIsEmpty)
     && !isBrowserTabId(activeTab)
     && !isSideChatTabId(activeTab)
@@ -1781,6 +1807,7 @@ export function FileWorkspace({
       className={[
         'workspace',
         designSystemProject ? 'has-design-system-tab' : '',
+        designSystemProject?.devServerUrl ? 'has-dev-server-preview-tab' : '',
       ].filter(Boolean).join(' ')}
       data-testid="file-workspace"
     >
@@ -1839,6 +1866,23 @@ export function FileWorkspace({
                 <Icon name="blocks" size={13} />
               </span>
               <span className="ws-tab-label">Design System</span>
+            </button>
+          ) : null}
+          {designSystemProject?.devServerUrl ? (
+            <button
+              type="button"
+              className={`ws-tab dev-server-preview-tab ${activeTab === DEV_SERVER_PREVIEW_TAB ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === DEV_SERVER_PREVIEW_TAB}
+              tabIndex={0}
+              data-testid="dev-server-preview-tab"
+              onClick={() => setPersistedActive(DEV_SERVER_PREVIEW_TAB)}
+              title="Dev Preview"
+            >
+              <span className="tab-icon" aria-hidden>
+                <Icon name="globe" size={13} />
+              </span>
+              <span className="ws-tab-label">Dev Preview</span>
             </button>
           ) : null}
           <button
@@ -2086,25 +2130,33 @@ export function FileWorkspace({
             generating={questionsGenerating}
             onSubmit={(text) => onSubmitQuestionForm?.(text)}
           />
-        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
-          <DesignSystemProjectPanel
-            projectId={projectId}
-            system={designSystemProject}
-            files={visibleFiles}
-            streaming={Boolean(streaming)}
-            activityEvents={designSystemActivityEvents}
-            onOpenFile={openFile}
-            onUploadAssets={() => fileInputRef.current?.click()}
-            defaultDesignSystemId={defaultDesignSystemId}
-            onSetDefaultDesignSystem={onSetDefaultDesignSystem}
-            onDesignSystemsRefresh={onDesignSystemsRefresh}
-            onNeedsWork={onDesignSystemNeedsWork}
-            designSystemReview={designSystemReview}
-            onReviewDecision={onDesignSystemReviewDecision}
-            onUseDesignSystem={onUseDesignSystem}
-            onConnectRepo={onConnectRepo}
-            githubConnected={githubConnected}
-          />
+        ) : activeTab === DEV_SERVER_PREVIEW_TAB && designSystemProject?.devServerUrl ? (
+          <div className="dev-server-preview" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: 'var(--bg, #0c0d0e)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid var(--border-subtle, #202224)', background: 'var(--chrome-bg, #121315)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted, #888)', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {designSystemProject.devServerUrl}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const iframe = document.getElementById('dev-server-preview-iframe') as HTMLIFrameElement | null;
+                  if (iframe) {
+                    iframe.src = designSystemProject.devServerUrl!;
+                  }
+                }}
+              >
+                <Icon name="reload" size={12} />
+              </Button>
+            </div>
+            <iframe
+              id="dev-server-preview-iframe"
+              src={designSystemProject.devServerUrl}
+              style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
+              sandbox="allow-scripts allow-downloads allow-same-origin allow-popups"
+              title="Dev Server Preview"
+            />
+          </div>
         ) : showGenerationPreview && generationPreview ? (
           <GenerationPreviewStage
             model={generationPreview}
@@ -2234,8 +2286,8 @@ export function FileWorkspace({
             locale={chatLocale ?? 'en'}
             projectFiles={visibleFiles}
             conversations={conversations}
-            onSelectConversation={onSelectConversation ?? (() => {})}
-            onDeleteConversation={onDeleteConversation ?? (() => {})}
+            onSelectConversation={onSelectConversation ?? (() => { })}
+            onDeleteConversation={onDeleteConversation ?? (() => { })}
             onRenameConversation={onRenameConversation}
             onSessionModeChange={onConversationSessionModeChange}
             onNewConversation={onNewConversation}
@@ -2276,6 +2328,7 @@ export function FileWorkspace({
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}
             onCommentModeChange={onCommentModeChange}
+            devServerUrl={designSystemProject?.devServerUrl}
             shareRequest={
               shareRequest && shareRequest.name === activeFile.name
                 ? { nonce: shareRequest.nonce }

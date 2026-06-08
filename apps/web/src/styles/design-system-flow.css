@@ -1756,9 +1756,30 @@
 .ws-tab.design-system-tab.active {
   background: var(--bg-subtle);
 }
+.ws-tab.dev-server-preview-tab {
+  font-weight: 500;
+  color: var(--text);
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-panel);
+  box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+.ws-tab.dev-server-preview-tab.active {
+  background: var(--bg-subtle);
+}
+.workspace.has-design-system-tab .ws-tab.dev-server-preview-tab {
+  left: 148px;
+}
 .workspace.has-design-system-tab .ws-tab.design-files-tab {
   left: 148px;
   z-index: 1;
+}
+.workspace.has-dev-server-preview-tab.has-design-system-tab .ws-tab.design-files-tab {
+  left: 264px;
+}
+.workspace.has-dev-server-preview-tab:not(.has-design-system-tab) .ws-tab.design-files-tab {
+  left: 116px;
 }
 
 .ws-tabs-actions { display: inline-flex; gap: 4px; align-items: center; }

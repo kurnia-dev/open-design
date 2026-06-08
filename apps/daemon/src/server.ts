@@ -223,7 +223,7 @@ import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
-import { installDependencies, startDevScript } from './design-system-import.js';
+import { installDependencies, startDevScript, getDevServerUrl } from './design-system-import.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure } from './run-failure-classification.js';
@@ -4566,11 +4566,17 @@ export async function startServer({
     }));
     let installed = [];
     try {
-      installed = await listDesignSystems(USER_DESIGN_SYSTEMS_DIR, {
+      const listed = await listDesignSystems(USER_DESIGN_SYSTEMS_DIR, {
         idPrefix: 'user:',
         source: 'user',
         isEditable: true,
         defaultStatus: 'draft',
+      });
+      installed = listed.map((s) => {
+        const dirId = s.id.startsWith('user:') ? s.id.slice('user:'.length) : s.id;
+        const systemDir = path.join(USER_DESIGN_SYSTEMS_DIR, dirId);
+        const devServerUrl = getDevServerUrl(systemDir);
+        return devServerUrl ? { ...s, devServerUrl } : s;
       });
     } catch {
       // User directory may not exist yet or be unreadable.

@@ -960,6 +960,7 @@ interface Props {
   // Bumped nonce asking a deck preview to flip to `slideIndex` (a queued chat
   // send for this file just started processing).
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
+  devServerUrl?: string;
 }
 
 export function FileViewer({
@@ -983,6 +984,7 @@ export function FileViewer({
   onCommentModeChange,
   shareRequest,
   slideNavRequest,
+  devServerUrl,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1026,6 +1028,7 @@ export function FileViewer({
         onCommentModeChange={onCommentModeChange}
         shareRequest={shareRequest}
         slideNavRequest={slideNavRequest}
+        devServerUrl={devServerUrl}
       />
     );
   }
@@ -4423,6 +4426,7 @@ function HtmlViewer({
   onCommentModeChange,
   shareRequest,
   slideNavRequest,
+  devServerUrl,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -4443,6 +4447,7 @@ function HtmlViewer({
   onCommentModeChange?: (active: boolean) => void;
   shareRequest?: { nonce: number } | null;
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
+  devServerUrl?: string;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -5205,7 +5210,7 @@ function HtmlViewer({
     [source],
   );
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
-  const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
+  const useUrlLoadPreview = (shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
     commentMode: boardMode,
@@ -5216,10 +5221,19 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
-  }) && !manualEditRequiresSrcDoc;
+  }) && !manualEditRequiresSrcDoc) || Boolean(devServerUrl);
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`,
-    [projectId, file.name, file.mtime, reloadKey],
+    () => {
+      if (devServerUrl) {
+        const safePath = file.name
+          .split('/')
+          .map((seg) => encodeURIComponent(seg))
+          .join('/');
+        return `${devServerUrl}/${safePath}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`;
+      }
+      return `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`;
+    },
+    [devServerUrl, projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
   const activePreviewSrcUrl = (
@@ -5265,14 +5279,16 @@ function HtmlViewer({
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: devServerUrl
+        ? `${devServerUrl}/${baseDirFor(file.name)}`
+        : projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       selectionBridge: true,
       editBridge: manualEditRequiresSrcDoc,
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditRequiresSrcDoc, devServerUrl],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -6556,6 +6572,14 @@ function HtmlViewer({
   }, [inTabPresent]);
 
   function openInNewTab() {
+    if (devServerUrl) {
+      const safePath = file.name
+        .split('/')
+        .map((seg) => encodeURIComponent(seg))
+        .join('/');
+      window.open(`${devServerUrl}/${safePath}`, '_blank');
+      return;
+    }
     if (!source) return;
     openSandboxedPreviewInNewTab(source, exportTitle, {
       deck: effectiveDeck,
@@ -8481,7 +8505,7 @@ function HtmlViewer({
                           aria-hidden={useUrlLoadPreview ? undefined : true}
                           tabIndex={useUrlLoadPreview ? 0 : -1}
                           title={file.name}
-                          sandbox="allow-scripts allow-downloads"
+                          sandbox={devServerUrl ? "allow-scripts allow-downloads allow-same-origin" : "allow-scripts allow-downloads"}
                           src={urlTransportSrc}
                           onLoad={() => {
                             const frame = urlPreviewIframeRef.current;
@@ -8506,7 +8530,7 @@ function HtmlViewer({
                           aria-hidden={useUrlLoadPreview ? undefined : true}
                           tabIndex={useUrlLoadPreview ? 0 : -1}
                           title={file.name}
-                          sandbox="allow-scripts allow-downloads"
+                          sandbox={devServerUrl ? "allow-scripts allow-downloads allow-same-origin" : "allow-scripts allow-downloads"}
                           src={urlTransportSrc}
                           onLoad={() => {
                             const frame = urlPreviewIframeRef.current;

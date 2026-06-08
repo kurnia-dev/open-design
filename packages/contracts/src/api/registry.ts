@@ -269,6 +269,7 @@ export interface DesignSystemSummary {
   updatedAt?: string;
   provenance?: DesignSystemProvenance;
   projectId?: string;
+  devServerUrl?: string;
 }
 
 export interface DesignSystemDetail extends DesignSystemSummary {

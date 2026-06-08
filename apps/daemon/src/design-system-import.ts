@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { copyFile, cp, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -596,34 +597,82 @@ export async function installDependencies(dir: string): Promise<void> {
   }
 }
 
+export function getDevServerUrl(dir: string): string | undefined {
+  const manifestPath = path.join(path.resolve(dir), 'manifest.json');
+  try {
+    if (existsSync(manifestPath)) {
+      const content = readFileSync(manifestPath, 'utf8');
+      const manifest = JSON.parse(content) as Record<string, any>;
+      return manifest.devServer?.url;
+    }
+  } catch {
+    // Ignored
+  }
+  return undefined;
+}
+
 /**
  * Starts the `dev` script if present in `package.json`.
  * Spawns it as a detached background process so it continues running.
  */
 export async function startDevScript(dir: string): Promise<void> {
-  console.log("Checking pakcage json", dir)
-  const pkgPath = path.join(dir, 'package.json');
+  const resolvedDir = path.resolve(dir);
+  console.log("Checking package json", resolvedDir)
+  const pkgPath = path.join(resolvedDir, 'package.json');
   if (!(await exists(pkgPath))) return;
   console.log("Package json exists")
+
+  // Check manifest.json for existing devServer configuration and terminate whatever is on the port
+  const manifestPath = path.join(resolvedDir, 'manifest.json');
+  if (existsSync(manifestPath)) {
+    try {
+      const content = readFileSync(manifestPath, 'utf8');
+      const manifest = JSON.parse(content) as Record<string, any>;
+      if (manifest.devServer?.port) {
+        const port = manifest.devServer.port;
+        try {
+          const { execSync } = await import('node:child_process');
+          const stdout = execSync(`lsof -t -i:${port}`).toString().trim();
+          if (stdout) {
+            const pids = stdout.split('\n').map(p => Number(p.trim())).filter(p => !isNaN(p));
+            for (const pid of pids) {
+              console.log(`[design-system-import] Port ${port} is in use by PID ${pid}. Terminating it.`);
+              try { process.kill(pid, 'SIGKILL'); } catch {}
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        } catch (err) {
+          // Ignored if lsof fails or port not in use
+        }
+      }
+    } catch {
+      // Ignored
+    }
+  }
 
   try {
     const pkgContent = await readFile(pkgPath, 'utf8');
     const pkg = JSON.parse(pkgContent) as Record<string, any>;
     if (!pkg.scripts || !pkg.scripts.dev) return;
 
-    const pm = await detectPackageManager(dir);
-    console.log(`[design-system-import] Starting dev server using ${pm} run dev in ${dir}`);
+    const pm = await detectPackageManager(resolvedDir);
+    console.log(`[design-system-import] Starting dev server using ${pm} run dev in ${resolvedDir}`);
 
     const child = spawn(pm, ['run', 'dev'], {
-      cwd: dir,
+      cwd: resolvedDir,
       detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', 'ignore', 'pipe'],
     });
 
+    child.stderr?.on('data', (chunk) => {
+      console.warn(`[design-system-import-stderr] ${chunk.toString().trim()}`);
+    });
+
+    (child.stderr as any)?.unref?.();
     child.unref();
   } catch (err) {
     console.warn(
-      `[design-system-import] Failed to start dev server in ${dir}:`,
+      `[design-system-import] Failed to start dev server in ${resolvedDir}:`,
       err instanceof Error ? err.message : String(err),
     );
   }

@@ -1,28 +1,82 @@
+import type { AppliedPluginSnapshot, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
+import {
+  composeSystemPrompt,
+  type AudioVoiceOption,
+  type MemorySystemPromptResponse
+} from '@open-design/contracts';
+import type {
+  TrackingDesignSystemApplyTargetKind,
+  TrackingDesignSystemOrigin,
+  TrackingDesignSystemStatusValue,
+} from '@open-design/contracts/analytics';
+import { normalizeCustomReason, projectKindToTracking } from '@open-design/contracts/analytics';
+import { AnimatePresence } from 'motion/react';
 import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useLayoutEffect,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { AnimatePresence } from 'motion/react';
+import {
+  trackDesignSystemApplyResult,
+  trackPageView,
+} from '../analytics/events';
+import {
+  clearOnboardingSessionId,
+  peekOnboardingSessionId,
+} from '../analytics/onboarding-session';
+import { useAnalytics } from '../analytics/provider';
+import { historyWithApiAttachmentContext } from '../api-attachment-context';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
-import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
-import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
+import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import {
   findFirstQuestionForm,
   hasUnterminatedQuestionForm,
   parsePartialQuestionForm,
   type QuestionForm,
 } from '../artifacts/question-form';
-import { parseSubmittedAnswers } from './QuestionForm';
+import { validateHtmlArtifact } from '../artifacts/validate';
+import {
+  commentsToAttachments,
+  historyWithCommentAttachmentContext,
+  mergeAttachedComments,
+  mergePreviewCommentAttachments,
+  queuedSlideNavTarget,
+  removeAttachedComment,
+} from '../comments';
+import {
+  DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
+  isDesignSystemWorkspacePrompt,
+} from '../design-system-auto-prompt';
+import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
+import { useDesignMdState } from '../hooks/useDesignMdState';
+import { useFinalizeProject } from '../hooks/useFinalizeProject';
+import { useProjectDetail } from '../hooks/useProjectDetail';
+import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
 import { useI18n } from '../i18n';
+import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
+import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
+import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
+import {
+  buildFinalizeCredentialsMissingToast,
+  buildFinalizeRequest,
+} from '../lib/resolve-finalize-request';
+import {
+  useByokImageModelOptions,
+  useByokSpeechModelOptions,
+  useByokVideoModelOptions,
+} from '../media/aihubmix-image-models';
+import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
+import { mediaModelProviderId } from '../media/models';
+import { filterImplicitProducedFiles } from '../produced-files';
 import { streamMessage } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
@@ -34,15 +88,15 @@ import {
   streamViaDaemon,
 } from '../providers/daemon';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import { normalizeCustomReason } from '@open-design/contracts/analytics';
+import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
 import {
   deletePreviewComment,
   fetchConnectorStatuses,
-  fetchPreviewComments,
   fetchDesignSystem,
   fetchDesignTemplate,
-  fetchProjectDesignSystemPackageAudit,
   fetchLiveArtifacts,
+  fetchPreviewComments,
+  fetchProjectDesignSystemPackageAudit,
   fetchProjectFiles,
   fetchSkill,
   patchPreviewCommentStatus,
@@ -51,56 +105,17 @@ import {
   upsertPreviewComment,
   writeProjectTextFile,
 } from '../providers/registry';
-import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
-import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
-import {
-  composeSystemPrompt,
-  type AudioVoiceOption,
-  type MemorySystemPromptResponse,
-  type ResearchOptions,
-} from '@open-design/contracts';
-import { projectKindToTracking } from '@open-design/contracts/analytics';
-import type {
-  TrackingDesignSystemApplyTargetKind,
-  TrackingDesignSystemOrigin,
-  TrackingDesignSystemStatusValue,
-} from '@open-design/contracts/analytics';
-import { useAnalytics } from '../analytics/provider';
-import {
-  trackDesignSystemApplyResult,
-  trackPageView,
-} from '../analytics/events';
-import {
-  clearOnboardingSessionId,
-  peekOnboardingSessionId,
-} from '../analytics/onboarding-session';
 import { navigate } from '../router';
-import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
-import { isMacPlatform } from '../utils/platform';
-import {
-  canAutoRenameProjectFromPrompt,
-  summarizeProjectNameFromPrompt,
-} from '../utils/projectName';
-import {
-  apiProtocolAgentId,
-  apiProtocolModelLabel,
-  usesAnthropicProxy,
-} from '../utils/apiProtocol';
-import { playSound, showCompletionNotification } from '../utils/notifications';
-import { randomUUID } from '../utils/uuid';
-import { DEFAULT_NOTIFICATIONS } from '../state/config';
-import type { TodoItem } from '../runtime/todos';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
 } from '../runtime/design-system-package-audit';
-import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
+import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
+import type { TodoItem } from '../runtime/todos';
+import { DEFAULT_NOTIFICATIONS } from '../state/config';
 import {
-  DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
-  isDesignSystemWorkspacePrompt,
-} from '../design-system-auto-prompt';
-import {
+  cacheTabsLocally,
   createConversation,
   deleteConversation as deleteConversationApi,
   fetchAppliedPluginSnapshot,
@@ -108,18 +123,16 @@ import {
   installGeneratedPluginFolder,
   listConversations,
   listMessages,
+  listPlugins,
   loadTabs,
   patchConversation,
   patchProject,
+  persistTabsToDaemonNow,
   saveMessage,
   startGeneratedPluginShareTask,
-  cacheTabsLocally,
-  persistTabsToDaemonNow,
-  listPlugins,
-  type SaveMessageOptions,
   waitGeneratedPluginShareTask,
+  type SaveMessageOptions,
 } from '../state/projects';
-import type { AppliedPluginSnapshot, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
 import type {
   AgentEvent,
   AgentInfo,
@@ -131,79 +144,63 @@ import type {
   ChatMessageFeedbackChange,
   Conversation,
   DesignSystemSummary,
+  LiveArtifactEventItem,
+  LiveArtifactSummary,
   OpenTabsState,
-  Project,
-  ProjectMetadata,
   PreviewComment,
   PreviewCommentAttachment,
   PreviewCommentTarget,
+  Project,
   ProjectFile,
+  ProjectMetadata,
   ProjectTemplate,
-  LiveArtifactEventItem,
-  LiveArtifactSummary,
   SkillSummary,
 } from '../types';
-import { historyWithApiAttachmentContext } from '../api-attachment-context';
+import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
+import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import {
-  commentsToAttachments,
-  historyWithCommentAttachmentContext,
-  mergeAttachedComments,
-  mergePreviewCommentAttachments,
-  queuedSlideNavTarget,
-  removeAttachedComment,
-} from '../comments';
-import { filterImplicitProducedFiles } from '../produced-files';
-import { buildPptxExportPrompt } from '../lib/build-pptx-export-prompt';
+  apiProtocolAgentId,
+  apiProtocolModelLabel,
+  usesAnthropicProxy,
+} from '../utils/apiProtocol';
+import { playSound, showCompletionNotification } from '../utils/notifications';
+import { isMacPlatform } from '../utils/platform';
+import {
+  canAutoRenameProjectFromPrompt,
+  summarizeProjectNameFromPrompt,
+} from '../utils/projectName';
+import { randomUUID } from '../utils/uuid';
+import type { QuestionFormOpenRequest } from './AssistantMessage';
 import { AvatarMenu } from './AvatarMenu';
+import type { ChatSendMeta } from './ChatComposer';
+import { ChatPane } from './ChatPane';
+import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { EntrySettingsMenu } from './EntrySettingsMenu';
+import { FileWorkspace } from './FileWorkspace';
 import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
-import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
+import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
+import { CenteredLoader, Spinner } from './Loading';
 import { PluginDetailsModal } from './PluginDetailsModal';
-import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
-import { ChatPane } from './ChatPane';
-import type { QuestionFormOpenRequest } from './AssistantMessage';
-import { WorkingDirPill } from './WorkingDirPill';
-import type { ChatSendMeta } from './ChatComposer';
+import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
+import { parseSubmittedAnswers } from './QuestionForm';
+import type { SettingsSection } from './SettingsDialog';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
 } from './Theater';
-import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
+import { Toast } from './Toast';
+import { WorkingDirPill } from './WorkingDirPill';
+import { effectiveAgentModelChoice } from './agentModelSelection';
 import {
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedHtml,
 } from './auto-open-file';
-import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
-import { collectReferencedJsxNames } from '../runtime/jsx-module-refs';
-import { FileWorkspace } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
 } from './design-files/pluginFolderActions';
+import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
-import { CenteredLoader } from './Loading';
-import type { SettingsSection } from './SettingsDialog';
-import { Toast } from './Toast';
-import { useDesignMdState } from '../hooks/useDesignMdState';
-import { useFinalizeProject } from '../hooks/useFinalizeProject';
-import { useProjectDetail } from '../hooks/useProjectDetail';
-import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
-import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
-import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
-import { copyToClipboard } from '../lib/copy-to-clipboard';
-import { effectiveMaxTokens } from '../state/maxTokens';
-import { effectiveAgentModelChoice } from './agentModelSelection';
-import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
-import { mediaModelProviderId } from '../media/models';
-import {
-  useByokImageModelOptions,
-  useByokVideoModelOptions,
-  useByokSpeechModelOptions,
-} from '../media/aihubmix-image-models';
-import {
-  buildFinalizeCredentialsMissingToast,
-  buildFinalizeRequest,
-} from '../lib/resolve-finalize-request';
 
 
 type ProjectChatSendMeta = ChatSendMeta & {
@@ -720,6 +717,8 @@ function byokModelSeedForProtocol(
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
   if (evt.type === 'conversation-created') return null;
+  if (evt.type === 'npm-install-status') return null;
+  if (evt.type === 'npm-install-log') return null;
   if (evt.type === 'live_artifact') {
     return {
       kind: 'live_artifact',
@@ -776,7 +775,7 @@ export function ProjectView({
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
-  const handleThemeChange = onThemeChange ?? (() => {});
+  const handleThemeChange = onThemeChange ?? (() => { });
   // P0 page_view page_name=chat_panel — fire once per project mount.
   // ProjectView outlives conversation switches (ChatPane is keyed by
   // activeConversationId so it remounts when the user switches chats,
@@ -1070,8 +1069,8 @@ export function ProjectView({
   );
   const currentConversationLoading = Boolean(
     activeConversationId
-      && messagesConversationId !== activeConversationId
-      && failedMessagesConversationId !== activeConversationId,
+    && messagesConversationId !== activeConversationId
+    && failedMessagesConversationId !== activeConversationId,
   );
   const currentConversationStreaming = streaming && streamingConversationId === activeConversationId;
   const currentConversationBusy = currentConversationLoading
@@ -1215,17 +1214,17 @@ export function ProjectView({
 
   const currentConversationQueuedItems = activeConversationId
     ? queuedChatSends
-        .filter((item) => item.conversationId === activeConversationId)
-        .map((item) => {
-          const queuedItem = {
-            id: item.id,
-            prompt: item.prompt,
-            attachments: item.attachments,
-            commentAttachments: item.commentAttachments,
-          };
-          if (item.meta === undefined) return queuedItem;
-          return { ...queuedItem, meta: item.meta };
-        })
+      .filter((item) => item.conversationId === activeConversationId)
+      .map((item) => {
+        const queuedItem = {
+          id: item.id,
+          prompt: item.prompt,
+          attachments: item.attachments,
+          commentAttachments: item.commentAttachments,
+        };
+        if (item.meta === undefined) return queuedItem;
+        return { ...queuedItem, meta: item.meta };
+      })
     : [];
   const newConversationDisabled = creatingConversation;
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
@@ -1320,6 +1319,19 @@ export function ProjectView({
     if (!match) return;
     setActiveConversationId(routeConversationId);
   }, [routeConversationId, conversations, activeConversationId]);
+
+  const [npmInstallStatus, setNpmInstallStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>(
+    project.npmInstallStatus || 'idle'
+  );
+  const [npmInstallMessage, setNpmInstallMessage] = useState<string>(
+    project.npmInstallMessage || ''
+  );
+  const [npmInstallLogs, setNpmInstallLogs] = useState<string[]>([]);
+
+  useEffect(() => {
+    setNpmInstallStatus(project.npmInstallStatus || 'idle');
+    setNpmInstallMessage(project.npmInstallMessage || '');
+  }, [project.id, project.npmInstallStatus, project.npmInstallMessage]);
 
   useEffect(() => {
     setWorkspaceFocused(false);
@@ -1519,12 +1531,12 @@ export function ProjectView({
       const routeActive = routeFileNameRef.current;
       let nextState = routeActive
         ? {
-            ...state,
-            tabs: state.tabs.includes(routeActive)
-              ? state.tabs
-              : [...state.tabs, routeActive],
-            active: routeActive,
-          }
+          ...state,
+          tabs: state.tabs.includes(routeActive)
+            ? state.tabs
+            : [...state.tabs, routeActive],
+          active: routeActive,
+        }
         : state;
       if (routeActive) {
         nextState = cacheTabsLocally(project.id, nextState);
@@ -1715,21 +1727,21 @@ export function ProjectView({
       const manifest =
         ext === '.html'
           ? createHtmlArtifactManifest({
-              entry: fileName,
-              title,
+            entry: fileName,
+            title,
+            sourceSkillId: project.skillId ?? undefined,
+            designSystemId: project.designSystemId,
+            metadata,
+          })
+          : inferLegacyManifest({
+            entry: fileName,
+            title,
+            metadata: {
+              ...metadata,
               sourceSkillId: project.skillId ?? undefined,
               designSystemId: project.designSystemId,
-              metadata,
-            })
-          : inferLegacyManifest({
-              entry: fileName,
-              title,
-              metadata: {
-                ...metadata,
-                sourceSkillId: project.skillId ?? undefined,
-                designSystemId: project.designSystemId,
-              },
-            });
+            },
+          });
       const file = await writeProjectTextFile(project.id, fileName, art.html, {
         artifactManifest: manifest ?? undefined,
       });
@@ -1742,7 +1754,7 @@ export function ProjectView({
         if (file.stubGuardWarning) {
           setError(
             `Saved "${file.name}", but the model may have shipped a placeholder: ` +
-              `${file.stubGuardWarning.message}`,
+            `${file.stubGuardWarning.message}`,
           );
         }
         // Auto-open the freshly-persisted artifact as a tab so the user
@@ -1760,7 +1772,7 @@ export function ProjectView({
         savedArtifactRef.current = '';
         setError(
           `Couldn't save artifact "${fileName}". The write failed — ` +
-            'check the daemon logs for details.',
+          'check the daemon logs for details.',
         );
       }
     },
@@ -1828,6 +1840,29 @@ export function ProjectView({
       coalescedFileChangedRefresh();
       return;
     }
+    if (evt.type === 'npm-install-status') {
+      if (evt.projectId === project.id) {
+        setNpmInstallStatus(evt.status);
+        if (evt.message !== undefined) {
+          setNpmInstallMessage(evt.message);
+        }
+        // Reset log lines when a fresh install begins
+        if (evt.status === 'running') {
+          setNpmInstallLogs([]);
+        }
+      }
+      return;
+    }
+    if (evt.type === 'npm-install-log') {
+      if (evt.projectId === project.id) {
+        setNpmInstallLogs((prev) => {
+          const next = [...prev, evt.line];
+          // Keep at most 500 lines in UI state
+          return next.length > 500 ? next.slice(next.length - 500) : next;
+        });
+      }
+      return;
+    }
     if (evt.type === 'conversation-created') {
       // A new conversation was inserted into this project by a path the
       // open project view can't observe through its own state (currently:
@@ -1887,22 +1922,22 @@ export function ProjectView({
     return JSON.stringify({
       designSystem: designSystem
         ? {
-            id: designSystem.id,
-            title: designSystem.title,
-            category: designSystem.category,
-            summary: designSystem.summary,
-            source: designSystem.source ?? null,
-          }
+          id: designSystem.id,
+          title: designSystem.title,
+          category: designSystem.category,
+          summary: designSystem.summary,
+          source: designSystem.source ?? null,
+        }
         : null,
       skill: skill
         ? {
-            id: skill.id,
-            name: skill.name,
-            description: skill.description,
-            mode: skill.mode,
-            source: skill.source ?? null,
-            upstream: skill.upstream,
-          }
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          mode: skill.mode,
+          source: skill.source ?? null,
+          upstream: skill.upstream,
+        }
         : null,
     });
   }, [designSystems, designTemplates, project.designSystemId, project.skillId, skills]);
@@ -2224,23 +2259,23 @@ export function ProjectView({
         (prev) =>
           change
             ? {
-                ...prev,
-                feedback: {
-                  rating: change.rating,
-                  reasonCodes: change.reasonCodes,
-                  customReason: change.customReason,
-                  reasonsSubmittedAt: change.reasonsSubmittedAt,
-                  createdAt:
-                    prev.feedback?.rating === change.rating
-                      ? prev.feedback.createdAt
-                      : now,
-                  updatedAt: now,
-                },
-              }
-            : {
-                ...prev,
-                feedback: undefined,
+              ...prev,
+              feedback: {
+                rating: change.rating,
+                reasonCodes: change.reasonCodes,
+                customReason: change.customReason,
+                reasonsSubmittedAt: change.reasonsSubmittedAt,
+                createdAt:
+                  prev.feedback?.rating === change.rating
+                    ? prev.feedback.createdAt
+                    : now,
+                updatedAt: now,
               },
+            }
+            : {
+              ...prev,
+              feedback: undefined,
+            },
         true,
       );
       // Forward affirmative ratings to the daemon → Langfuse `score-create`.
@@ -2424,8 +2459,8 @@ export function ProjectView({
         : [];
       const historicalRuns = missingRunIdMessages.length > 0
         ? (await listProjectRuns()).filter(
-            (run) => run.projectId === project.id && run.conversationId === reattachConversationId,
-          )
+          (run) => run.projectId === project.id && run.conversationId === reattachConversationId,
+        )
         : [];
       if (cancelled) return;
       const activeByMessage = new Map(
@@ -2548,27 +2583,27 @@ export function ProjectView({
               parsedArtifact = parsedArtifact
                 ? { ...parsedArtifact, html: liveHtml }
                 : {
-                    identifier: ev.identifier,
-                    title: '',
-                    html: liveHtml,
-                  };
+                  identifier: ev.identifier,
+                  title: '',
+                  html: liveHtml,
+                };
               setArtifact((prev) =>
                 prev
                   ? { ...prev, html: liveHtml }
                   : {
-                      identifier: ev.identifier,
-                      title: '',
-                      html: liveHtml,
-                    },
+                    identifier: ev.identifier,
+                    title: '',
+                    html: liveHtml,
+                  },
               );
             } else if (ev.type === 'artifact:end') {
               parsedArtifact = parsedArtifact
                 ? { ...parsedArtifact, html: ev.fullContent }
                 : {
-                    identifier: ev.identifier,
-                    title: '',
-                    html: ev.fullContent,
-                  };
+                  identifier: ev.identifier,
+                  title: '',
+                  html: ev.fullContent,
+                };
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
           }
@@ -2610,10 +2645,10 @@ export function ProjectView({
                   parsedArtifact = parsedArtifact
                     ? { ...parsedArtifact, html: ev.fullContent }
                     : {
-                        identifier: ev.identifier,
-                        title: '',
-                        html: ev.fullContent,
-                      };
+                      identifier: ev.identifier,
+                      title: '',
+                      html: ev.fullContent,
+                    };
                   setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
                 }
               }
@@ -2876,7 +2911,7 @@ export function ProjectView({
           Array.from(reservedCommentIds, (commentId) =>
             patchPreviewCommentStatus(project.id, input.conversationId, commentId, 'applying'),
           ),
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
   }, [enqueueChatSend, project.id]);
@@ -2973,10 +3008,10 @@ export function ProjectView({
       const assistantAgentName =
         config.mode === 'daemon'
           ? agentModelDisplayName(
-              config.agentId,
-              selectedAgent?.name,
-              effectiveSelectedAgentChoice?.model,
-            )
+            config.agentId,
+            selectedAgent?.name,
+            effectiveSelectedAgentChoice?.model,
+          )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const preTurnFileNames = projectFiles.map((f) => f.name);
       const assistantId = randomUUID();
@@ -3001,19 +3036,19 @@ export function ProjectView({
           curr.map((conversation) =>
             conversation.id === runConversationId
               ? {
-                  ...conversation,
-                  updatedAt: endedAt ?? startedAt,
-                  latestRun: {
-                    status,
-                    startedAt,
-                    ...(endedAt === undefined
-                      ? {}
-                      : {
-                          endedAt,
-                          durationMs: Math.max(0, endedAt - startedAt),
-                        }),
-                  },
-                }
+                ...conversation,
+                updatedAt: endedAt ?? startedAt,
+                latestRun: {
+                  status,
+                  startedAt,
+                  ...(endedAt === undefined
+                    ? {}
+                    : {
+                      endedAt,
+                      durationMs: Math.max(0, endedAt - startedAt),
+                    }),
+                },
+              }
               : conversation,
           ),
         );
@@ -3210,27 +3245,27 @@ export function ProjectView({
             parsedArtifact = parsedArtifact
               ? { ...parsedArtifact, html: liveHtml }
               : {
-                  identifier: ev.identifier,
-                  title: '',
-                  html: liveHtml,
-                };
+                identifier: ev.identifier,
+                title: '',
+                html: liveHtml,
+              };
             setArtifact((prev) =>
               prev
                 ? { ...prev, html: liveHtml }
                 : {
-                    identifier: ev.identifier,
-                    title: '',
-                    html: liveHtml,
-                  },
+                  identifier: ev.identifier,
+                  title: '',
+                  html: liveHtml,
+                },
             );
           } else if (ev.type === 'artifact:end') {
             parsedArtifact = parsedArtifact
               ? { ...parsedArtifact, html: ev.fullContent }
               : {
-                  identifier: ev.identifier,
-                  title: '',
-                  html: ev.fullContent,
-                };
+                identifier: ev.identifier,
+                title: '',
+                html: ev.fullContent,
+              };
             setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
           }
         }
@@ -3284,10 +3319,10 @@ export function ProjectView({
               parsedArtifact = parsedArtifact
                 ? { ...parsedArtifact, html: ev.fullContent }
                 : {
-                    identifier: ev.identifier,
-                    title: '',
-                    html: ev.fullContent,
-                  };
+                  identifier: ev.identifier,
+                  title: '',
+                  html: ev.fullContent,
+                };
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
           }
@@ -3425,12 +3460,12 @@ export function ProjectView({
             : 'regenerate_from_review';
         const dsAnalyticsHints = isDesignSystemWorkspaceProject
           ? {
-              entryFrom: dsEntryFrom,
-              projectKind: 'design_system' as const,
-              designSystemRunContext: {
-                origin: 'manual_create' as const,
-              },
-            }
+            entryFrom: dsEntryFrom,
+            projectKind: 'design_system' as const,
+            designSystemRunContext: {
+              origin: 'manual_create' as const,
+            },
+          }
           : undefined;
         void streamViaDaemon({
           agentId: config.agentId,
@@ -3518,14 +3553,14 @@ export function ProjectView({
         const byokChatProvider =
           config.apiProtocol && config.apiKey
             ? {
-                provider: config.apiProtocol,
-                apiKey: config.apiKey,
-                baseUrl: config.baseUrl,
-                apiVersion:
-                  config.apiProtocol === 'azure'
-                    ? config.apiVersion ?? ''
-                    : '',
-              }
+              provider: config.apiProtocol,
+              apiKey: config.apiKey,
+              baseUrl: config.baseUrl,
+              apiVersion:
+                config.apiProtocol === 'azure'
+                  ? config.apiVersion ?? ''
+                  : '',
+            }
             : undefined;
         if (userText.length > 0) {
           try {
@@ -3878,10 +3913,10 @@ export function ProjectView({
   const pluginWorkflowAgentName =
     config.mode === 'daemon'
       ? agentModelDisplayName(
-          config.agentId,
-          selectedPluginActionAgent?.name,
-          effectiveSelectedPluginActionChoice?.model,
-        )
+        config.agentId,
+        selectedPluginActionAgent?.name,
+        effectiveSelectedPluginActionChoice?.model,
+      )
       : apiProtocolModelLabel(config.apiProtocol, config.model);
 
   const handlePluginFolderAgentAction = useCallback(
@@ -3937,19 +3972,19 @@ export function ProjectView({
           curr.map((conversation) =>
             conversation.id === conversationId
               ? {
-                  ...conversation,
-                  updatedAt: endedAt ?? startedAt,
-                  latestRun: {
-                    status,
-                    startedAt,
-                    ...(endedAt === undefined
-                      ? {}
-                      : {
-                          endedAt,
-                          durationMs: Math.max(0, endedAt - startedAt),
-                        }),
-                  },
-                }
+                ...conversation,
+                updatedAt: endedAt ?? startedAt,
+                latestRun: {
+                  status,
+                  startedAt,
+                  ...(endedAt === undefined
+                    ? {}
+                    : {
+                      endedAt,
+                      durationMs: Math.max(0, endedAt - startedAt),
+                    }),
+                },
+              }
               : conversation,
           ),
         );
@@ -4560,36 +4595,36 @@ export function ProjectView({
     () =>
       activeConversationId
         ? {
-	            conversationId: activeConversationId,
-	            messages,
-	            streaming: currentConversationStreaming,
-	            loading: currentConversationLoading,
-	            sendDisabled: currentConversationSendDisabled,
-            queuedItems: currentConversationQueuedItems,
-            error: conversationLoadError ?? error ?? audioVoiceOptionsError,
-            onSend: handleSend,
-            onRetry: handleRetry,
-            onStop: handleStop,
-            onSubmitForm: (text: string) => {
-              if (currentConversationActionDisabled) return;
-              void handleSend(text, [], []);
-            },
-            onRemoveQueuedSend: removeQueuedChatSend,
-            onUpdateQueuedSend: updateQueuedChatSend,
-            onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
-            onSendQueuedNow: sendQueuedChatSendNow,
-            onAssistantFeedback: handleAssistantFeedback,
-          }
+          conversationId: activeConversationId,
+          messages,
+          streaming: currentConversationStreaming,
+          loading: currentConversationLoading,
+          sendDisabled: currentConversationSendDisabled,
+          queuedItems: currentConversationQueuedItems,
+          error: conversationLoadError ?? error ?? audioVoiceOptionsError,
+          onSend: handleSend,
+          onRetry: handleRetry,
+          onStop: handleStop,
+          onSubmitForm: (text: string) => {
+            if (currentConversationActionDisabled) return;
+            void handleSend(text, [], []);
+          },
+          onRemoveQueuedSend: removeQueuedChatSend,
+          onUpdateQueuedSend: updateQueuedChatSend,
+          onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
+          onSendQueuedNow: sendQueuedChatSendNow,
+          onAssistantFeedback: handleAssistantFeedback,
+        }
         : undefined,
     [
       activeConversationId,
       audioVoiceOptionsError,
       conversationLoadError,
       currentConversationActionDisabled,
-	      currentConversationQueuedItems,
-	      currentConversationSendDisabled,
-	      currentConversationLoading,
-	      currentConversationStreaming,
+      currentConversationQueuedItems,
+      currentConversationSendDisabled,
+      currentConversationLoading,
+      currentConversationStreaming,
       error,
       handleAssistantFeedback,
       handleRetry,
@@ -5611,106 +5646,160 @@ export function ProjectView({
             />
           )
         ) : null}
-        <FileWorkspace
-          projectId={project.id}
-          projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
-          rootDirName={(() => {
-            const baseDir =
-              projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;
-            return typeof baseDir === 'string'
-              ? baseDir.split(/[/\\]/).filter(Boolean).pop()
-              : undefined;
-          })()}
-          reloading={workingDirReplacing}
-          resolvedDir={projectDetail.resolvedDir}
-          files={projectFiles}
-          liveArtifacts={liveArtifacts}
-          filesRefreshKey={filesRefresh}
-          onRefreshFiles={() => {
-            void refreshWorkspaceItems();
-          }}
-          isDeck={isDeck}
-          onExportAsPptx={handleExportAsPptx}
-          streaming={currentConversationActionDisabled}
-          commentQueueOnSend={commentQueueOnSend}
-          commentSendDisabled={currentConversationQueueDisabled}
-          openRequest={openRequest}
-          shareRequest={shareRequest}
-          slideNavRequest={slideNavRequest}
-          liveArtifactEvents={liveArtifactEvents}
-          designSystemActivityEvents={designSystemActivityEvents}
-          tabsState={openTabsState}
-          onTabsStateChange={persistTabsState}
-          previewComments={previewComments}
-          onSavePreviewComment={savePreviewComment}
-          onRemovePreviewComment={removePreviewComment}
-          onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
-          onRequestBrowserUsePrompt={handleBrowserUsePrompt}
-          onPluginFolderAgentAction={handlePluginFolderAgentAction}
-          activePluginActionPaths={activePluginActionPaths}
-          preferredPreviewFile={project.metadata?.entryFile ?? null}
-          autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
-          focusMode={workspaceFocused}
-          onFocusModeChange={setWorkspaceFocused}
-          designSystemProject={designSystemProject}
-          defaultDesignSystemId={config.designSystemId}
-          onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
-          onDesignSystemsRefresh={onDesignSystemsRefresh}
-          onDesignSystemNeedsWork={sendDesignSystemFeedback}
-          designSystemReview={project.metadata?.designSystemReview}
-          onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
-          onConnectRepo={handleConnectRepo}
-          githubConnected={githubConnected}
-          commentPortalId={commentInspectorPortalId}
-          onCommentModeChange={setCommentInspectorActive}
-          chatConfig={config}
-          chatAgentsById={agentsById}
-          chatLocale={locale}
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onDeleteConversation={handleDeleteConversation}
-          onRenameConversation={handleRenameConversation}
-          onConversationSessionModeChange={handleConversationSessionModeChange}
-          onNewConversation={handleNewConversation}
-          activeConversationChat={activeConversationChatState}
-          onActiveContextChange={handleActiveWorkspaceContextChange}
-          onWorkspaceContextsChange={handleWorkspaceContextsChange}
-          messages={messages}
-          artifactHtml={artifact?.html}
-          conversationError={error}
-          onRetry={handleRetry}
-          onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
-          onLaunchTerminalAuth={handleLaunchAntigravityOauth}
-          conversationId={activeConversationId}
-          headerActions={(
-            <>
-              <EntrySettingsMenu
-                config={config}
-                onThemeChange={handleThemeChange}
-                onOpenSettings={onOpenSettings}
-              />
-              <HandoffButton
-                projectId={project.id}
-                projectName={project.name}
-                projectDir={projectDetail.resolvedDir}
-                agents={agents}
-              />
-            </>
-          )}
-          questionForm={displayedQuestionForm}
-          questionFormPreview={displayedQuestionFormPreview}
-          questionFormKey={displayedQuestionFormKey}
-          questionFormInteractive={displayedQuestionFormActive}
-          questionFormSubmitDisabled={currentConversationActionDisabled}
-          questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
-          questionsGenerating={displayedQuestionsGenerating}
-          focusQuestionsRequest={focusQuestionsRequest}
-          onSubmitQuestionForm={(text) => {
-            if (currentConversationActionDisabled) return;
-            void handleSend(text, [], []);
-          }}
-        />
+        {npmInstallStatus === 'running' ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              flex: 1,
+              minWidth: 0,
+              height: '100%',
+              background: 'var(--bg)',
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '16px 24px',
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--bg-2)',
+              flexShrink: 0,
+            }}>
+              <Spinner size={18} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <strong style={{ fontSize: 14, lineHeight: 1.4 }}>Installing dependencies</strong>
+                <span style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.4 }}>{npmInstallMessage || 'Setting up your project...'}</span>
+              </div>
+            </div>
+            <div
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                padding: '12px 16px',
+                fontFamily: 'var(--font-mono, ui-monospace, monospace)',
+                fontSize: 12,
+                lineHeight: 1.6,
+                color: 'var(--text-2)',
+                background: 'var(--bg)',
+              }}
+              ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
+            >
+              {npmInstallLogs.length === 0 ? (
+                <span style={{ color: 'var(--text-4)', fontStyle: 'italic' }}>Waiting for output...</span>
+              ) : (
+                npmInstallLogs.map((line, i) => (
+                  <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
+                ))
+              )}
+              <div ref={(el) => el?.scrollIntoView({ block: 'end' })} />
+            </div>
+          </div>
+        ) : (
+          <FileWorkspace
+            projectId={project.id}
+            npmInstallStatus={npmInstallStatus}
+            npmInstallMessage={npmInstallMessage}
+            projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}
+            rootDirName={(() => {
+              const baseDir =
+                projectDetail.project?.metadata?.baseDir ?? project.metadata?.baseDir;
+              return typeof baseDir === 'string'
+                ? baseDir.split(/[/\\]/).filter(Boolean).pop()
+                : undefined;
+            })()}
+            reloading={workingDirReplacing}
+            resolvedDir={projectDetail.resolvedDir}
+            files={projectFiles}
+            liveArtifacts={liveArtifacts}
+            filesRefreshKey={filesRefresh}
+            onRefreshFiles={() => {
+              void refreshWorkspaceItems();
+            }}
+            isDeck={isDeck}
+            onExportAsPptx={handleExportAsPptx}
+            streaming={currentConversationActionDisabled}
+            commentQueueOnSend={commentQueueOnSend}
+            commentSendDisabled={currentConversationQueueDisabled}
+            openRequest={openRequest}
+            shareRequest={shareRequest}
+            slideNavRequest={slideNavRequest}
+            liveArtifactEvents={liveArtifactEvents}
+            designSystemActivityEvents={designSystemActivityEvents}
+            tabsState={openTabsState}
+            onTabsStateChange={persistTabsState}
+            previewComments={previewComments}
+            onSavePreviewComment={savePreviewComment}
+            onRemovePreviewComment={removePreviewComment}
+            onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
+            onRequestBrowserUsePrompt={handleBrowserUsePrompt}
+            onPluginFolderAgentAction={handlePluginFolderAgentAction}
+            activePluginActionPaths={activePluginActionPaths}
+            preferredPreviewFile={project.metadata?.entryFile ?? null}
+            autoPreviewDesignArtifacts={project.metadata?.importedFrom === 'folder'}
+            focusMode={workspaceFocused}
+            onFocusModeChange={setWorkspaceFocused}
+            designSystemProject={designSystemProject}
+            defaultDesignSystemId={config.designSystemId}
+            onSetDefaultDesignSystem={onChangeDefaultDesignSystem}
+            onDesignSystemsRefresh={onDesignSystemsRefresh}
+            onDesignSystemNeedsWork={sendDesignSystemFeedback}
+            designSystemReview={project.metadata?.designSystemReview}
+            onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
+            onConnectRepo={handleConnectRepo}
+            githubConnected={githubConnected}
+            commentPortalId={commentInspectorPortalId}
+            onCommentModeChange={setCommentInspectorActive}
+            chatConfig={config}
+            chatAgentsById={agentsById}
+            chatLocale={locale}
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelectConversation={handleSelectConversation}
+            onDeleteConversation={handleDeleteConversation}
+            onRenameConversation={handleRenameConversation}
+            onConversationSessionModeChange={handleConversationSessionModeChange}
+            onNewConversation={handleNewConversation}
+            activeConversationChat={activeConversationChatState}
+            onActiveContextChange={handleActiveWorkspaceContextChange}
+            onWorkspaceContextsChange={handleWorkspaceContextsChange}
+            messages={messages}
+            artifactHtml={artifact?.html}
+            conversationError={error}
+            onRetry={handleRetry}
+            onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
+            onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+            conversationId={activeConversationId}
+            headerActions={(
+              <>
+                <EntrySettingsMenu
+                  config={config}
+                  onThemeChange={handleThemeChange}
+                  onOpenSettings={onOpenSettings}
+                />
+                <HandoffButton
+                  projectId={project.id}
+                  projectName={project.name}
+                  projectDir={projectDetail.resolvedDir}
+                  agents={agents}
+                />
+              </>
+            )}
+            questionForm={displayedQuestionForm}
+            questionFormPreview={displayedQuestionFormPreview}
+            questionFormKey={displayedQuestionFormKey}
+            questionFormInteractive={displayedQuestionFormActive}
+            questionFormSubmitDisabled={currentConversationActionDisabled}
+            questionFormSubmittedAnswers={displayedQuestionFormSubmittedAnswers}
+            questionsGenerating={displayedQuestionsGenerating}
+            focusQuestionsRequest={focusQuestionsRequest}
+            onSubmitQuestionForm={(text) => {
+              if (currentConversationActionDisabled) return;
+              void handleSend(text, [], []);
+            }}
+          />
+        )}
       </div>
       {contextPluginDetails ? (
         <PluginDetailsModal

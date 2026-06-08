@@ -18,10 +18,25 @@ export type ProjectConversationCreatedEvent = ProjectConversationCreatedSsePaylo
 
 export type ProjectLiveArtifactEvent = LiveArtifactSsePayload | LiveArtifactRefreshSsePayload;
 
+export interface ProjectNpmInstallStatusEvent {
+  type: 'npm-install-status';
+  status: 'running' | 'completed' | 'failed';
+  message?: string;
+  projectId: string;
+}
+
+export interface ProjectNpmInstallLogEvent {
+  type: 'npm-install-log';
+  line: string;
+  projectId: string;
+}
+
 export type ProjectEvent =
   | ProjectFileChangeEvent
   | ProjectConversationCreatedEvent
-  | ProjectLiveArtifactEvent;
+  | ProjectLiveArtifactEvent
+  | ProjectNpmInstallStatusEvent
+  | ProjectNpmInstallLogEvent;
 
 export interface ProjectEventsConnectionOptions {
   /** Test seam: substitute a mock EventSource constructor. */
@@ -126,6 +141,34 @@ export function createProjectEventsConnection(
         ) {
           // eslint-disable-next-line no-console
           console.warn('[project-events] malformed conversation-created payload', err);
+        }
+      }
+    });
+    es.addEventListener('npm-install-status', (evt) => {
+      try {
+        const data = JSON.parse((evt as MessageEvent).data) as ProjectNpmInstallStatusEvent;
+        onChange(data);
+      } catch (err) {
+        if (
+          typeof process !== 'undefined' &&
+          process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[project-events] malformed npm-install-status payload', err);
+        }
+      }
+    });
+    es.addEventListener('npm-install-log', (evt) => {
+      try {
+        const data = JSON.parse((evt as MessageEvent).data) as ProjectNpmInstallLogEvent;
+        onChange(data);
+      } catch (err) {
+        if (
+          typeof process !== 'undefined' &&
+          process.env?.NODE_ENV === 'development'
+        ) {
+          // eslint-disable-next-line no-console
+          console.warn('[project-events] malformed npm-install-log payload', err);
         }
       }
     });

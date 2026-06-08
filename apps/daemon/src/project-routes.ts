@@ -1,6 +1,6 @@
 import { rm, writeFile, readFile, readdir, stat, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import type { Express, Response } from 'express';
 import {
   defaultScenarioPluginIdForProjectMetadata,
@@ -32,7 +32,7 @@ import {
 } from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> { }
 
 function projectDetailResolvedDir(
   projectsRoot: string,
@@ -761,7 +761,7 @@ async function scanDirForPackages(dir: string): Promise<Array<{ name: string; pa
   try {
     const st = await stat(workspaceYamlPath);
     hasWorkspace = st.isFile();
-  } catch {}
+  } catch { }
 
   if (hasWorkspace) {
     try {
@@ -802,10 +802,10 @@ async function scanDirForPackages(dir: string): Promise<Array<{ name: string; pa
                   if (pkgJson && pkgJson.name) {
                     packages.push({ name: pkgJson.name, path: pkgPath });
                   }
-                } catch {}
+                } catch { }
               }
             }
-          } catch {}
+          } catch { }
         } else {
           const pkgPath = path.join(dir, pattern);
           const pkgJsonPath = path.join(pkgPath, 'package.json');
@@ -815,7 +815,7 @@ async function scanDirForPackages(dir: string): Promise<Array<{ name: string; pa
             if (pkgJson && pkgJson.name) {
               packages.push({ name: pkgJson.name, path: pkgPath });
             }
-          } catch {}
+          } catch { }
         }
       }
     } catch (err) {
@@ -832,7 +832,7 @@ async function scanDirForPackages(dir: string): Promise<Array<{ name: string; pa
         packages.push({ name: rootPkgJson.name, path: dir });
       }
     }
-  } catch {}
+  } catch { }
 
   return packages;
 }
@@ -891,17 +891,17 @@ async function initializeReactViteProject(
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"${dsDeps}
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"${dsDeps}
   },
   "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react-swc": "^3.5.0",
-    "@tailwindcss/vite": "^4.0.0",
-    "tailwindcss": "^4.0.0",
-    "typescript": "^5.5.3",
-    "vite": "^5.4.1"
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react-swc": "^4.3.1",
+    "@tailwindcss/vite": "^4.3.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
   }
 }`;
 
@@ -1001,20 +1001,191 @@ export default App;
   ]);
 }
 
-function installDependencies(dir: string) {
-  try {
-    console.log('[project-routes] Running npm install in background for ' + dir);
-    const child = spawn('npm', ['install'], {
+const npmInstallStatuses = new Map<string, 'idle' | 'running' | 'completed' | 'failed'>();
+const npmInstallMessages = new Map<string, string>();
+const npmInstallLogs = new Map<string, string[]>();
+const activeInstallProcesses = new Map<string, ChildProcess>();
+
+function broadcastNpmInstallStatus(
+  projectId: string,
+  status: 'running' | 'completed' | 'failed',
+  message: string,
+  activeProjectEventSinks: Map<string, Set<any>>
+) {
+  const sinks = activeProjectEventSinks.get(projectId);
+  if (sinks && sinks.size > 0) {
+    for (const sink of Array.from(sinks) as any[]) {
+      try {
+        sink({ type: 'npm-install-status', status, message, projectId });
+      } catch {
+        sinks.delete(sink);
+      }
+    }
+    if (sinks.size === 0) activeProjectEventSinks.delete(projectId);
+  }
+}
+
+function broadcastNpmInstallLog(
+  projectId: string,
+  line: string,
+  activeProjectEventSinks: Map<string, Set<any>>
+) {
+  // Accumulate up to 500 lines in memory for reconnecting clients
+  const logs = npmInstallLogs.get(projectId) ?? [];
+  logs.push(line);
+  if (logs.length > 500) logs.shift();
+  npmInstallLogs.set(projectId, logs);
+
+  const sinks = activeProjectEventSinks.get(projectId);
+  if (sinks && sinks.size > 0) {
+    for (const sink of Array.from(sinks) as any[]) {
+      try {
+        sink({ type: 'npm-install-log', line, projectId });
+      } catch {
+        sinks.delete(sink);
+      }
+    }
+  }
+}
+
+function checkPnpmInstalled(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn('pnpm', ['--version'], { stdio: 'ignore' });
+    child.on('error', () => {
+      resolve(false);
+    });
+    child.on('close', (code) => {
+      resolve(code === 0);
+    });
+  });
+}
+
+function installPnpmGlobally(projectId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    console.log('[project-routes] Installing pnpm globally for project ' + projectId);
+    const child = spawn('npm', ['install', '-g', 'pnpm'], { stdio: 'ignore' });
+    activeInstallProcesses.set(projectId, child);
+    child.on('error', (err) => {
+      console.error('[project-routes] Failed to run global pnpm install:', err);
+      resolve(false);
+    });
+    child.on('close', (code) => {
+      if (activeInstallProcesses.get(projectId) === child) {
+        activeInstallProcesses.delete(projectId);
+      }
+      resolve(code === 0);
+    });
+  });
+}
+
+function runProjectInstall(
+  projectId: string,
+  dir: string,
+  tool: 'pnpm' | 'npm',
+  activeProjectEventSinks: Map<string, Set<any>>
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    // When the project lives inside the Open Design monorepo tree (e.g.
+    // .od/projects/<id>) pnpm walks up and finds the root pnpm-workspace.yaml,
+    // causing it to run a full 24-package workspace install instead of
+    // creating a local node_modules for just this project.
+    // --ignore-workspace tells pnpm to treat this directory as a standalone
+    // project and create its own node_modules here.
+    const args = tool === 'pnpm'
+      ? ['install', '--ignore-workspace']
+      : ['install', '--no-workspaces', '--legacy-peer-deps'];
+    console.log(`[project-routes] Running ${tool} ${args.join(' ')} in ${dir}`);
+    const child = spawn(tool, args, {
       cwd: dir,
-      stdio: 'ignore',
+      stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     });
-    child.on('error', (err) => {
-      console.error('[project-routes] Failed to start npm install in ' + dir + ':', err);
+    child.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      console.log(`[project-routes][${tool}] ${text.trim()}`);
+      for (const rawLine of text.split('\n')) {
+        // Strip ANSI colour codes before sending to the UI
+        const line = rawLine.replace(/\x1B\[[0-9;]*m/g, '').trimEnd();
+        if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
+      }
     });
-    child.unref();
-  } catch (err) {
-    console.error('[project-routes] Error spawning npm install in ' + dir + ':', err);
+    child.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      console.warn(`[project-routes][${tool}] ${text.trim()}`);
+      for (const rawLine of text.split('\n')) {
+        const line = rawLine.replace(/\x1B\[[0-9;]*m/g, '').trimEnd();
+        if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
+      }
+    });
+    activeInstallProcesses.set(projectId, child);
+    child.on('error', (err) => {
+      console.error(`[project-routes] Failed to start ${tool} install:`, err);
+      resolve(false);
+    });
+    child.on('close', (code) => {
+      console.log(`[project-routes] ${tool} install exited with code ${code} for ${dir}`);
+      if (activeInstallProcesses.get(projectId) === child) {
+        activeInstallProcesses.delete(projectId);
+      }
+      resolve(code === 0);
+    });
+  });
+}
+
+async function installDependencies(
+  projectId: string,
+  dir: string,
+  activeProjectEventSinks: Map<string, Set<any>>
+) {
+  const updateStatus = (status: 'running' | 'completed' | 'failed', message: string) => {
+    npmInstallStatuses.set(projectId, status);
+    npmInstallMessages.set(projectId, message);
+    broadcastNpmInstallStatus(projectId, status, message, activeProjectEventSinks);
+  };
+
+  try {
+    // Clear any previous log lines for a fresh install run
+    npmInstallLogs.set(projectId, []);
+    updateStatus('running', 'Checking for pnpm...');
+
+    const hasPnpm = await checkPnpmInstalled();
+    let usePnpm = hasPnpm;
+
+    if (!hasPnpm) {
+      updateStatus('running', 'pnpm not found. Installing pnpm globally...');
+      const pnpmInstalled = await installPnpmGlobally(projectId);
+      if (pnpmInstalled) {
+        usePnpm = true;
+      } else {
+        updateStatus('running', 'Global pnpm installation failed. Falling back to npm...');
+        // Wait a tiny bit so the user can read the fallback message
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    // Double check if we were cancelled during the async steps
+    if (npmInstallStatuses.get(projectId) === 'failed' && npmInstallMessages.get(projectId)?.includes('terminated')) {
+      return;
+    }
+
+    const tool = usePnpm ? 'pnpm' : 'npm';
+    updateStatus('running', `Installing dependencies with ${tool}...`);
+
+    const installSuccess = await runProjectInstall(projectId, dir, tool, activeProjectEventSinks);
+
+    // Again, double check cancellation
+    if (npmInstallStatuses.get(projectId) === 'failed' && npmInstallMessages.get(projectId)?.includes('terminated')) {
+      return;
+    }
+
+    if (installSuccess) {
+      updateStatus('completed', 'Dependencies installed successfully.');
+    } else {
+      updateStatus('failed', `Failed to install dependencies using ${tool}.`);
+    }
+  } catch (err: any) {
+    console.error(`[project-routes] Installation loop error:`, err);
+    updateStatus('failed', `Installation failed: ${err?.message || err}`);
   }
 }
 
@@ -1299,10 +1470,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             ...project,
             status: composeProjectDisplayStatus(
               activeRunStatuses.get(project.id) ??
-                latestRunStatuses.get(project.id) ?? { value: 'not_started' },
+              latestRunStatuses.get(project.id) ?? { value: 'not_started' },
               awaitingInputProjects,
               project.id,
             ),
+            npmInstallStatus: npmInstallStatuses.get(project.id) ?? 'idle',
+            npmInstallMessage: npmInstallMessages.get(project.id) ?? '',
           })),
       };
       res.json(body);
@@ -1352,8 +1525,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       if (customInstructions !== undefined
-          && typeof customInstructions !== 'string'
-          && customInstructions !== null) {
+        && typeof customInstructions !== 'string'
+        && customInstructions !== null) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions must be a string or null');
       }
       if (typeof customInstructions === 'string' && customInstructions.length > 5000) {
@@ -1392,40 +1565,40 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
-              ...metadata,
-              ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
-              ...(externalProjectDir
-                ? {
-                    baseDir: externalProjectDir,
-                    importedFrom: 'project-location',
-                    projectLocationId: selectedLocationId,
-                  }
-                : {}),
-              ...(Array.isArray(metadata.linkedDirs)
-                ? (() => {
-                    const v = validateLinkedDirs(metadata.linkedDirs);
-                    return v.error ? {} : { linkedDirs: v.dirs };
-                  })()
-                : {}),
-            }
+            ...metadata,
+            ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+            ...(externalProjectDir
+              ? {
+                baseDir: externalProjectDir,
+                importedFrom: 'project-location',
+                projectLocationId: selectedLocationId,
+              }
+              : {}),
+            ...(Array.isArray(metadata.linkedDirs)
+              ? (() => {
+                const v = validateLinkedDirs(metadata.linkedDirs);
+                return v.error ? {} : { linkedDirs: v.dirs };
+              })()
+              : {}),
+          }
           : skipDiscoveryBrief === true
             ? {
-                skipDiscoveryBrief: true,
-                ...(externalProjectDir
-                  ? {
-                      baseDir: externalProjectDir,
-                      importedFrom: 'project-location',
-                      projectLocationId: selectedLocationId,
-                    }
-                  : {}),
-              }
-            : externalProjectDir
-              ? {
-                  kind: 'prototype',
+              skipDiscoveryBrief: true,
+              ...(externalProjectDir
+                ? {
                   baseDir: externalProjectDir,
                   importedFrom: 'project-location',
                   projectLocationId: selectedLocationId,
                 }
+                : {}),
+            }
+            : externalProjectDir
+              ? {
+                kind: 'prototype',
+                baseDir: externalProjectDir,
+                importedFrom: 'project-location',
+                projectLocationId: selectedLocationId,
+              }
               : null;
       const now = Date.now();
       let project;
@@ -1466,14 +1639,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               USER_DESIGN_SYSTEMS_DIR,
             );
             await initializeReactViteProject(projectDir, name.trim(), designSystemPackages);
-            installDependencies(projectDir);
           } catch (initErr) {
             console.error(`[project-routes] Failed to initialize React Vite project:`, initErr);
           }
         }
       } catch (err) {
         if (externalProjectDir) {
-          await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+          await rm(externalProjectDir, { recursive: true, force: true }).catch(() => { });
         }
         throw err;
       }
@@ -1494,7 +1666,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
           ? true
           : typeof req.body?.appliedPluginSnapshotId === 'string'
-            && req.body.appliedPluginSnapshotId.trim().length > 0;
+          && req.body.appliedPluginSnapshotId.trim().length > 0;
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
       if (!resolveBody && initialSessionMode === 'design') {
@@ -1597,7 +1769,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
     const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
     /** @type {import('@open-design/contracts').ProjectResponse} */
-    const body = { project, resolvedDir };
+    const body = {
+      project: {
+        ...project,
+        npmInstallStatus: npmInstallStatuses.get(req.params.id) ?? 'idle',
+        npmInstallMessage: npmInstallMessages.get(req.params.id) ?? '',
+      },
+      resolvedDir,
+    };
     res.json(body);
   });
 
@@ -1621,7 +1800,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         const existing = getProject(db, req.params.id);
         const existingMeta = existing?.metadata;
         if ('fromTrustedPicker' in patch.metadata
-            && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
+          && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
           return sendApiError(
             res, 400, 'BAD_REQUEST',
             'fromTrustedPicker can only be set via POST /api/import/folder',
@@ -1671,8 +1850,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             : validated.dirs;
       }
       if (patch.customInstructions !== undefined
-          && typeof patch.customInstructions !== 'string'
-          && patch.customInstructions !== null) {
+        && typeof patch.customInstructions !== 'string'
+        && patch.customInstructions !== null) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions must be a string or null');
       }
       if (typeof patch.customInstructions === 'string' && patch.customInstructions.length > 5000) {
@@ -1711,7 +1890,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   app.delete('/api/projects/:id', async (req, res) => {
     try {
       dbDeleteProject(db, req.params.id);
-      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => { });
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
@@ -1744,24 +1923,70 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       sinks.add(projectEventSink);
       const watchProject = getProject(db, req.params.id);
+
+      // Trigger dependency installation when the project is opened (events connection established)
+      const projectMetadata = watchProject?.metadata;
+      const kind = projectMetadata?.kind;
+      if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
+        const currentStatus = npmInstallStatuses.get(req.params.id);
+        const hasActiveProc = activeInstallProcesses.has(req.params.id);
+        if (currentStatus !== 'completed' && !hasActiveProc) {
+          const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, watchProject, resolveProjectDir);
+          installDependencies(req.params.id, resolvedDir, activeProjectEventSinks);
+        } else if (currentStatus) {
+          // Send current status/message immediately to this connection
+          sse.send('npm-install-status', {
+            type: 'npm-install-status',
+            status: currentStatus,
+            message: npmInstallMessages.get(req.params.id) || '',
+            projectId: req.params.id,
+          });
+          // Replay accumulated log lines so the client's log panel is filled in
+          const historicLogs = npmInstallLogs.get(req.params.id) ?? [];
+          for (const line of historicLogs) {
+            sse.send('npm-install-log', { type: 'npm-install-log', line, projectId: req.params.id });
+          }
+        }
+      }
+
       sub = subscribeFileEvents(PROJECTS_DIR, req.params.id, (evt: any) => {
         sse.send('file-changed', evt);
       }, { metadata: watchProject?.metadata });
-      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => {});
+      sub.ready.then(() => sse.send('ready', { projectId: req.params.id })).catch(() => { });
       const cleanup = () => {
         if (sub) {
           const { unsubscribe } = sub;
           sub = null;
-          Promise.resolve(unsubscribe()).catch(() => {});
+          Promise.resolve(unsubscribe()).catch(() => { });
         }
         const currentSinks = activeProjectEventSinks.get(req.params.id);
         currentSinks?.delete(projectEventSink);
-        if (currentSinks?.size === 0) activeProjectEventSinks.delete(req.params.id);
+        if (currentSinks?.size === 0) {
+          activeProjectEventSinks.delete(req.params.id);
+
+          // Terminate active install process when last UI is disposed
+          const activeProc = activeInstallProcesses.get(req.params.id);
+          if (activeProc) {
+            console.log(`[project-routes] Terminating install process for project ${req.params.id} due to UI disposal`);
+            activeInstallProcesses.delete(req.params.id);
+            if (activeProc.pid) {
+              try {
+                process.kill(-activeProc.pid, 'SIGTERM');
+              } catch (err) {
+                activeProc.kill('SIGTERM');
+              }
+            } else {
+              activeProc.kill('SIGTERM');
+            }
+            npmInstallStatuses.set(req.params.id, 'failed');
+            npmInstallMessages.set(req.params.id, 'Installation terminated (workspace closed)');
+          }
+        }
       };
       res.on('close', cleanup);
       res.on('finish', cleanup);
     } catch (err: any) {
-      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => {});
+      if (sub) Promise.resolve(sub.unsubscribe()).catch(() => { });
       if (!res.headersSent) sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
     }
   });
@@ -1800,8 +2025,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     // 404ing on `forkAfterMessageId`.
     const clientSeedMessages = Array.isArray(req.body?.seedMessages)
       ? (req.body.seedMessages as any[]).filter(
-          (message) => message && typeof message.role === 'string',
-        )
+        (message) => message && typeof message.role === 'string',
+      )
       : null;
     let seedMessages: any[] = [];
     if (clientSeedMessages && clientSeedMessages.length > 0) {
@@ -2104,7 +2329,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
 }
 
-export interface RegisterProjectArtifactRoutesDeps extends RouteDeps<'http' | 'uploads' | 'paths' | 'node' | 'artifacts'> {}
+export interface RegisterProjectArtifactRoutesDeps extends RouteDeps<'http' | 'uploads' | 'paths' | 'node' | 'artifacts'> { }
 
 export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProjectArtifactRoutesDeps) {
   const { upload } = ctx.uploads;
@@ -2169,7 +2394,7 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
 
 }
 
-export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> {}
+export interface RegisterProjectFileRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'uploads' | 'node' | 'projectStore' | 'projectFiles' | 'documents' | 'artifacts' | 'projectPreviewScopes'> { }
 
 export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFileRoutesDeps) {
   const { db } = ctx;
@@ -2647,7 +2872,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             {},
             uploadProject?.metadata,
           );
-          fs.promises.unlink(req.file.path).catch(() => {});
+          fs.promises.unlink(req.file.path).catch(() => { });
           /** @type {import('@open-design/contracts').ProjectFileResponse} */
           const body = { file: meta };
           return res.json(body);
@@ -2681,23 +2906,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
             : Buffer.from(content, 'utf8');
         const meta = artifact === true
           ? await createProjectArtifactFile({
-              projectsRoot: PROJECTS_DIR,
-              projectId: req.params.id,
-              input: { name, content, encoding, artifactManifest },
-              metadata: uploadProject?.metadata,
-              writeProjectFile,
-            })
+            projectsRoot: PROJECTS_DIR,
+            projectId: req.params.id,
+            input: { name, content, encoding, artifactManifest },
+            metadata: uploadProject?.metadata,
+            writeProjectFile,
+          })
           : await writeProjectFile(
-              PROJECTS_DIR,
-              req.params.id,
-              name,
-              buf,
-              {
-                artifactManifest,
-                ...(overwrite === false ? { overwrite: false } : {}),
-              },
-              uploadProject?.metadata,
-            );
+            PROJECTS_DIR,
+            req.params.id,
+            name,
+            buf,
+            {
+              artifactManifest,
+              ...(overwrite === false ? { overwrite: false } : {}),
+            },
+            uploadProject?.metadata,
+          );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
         res.json(body);
@@ -2780,7 +3005,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 }
 
-export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> {}
+export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> { }
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
   const { sendApiError } = ctx.http;

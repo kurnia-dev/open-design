@@ -189,6 +189,8 @@ export interface Project {
   // pick a plugin they already selected.
   appliedPluginSnapshotId?: string;
   customInstructions?: string;
+  npmInstallStatus?: 'idle' | 'running' | 'completed' | 'failed';
+  npmInstallMessage?: string;
 }
 
 export interface ProjectTemplate {

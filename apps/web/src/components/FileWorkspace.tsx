@@ -70,6 +70,7 @@ import { GenerationPreviewStage } from './GenerationPreviewStage';
 import { Icon, type IconName } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
+import { Spinner } from './Loading';
 import { PasteTextDialog } from './PasteTextDialog';
 import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
@@ -213,6 +214,8 @@ interface Props {
   onSubmitQuestionForm?: (text: string) => void;
   // Bumped nonce that focuses the Questions tab (banner click / new form).
   focusQuestionsRequest?: { nonce: number } | null;
+  npmInstallStatus?: 'idle' | 'running' | 'completed' | 'failed';
+  npmInstallMessage?: string;
 }
 
 interface SketchState {
@@ -423,6 +426,8 @@ export function FileWorkspace({
   questionsGenerating = false,
   onSubmitQuestionForm,
   focusQuestionsRequest = null,
+  npmInstallStatus = 'idle',
+  npmInstallMessage = '',
 }: Props) {
   const t = useT();
   // The chat column only shows a compact Questions banner; the form itself
@@ -2076,6 +2081,23 @@ export function FileWorkspace({
         />
       ) : null}
       <div className="ws-body">
+        {npmInstallStatus === 'running' ? (
+          <div className="ds-project-warning-card" style={{ margin: '8px 20px', gap: '12px' }}>
+            <Spinner size={16} />
+            <span>
+              <strong>Installing dependencies</strong>
+              <small>{npmInstallMessage || 'Dependencies are being installed in the background. Dev previews may be incomplete until this finishes.'}</small>
+            </span>
+          </div>
+        ) : npmInstallStatus === 'failed' ? (
+          <div className="ds-project-warning-card" style={{ margin: '8px 20px', gap: '12px', borderLeft: '3px solid var(--red)' }}>
+            <Icon name="alert-triangle" size={16} style={{ color: 'var(--red)' }} />
+            <span>
+              <strong>Installation failed</strong>
+              <small>{npmInstallMessage || 'Background dependency installation failed. Try running pnpm install manually in the terminal.'}</small>
+            </span>
+          </div>
+        ) : null}
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
             single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
             no longer leaves a stale banner mounted above the preview.

@@ -4494,6 +4494,7 @@ logs: { type: stdout, format: pretty, level: http }
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'ignore', 'pipe'],
     shell: process.platform === 'win32',
+    windowsHide: true,
   });
 
   verdaccioChild.stderr?.on('data', (chunk: Buffer) => {

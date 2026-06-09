@@ -967,7 +967,7 @@ function runCommand(
   onProgress?: (type: 'info' | 'stdout' | 'stderr', data: string) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(fullCommand, [], { cwd, shell: true });
+    const child = spawn(fullCommand, [], { cwd, shell: true, windowsHide: true });
     let stdout = '';
     let stderr = '';
 

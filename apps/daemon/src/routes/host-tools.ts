@@ -311,9 +311,10 @@ export function registerHostToolsRoutes(app: Express, ctx: RegisterHostToolsRout
       // the native argument shape it expects (CLI shim, `open -a`, Explorer,
       // xdg-open, etc.).
       const child = spawn(launchPlan.command, launchPlan.args, {
-        detached: true,
+        detached: process.platform !== 'win32',
         stdio: 'ignore',
         shell: process.platform === 'win32',
+        windowsHide: true,
       });
       child.on('error', () => {
         // Swallow — best-effort; the client will see ok:true but the OS

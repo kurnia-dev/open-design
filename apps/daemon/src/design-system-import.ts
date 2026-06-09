@@ -705,6 +705,7 @@ export async function startDevScript(dir: string): Promise<void> {
       detached: !isWindows,
       stdio: ['ignore', 'ignore', 'pipe'],
       shell: isWindows,
+      windowsHide: true,
     });
 
     child.stderr?.on('data', (chunk) => {

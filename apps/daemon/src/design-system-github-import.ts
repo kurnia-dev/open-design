@@ -14,7 +14,7 @@ const execFileAsync = promisify(execFile);
 
 export type GitHubDesignSystemImportOptions = Pick<
   LocalDesignSystemImportOptions,
-  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds'
+  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds' | 'projectsRoot'
 > & {
   branch?: string;
   gitBin?: string;
@@ -65,6 +65,7 @@ export async function importGitHubDesignSystemProject(
       ...(options.reservedIds ? { reservedIds: options.reservedIds } : {}),
       ...(options.importMode ? { importMode: options.importMode } : {}),
       ...(options.craftApplies ? { craftApplies: options.craftApplies } : {}),
+      projectsRoot: options.projectsRoot,
       source: {
         type: 'github',
         url: parsed.cloneUrl,
@@ -87,7 +88,7 @@ export async function importGitHubDesignSystemProject(
 
 export type GitDesignSystemImportOptions = Pick<
   LocalDesignSystemImportOptions,
-  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds'
+  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds' | 'projectsRoot'
 > & {
   branch?: string;
   gitBin?: string;
@@ -145,6 +146,7 @@ export async function importGitDesignSystemProject(
       ...(options.reservedIds ? { reservedIds: options.reservedIds } : {}),
       ...(options.importMode ? { importMode: options.importMode } : {}),
       ...(options.craftApplies ? { craftApplies: options.craftApplies } : {}),
+      projectsRoot: options.projectsRoot,
       source: {
         type: 'git',
         url: parsed.cloneUrl,

@@ -31,6 +31,7 @@ export type LocalDesignSystemImportOptions = {
   source?: DesignSystemProjectSource;
   importMode?: 'normalized' | 'hybrid' | 'verbatim';
   craftApplies?: string[];
+  projectsRoot?: string | undefined;
 };
 
 export type DesignSystemProjectSource =
@@ -164,19 +165,33 @@ export async function importLocalDesignSystemProject(
   const outDir = path.join(userDesignSystemsRoot, id);
   await mkdir(outDir, { recursive: true });
 
-  if (isGitProject || hasManifest) {
+  if (isGitProject && hasManifest) {
+    const entries = await readdir(sourceRoot, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        const nameLower = entry.name.toLowerCase();
+        if (nameLower === 'design.md' || nameLower === 'readme.md' || nameLower.startsWith('readme.')) {
+          await copyFile(path.join(sourceRoot, entry.name), path.join(outDir, entry.name));
+        }
+      }
+    }
+    if (options.projectsRoot) {
+      const projectDestDir = path.join(options.projectsRoot, `ds-${id}`);
+      await mkdir(projectDestDir, { recursive: true });
+      await cp(sourceRoot, projectDestDir, { recursive: true, filter: skipNodeModules });
+    }
+  } else if (isGitProject || hasManifest) {
     await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
-    await installDependencies(outDir);
-    await startDevScript(outDir);
   }
   const importMode = normalizeImportMode(options.importMode);
   const craftApplies = normalizeCraftList(options.craftApplies);
   const now = options.now ?? new Date();
 
   if (hasManifest) {
+    const srcManifestPath = path.join(sourceRoot, 'manifest.json');
     const manifestPath = path.join(outDir, 'manifest.json');
     try {
-      const content = await readFile(manifestPath, 'utf8');
+      const content = await readFile(srcManifestPath, 'utf8');
       const parsed = JSON.parse(content) as Record<string, any>;
       parsed.id = id;
       parsed.source = options.source ?? {
@@ -569,33 +584,6 @@ async function detectPackageManager(dir: string): Promise<string> {
   if (hasPnpm) return 'pnpm';
   if (hasYarn) return 'yarn';
   return 'npm';
-}
-
-/**
- * Runs `<pm> install` in `dir` if a `package.json` is present.
- * Uses a 5-minute timeout to accommodate large monorepos.
- * Errors are non-fatal: a warning is printed and import continues.
- */
-export async function installDependencies(dir: string): Promise<void> {
-  const pkgPath = path.join(dir, 'package.json');
-  if (!(await exists(pkgPath))) return;
-
-  const pm = await detectPackageManager(dir);
-  try {
-    await execFileAsync(pm, ['install'], {
-      cwd: dir,
-      timeout: 300_000, // 5 minutes
-      maxBuffer: 10 * 1024 * 1024,
-      shell: process.platform === 'win32',
-    });
-  } catch (err) {
-    // Non-fatal: the project is still usable without node_modules for
-    // documentation/token extraction purposes.
-    console.warn(
-      `[design-system-import] ${pm} install failed in ${dir} — continuing without node_modules:`,
-      err instanceof Error ? err.message : String(err),
-    );
-  }
 }
 
 export function getDevServerUrl(dir: string): string | undefined {

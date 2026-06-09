@@ -223,7 +223,7 @@ import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
-import { installDependencies, startDevScript, getDevServerUrl } from './design-system-import.js';
+import { startDevScript, getDevServerUrl } from './design-system-import.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure } from './run-failure-classification.js';
@@ -373,7 +373,6 @@ import {
   SandboxImportedProjectError,
   sanitizeName,
   searchProjectFiles,
-  resolveProjectDir,
   resolveProjectFilePath,
   writeProjectFile,
   reconcileHtmlArtifactManifest,
@@ -4742,17 +4741,6 @@ export async function startServer({
     console.log("ensureUserDesignSystemWorkspaceProject: project updated");
     const dirId = id.startsWith('user:') ? id.slice('user:'.length) : id;
     const systemDir = path.join(USER_DESIGN_SYSTEMS_DIR, dirId);
-    void (async () => {
-      try {
-        console.log("ensureUserDesignSystemWorkspaceProject: installing dependencies");
-        await installDependencies(systemDir);
-        console.log("ensureUserDesignSystemWorkspaceProject: dependencies installed");
-        await startDevScript(systemDir);
-        console.log("ensureUserDesignSystemWorkspaceProject: dev script started");
-      } catch (err) {
-        console.warn(`[ensureUserDesignSystemWorkspaceProject] setup failed:`, err);
-      }
-    })();
     const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
     return { project, files: projectFiles };
   }

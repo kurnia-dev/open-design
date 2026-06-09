@@ -41,6 +41,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     RUNTIME_DATA_DIR,
     RUNTIME_DATA_DIR_CANONICAL,
     PROJECT_ROOT,
+    PROJECTS_DIR,
     DESIGN_SYSTEMS_DIR,
     USER_DESIGN_SYSTEMS_DIR,
     DESIGN_TEMPLATES_DIR,
@@ -702,6 +703,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         ...(importMode ? { importMode } : {}),
         ...(craftApplies ? { craftApplies } : {}),
         reservedIds: designSystemDirIdsFromCatalog(before),
+        projectsRoot: PROJECTS_DIR,
       });
       const systems = await listAllDesignSystems();
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
@@ -745,6 +747,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(importMode ? { importMode } : {}),
           ...(craftApplies ? { craftApplies } : {}),
           reservedIds: designSystemDirIdsFromCatalog(before),
+          projectsRoot: PROJECTS_DIR,
         },
       );
       const systems = await listAllDesignSystems();
@@ -789,6 +792,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(importMode ? { importMode } : {}),
           ...(craftApplies ? { craftApplies } : {}),
           reservedIds: designSystemDirIdsFromCatalog(before),
+          projectsRoot: PROJECTS_DIR,
         },
       );
       const systems = await listAllDesignSystems();

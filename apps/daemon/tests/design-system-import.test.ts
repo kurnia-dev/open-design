@@ -312,8 +312,12 @@ describe('importLocalDesignSystemProject', () => {
     fs.writeFileSync(path.join(sourceRoot, 'tokens.css'), ':root { --accent: #fff; }');
     fs.writeFileSync(path.join(sourceRoot, 'extra-file.txt'), 'extra');
 
+    const dummyProjectsRoot = path.join(tempRoot, 'projects');
+    fs.mkdirSync(dummyProjectsRoot, { recursive: true });
+
     const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
       now: new Date('2026-05-18T09:00:00.000Z'),
+      projectsRoot: dummyProjectsRoot,
       source: {
         type: 'github',
         url: 'https://github.com/test/repo.git',
@@ -324,8 +328,14 @@ describe('importLocalDesignSystemProject', () => {
 
     expect(result.id).toBe('custom-manifest-name');
     expect(fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8')).toBe('# custom-manifest-name\nCustom content');
-    expect(fs.readFileSync(path.join(result.dir, 'extra-file.txt'), 'utf8')).toBe('extra');
+    expect(fs.existsSync(path.join(result.dir, 'extra-file.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(result.dir, 'tokens.css'))).toBe(false);
     expect(fs.existsSync(path.join(result.dir, 'USAGE.md'))).toBe(false);
+
+    const projectDir = path.join(dummyProjectsRoot, `ds-${result.id}`);
+    expect(fs.readFileSync(path.join(projectDir, 'extra-file.txt'), 'utf8')).toBe('extra');
+    expect(fs.readFileSync(path.join(projectDir, 'DESIGN.md'), 'utf8')).toBe('# custom-manifest-name\nCustom content');
+    expect(fs.readFileSync(path.join(projectDir, 'tokens.css'), 'utf8')).toBe(':root { --accent: #fff; }');
 
     const updatedManifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8'));
     expect(updatedManifest).toMatchObject({

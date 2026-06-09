@@ -871,15 +871,39 @@ async function initializeReactViteProject(
   dir: string,
   projectName: string,
   designSystemPackages: Array<{ name: string; path: string }>,
+  isPublishedDesignSystem = false,
+  publishedPackages: string[] = [],
 ) {
   await mkdir(path.join(dir, 'src'), { recursive: true });
 
-  const dsDeps = designSystemPackages
-    .map(pkg => {
-      const relPath = path.relative(dir, pkg.path).replace(/\\/g, '/');
-      return `,\n    "${pkg.name}": "link:${relPath}"`;
-    })
-    .join('');
+  let dsDeps = '';
+  if (isPublishedDesignSystem && publishedPackages.length > 0) {
+    dsDeps = publishedPackages
+      .map(pkgName => `,\n    "${pkgName}": "latest"`)
+      .join('');
+
+    const scopes = new Set<string>();
+    for (const pkgName of publishedPackages) {
+      if (pkgName.startsWith('@') && pkgName.includes('/')) {
+        const scope = pkgName.split('/')[0];
+        if (scope) {
+          scopes.add(scope);
+        }
+      }
+    }
+    let npmrcContent = 'registry=http://localhost:4873/\n//localhost:4873/:_authToken="dummy-token"\n';
+    for (const scope of scopes) {
+      npmrcContent += `${scope}:registry=http://localhost:4873/\n`;
+    }
+    await writeFile(path.join(dir, '.npmrc'), npmrcContent, 'utf8');
+  } else {
+    dsDeps = designSystemPackages
+      .map(pkg => {
+        const relPath = path.relative(dir, pkg.path).replace(/\\/g, '/');
+        return `,\n    "${pkg.name}": "link:${relPath}"`;
+      })
+      .join('');
+  }
 
   const packageJson = `{
   "name": "${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}",
@@ -968,9 +992,13 @@ async function initializeReactViteProject(
     "  </React.StrictMode>,\n" +
     ");\n";
 
-  const listItems = designSystemPackages
-    .map(pkg => `<li><strong>${pkg.name}</strong> (linked from <code>${pkg.path}</code>)</li>`)
-    .join('\n        ');
+  const listItems = (isPublishedDesignSystem && publishedPackages.length > 0)
+    ? publishedPackages
+      .map(pkgName => `<li><strong>${pkgName}</strong> (installed from local Verdaccio registry)</li>`)
+      .join('\n        ')
+    : designSystemPackages
+      .map(pkg => `<li><strong>${pkg.name}</strong> (linked from <code>${pkg.path}</code>)</li>`)
+      .join('\n        ');
 
   const appTsx = `import React from 'react';
 
@@ -978,7 +1006,7 @@ function App() {
   return (
     <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
       <h1>Design Project: ${projectName}</h1>
-      <p>This is a functional React + Vite + TypeScript project linked with the following design system packages:</p>
+      <p>This is a functional React + Vite + TypeScript project ${(isPublishedDesignSystem && publishedPackages.length > 0) ? 'configured with' : 'linked with'} the following design system packages:</p>
       <ul>
         ${listItems}
       </ul>
@@ -1618,7 +1646,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         if (getProject(db, id)) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'project id already exists');
         }
-        externalProjectDir = await createLocationProjectDir(location, id);
+        try {
+          externalProjectDir = await createLocationProjectDir(location, id);
+        } catch (err: any) {
+          if (err && (err.code === 'EEXIST' || err.code === 'EADDRINUSE')) {
+            return sendApiError(res, 400, 'BAD_REQUEST', 'project directory already exists');
+          }
+          throw err;
+        }
       }
       const projectMetadata =
         metadata && typeof metadata === 'object'
@@ -1691,12 +1726,52 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
           try {
             const projectDir = await ensureProject(PROJECTS_DIR, id, projectMetadata);
+            
+            let isPublishedDesignSystem = false;
+            let publishedPackages: string[] = [];
+
+            if (normalizedDesignSystemId) {
+              const dirId = normalizedDesignSystemId.startsWith('user:')
+                ? normalizedDesignSystemId.slice('user:'.length)
+                : normalizedDesignSystemId;
+              const brandRoot = path.join(
+                normalizedDesignSystemId.startsWith('user:') ? USER_DESIGN_SYSTEMS_DIR : DESIGN_SYSTEMS_DIR,
+                dirId
+              );
+
+              let status = 'draft';
+              try {
+                const rawMeta = await readFile(path.join(brandRoot, 'metadata.json'), 'utf8');
+                const parsedMeta = JSON.parse(rawMeta);
+                if (parsedMeta && typeof parsedMeta.status === 'string') {
+                  status = parsedMeta.status;
+                }
+              } catch {}
+
+              if (status === 'published') {
+                isPublishedDesignSystem = true;
+                const info = normalizedDesignSystemId.startsWith('user:')
+                  ? await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, normalizedDesignSystemId, { idPrefix: 'user:' })
+                  : await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, normalizedDesignSystemId);
+
+                if (info && info.manifest && info.manifest.npmPackages && Array.isArray(info.manifest.npmPackages)) {
+                  publishedPackages = info.manifest.npmPackages.map((pkg: any) => pkg.name);
+                }
+              }
+            }
+
             const designSystemPackages = await resolveDesignSystemNpmPackages(
               normalizedDesignSystemId,
               DESIGN_SYSTEMS_DIR,
               USER_DESIGN_SYSTEMS_DIR,
             );
-            await initializeReactViteProject(projectDir, name.trim(), designSystemPackages);
+            await initializeReactViteProject(
+              projectDir,
+              name.trim(),
+              designSystemPackages,
+              isPublishedDesignSystem,
+              publishedPackages
+            );
           } catch (initErr) {
             console.error(`[project-routes] Failed to initialize React Vite project:`, initErr);
           }

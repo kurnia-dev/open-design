@@ -1201,6 +1201,162 @@ describe('project locations routes', () => {
       ]),
     );
   });
+
+  it('creates project with dependencies mapped to "latest" and a custom .npmrc when design system is published', async () => {
+    const userDSId = `user-ds-published-${Date.now()}`;
+    const userDSDir = path.join(process.env.OD_DATA_DIR!, 'design-systems', userDSId);
+    await mkdir(userDSDir, { recursive: true });
+
+    // Write metadata.json
+    const metadata = {
+      status: 'published',
+      title: 'Published DS',
+      category: 'Custom',
+    };
+    await writeFile(path.join(userDSDir, 'metadata.json'), JSON.stringify(metadata), 'utf8');
+
+    // Write manifest.json with id matching the folder name (userDSId)
+    const manifest = {
+      schemaVersion: 'od-design-system-project/v1',
+      id: userDSId,
+      name: 'Published DS',
+      category: 'Custom',
+      files: {
+        design: 'DESIGN.md',
+        tokens: 'tokens.css',
+      },
+      npmPackages: [
+        { name: '@mystaline/mysta-lib' },
+        { name: '@mystaline/mysta-commons' },
+      ],
+    };
+    await writeFile(path.join(userDSDir, 'manifest.json'), JSON.stringify(manifest), 'utf8');
+
+    // Write DESIGN.md
+    await writeFile(
+      path.join(userDSDir, 'DESIGN.md'),
+      '# Published DS\n\n> Category: Custom\n> Surface: web\n\nDemo',
+      'utf8',
+    );
+    // Write tokens.css
+    await writeFile(
+      path.join(userDSDir, 'tokens.css'),
+      ':root {}',
+      'utf8',
+    );
+
+    const projectId = `ds-project-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Project with Published DS',
+        designSystemId: `user:${userDSId}`,
+        metadata: {
+          kind: 'prototype',
+          skipDiscoveryBrief: true,
+        },
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const createBody = (await createResp.json()) as {
+      project: { id: string };
+    };
+    expect(createBody.project.id).toBe(projectId);
+
+    const projectDir = path.join(process.env.OD_DATA_DIR!, 'projects', projectId);
+    const pkgJsonPath = path.join(projectDir, 'package.json');
+    const pkgJsonRaw = await readFile(pkgJsonPath, 'utf8');
+    const pkgJson = JSON.parse(pkgJsonRaw);
+
+    expect(pkgJson.dependencies['@mystaline/mysta-lib']).toBe('latest');
+    expect(pkgJson.dependencies['@mystaline/mysta-commons']).toBe('latest');
+
+    const npmrcPath = path.join(projectDir, '.npmrc');
+    const npmrcContent = await readFile(npmrcPath, 'utf8');
+    expect(npmrcContent).toContain('registry=http://localhost:4873/');
+    expect(npmrcContent).toContain('@mystaline:registry=http://localhost:4873/');
+    expect(npmrcContent).toContain('//localhost:4873/:_authToken="dummy-token"');
+  });
+
+  it('creates project with dependencies mapped to "link:..." and no .npmrc when design system is published but has no npmPackages', async () => {
+    const userDSId = `user-ds-fallback-${Date.now()}`;
+    const userDSDir = path.join(process.env.OD_DATA_DIR!, 'design-systems', userDSId);
+    await mkdir(userDSDir, { recursive: true });
+
+    // Write metadata.json
+    const metadata = {
+      status: 'published',
+      title: 'Fallback DS',
+      category: 'Custom',
+    };
+    await writeFile(path.join(userDSDir, 'metadata.json'), JSON.stringify(metadata), 'utf8');
+
+    // Write manifest.json with id matching the folder name (userDSId)
+    const manifest = {
+      schemaVersion: 'od-design-system-project/v1',
+      id: userDSId,
+      name: 'Fallback DS',
+      category: 'Custom',
+      files: {
+        design: 'DESIGN.md',
+        tokens: 'tokens.css',
+      },
+    };
+    await writeFile(path.join(userDSDir, 'manifest.json'), JSON.stringify(manifest), 'utf8');
+
+    // Write DESIGN.md
+    await writeFile(
+      path.join(userDSDir, 'DESIGN.md'),
+      '# Fallback DS\n\n> Category: Custom\n> Surface: web\n\nDemo',
+      'utf8',
+    );
+    // Write tokens.css
+    await writeFile(
+      path.join(userDSDir, 'tokens.css'),
+      ':root {}',
+      'utf8',
+    );
+    // Write package.json inside userDSDir to be discovered by scanDirForPackages
+    const dsPkg = {
+      name: '@mystaline/mysta-fallback-package',
+      version: '1.0.0',
+    };
+    await writeFile(path.join(userDSDir, 'package.json'), JSON.stringify(dsPkg), 'utf8');
+
+    const projectId = `ds-project-fallback-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Project with Fallback DS',
+        designSystemId: `user:${userDSId}`,
+        metadata: {
+          kind: 'prototype',
+          skipDiscoveryBrief: true,
+        },
+      }),
+    });
+    expect(createResp.status).toBe(200);
+
+    const createBody = (await createResp.json()) as {
+      project: { id: string };
+    };
+    expect(createBody.project.id).toBe(projectId);
+
+    const projectDir = path.join(process.env.OD_DATA_DIR!, 'projects', projectId);
+    const pkgJsonPath = path.join(projectDir, 'package.json');
+    const pkgJsonRaw = await readFile(pkgJsonPath, 'utf8');
+    const pkgJson = JSON.parse(pkgJsonRaw);
+
+    expect(pkgJson.dependencies['@mystaline/mysta-fallback-package']).toMatch(/^link:/);
+
+    const npmrcPath = path.join(projectDir, '.npmrc');
+    await expect(stat(npmrcPath)).rejects.toThrow();
+  });
 });
 
 async function withSandboxMode<T>(run: () => Promise<T>): Promise<T> {

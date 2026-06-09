@@ -910,7 +910,7 @@ async function findPackageDir(baseDir: string, packageName: string): Promise<str
     if (pkg && typeof pkg === 'object' && pkg.name === packageName) {
       return baseDir;
     }
-  } catch {}
+  } catch { }
 
   let entries: string[] = [];
   try {
@@ -930,10 +930,37 @@ async function findPackageDir(baseDir: string, packageName: string): Promise<str
         const found = await findPackageDir(fullPath, packageName);
         if (found) return found;
       }
-    } catch {}
+    } catch { }
   }
 
   return null;
+}
+
+async function findScopes(dir: string, depth = 0): Promise<string[]> {
+  if (depth > 3) return [];
+  const scopes: string[] = [];
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.od' || entry.name === 'dist') {
+          continue;
+        }
+        const subScopes = await findScopes(path.join(dir, entry.name), depth + 1);
+        scopes.push(...subScopes);
+      } else if (entry.name === 'package.json') {
+        try {
+          const content = await readFile(path.join(dir, entry.name), 'utf8');
+          const pkg = JSON.parse(content);
+          if (pkg && pkg.name && typeof pkg.name === 'string' && pkg.name.startsWith('@') && pkg.name.includes('/')) {
+            const scope = pkg.name.split('/')[0];
+            scopes.push(scope);
+          }
+        } catch { }
+      }
+    }
+  } catch { }
+  return Array.from(new Set(scopes));
 }
 
 function runCommand(
@@ -1005,29 +1032,19 @@ export async function updateUserDesignSystem(
       const manifest = await readProjectManifest(projectDir, dirId);
       if (manifest && manifest.npmPackages && manifest.npmPackages.length > 0) {
         onProgress?.('info', `Found ${manifest.npmPackages.length} package(s) to publish.\n`);
-        const nodeModulesExist = await stat(path.join(projectDir, 'node_modules')).then(() => true).catch(() => false);
-        if (!nodeModulesExist) {
-          const pm = await detectPackageManager(projectDir);
-          const msg = `Installing dependencies with ${pm} in ${projectDir}...\n`;
-          console.log(`[od] ${msg}`);
-          onProgress?.('info', msg);
-          try {
-            await runCommand(`${pm} install`, projectDir, onProgress);
-          } catch (err: any) {
-            console.error(`[od] Dependency install failed in ${projectDir}:`, err.message);
-            throw new Error(`Failed to install dependencies: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
-          }
+        const pm = await detectPackageManager(projectDir);
+        const msg = `Installing dependencies with ${pm} in ${projectDir}...\n`;
+        console.log(`[od] ${msg}`);
+        onProgress?.('info', msg);
+        try {
+          await runCommand(`${pm} install`, projectDir, onProgress);
+        } catch (err: any) {
+          console.error(`[od] Dependency install failed in ${projectDir}:`, err.message);
+          throw new Error(`Failed to install dependencies: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
         }
 
+        // 1. Build all packages
         for (const pkg of manifest.npmPackages) {
-          const msgLocating = `Locating package directory for ${pkg.name} in ${projectDir}...\n`;
-          console.log(`[od] ${msgLocating}`);
-          onProgress?.('info', msgLocating);
-          const pkgDir = await findPackageDir(projectDir, pkg.name);
-          if (!pkgDir) {
-            throw new Error(`Package directory for ${pkg.name} not found in ${projectDir}`);
-          }
-
           if (pkg.buildCommand) {
             const msgBuild = `Running build command "${pkg.buildCommand}" in ${projectDir}...\n`;
             console.log(`[od] ${msgBuild}`);
@@ -1039,47 +1056,82 @@ export async function updateUserDesignSystem(
               throw new Error(`Build command failed: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
             }
           }
+        }
 
-          const npmrcPath = path.join(pkgDir, '.npmrc');
-          const existed = await stat(npmrcPath).then(() => true).catch(() => false);
-          let originalContent: string | null = null;
-          if (existed) {
-            originalContent = await readFile(npmrcPath, 'utf8');
+        // 2. Prepare .npmrc paths to write and clean up
+        const npmrcFilesToClean: { path: string; originalContent: string | null; existed: boolean }[] = [];
+
+        // Root .npmrc
+        const rootNpmrcPath = path.join(projectDir, '.npmrc');
+        const rootNpmrcExisted = await stat(rootNpmrcPath).then(() => true).catch(() => false);
+        let rootNpmrcContent: string | null = null;
+        if (rootNpmrcExisted) {
+          rootNpmrcContent = await readFile(rootNpmrcPath, 'utf8');
+        }
+        npmrcFilesToClean.push({ path: rootNpmrcPath, originalContent: rootNpmrcContent, existed: rootNpmrcExisted });
+
+        // Package-specific .npmrc files
+        for (const pkg of manifest.npmPackages) {
+          const pkgDir = await findPackageDir(projectDir, pkg.name);
+          if (pkgDir) {
+            const npmrcPath = path.join(pkgDir, '.npmrc');
+            if (npmrcPath !== rootNpmrcPath) {
+              const existed = await stat(npmrcPath).then(() => true).catch(() => false);
+              let originalContent: string | null = null;
+              if (existed) {
+                originalContent = await readFile(npmrcPath, 'utf8');
+              }
+              npmrcFilesToClean.push({ path: npmrcPath, originalContent, existed });
+            }
+          }
+        }
+
+        try {
+          // 3. Write temporary .npmrc to all paths
+          const scopes = await findScopes(projectDir);
+          let npmrcLines = 'registry=http://localhost:4873/\n//localhost:4873/:_authToken="dummy-token"\n';
+          for (const scope of scopes) {
+            npmrcLines += `${scope}:registry=http://localhost:4873/\n`;
           }
 
-          try {
-            const msgNpmrc = `Writing temporary .npmrc to ${npmrcPath}...\n`;
+          for (const item of npmrcFilesToClean) {
+            const msgNpmrc = `Writing temporary .npmrc to ${item.path}...\n`;
             console.log(`[od] ${msgNpmrc}`);
             onProgress?.('info', msgNpmrc);
             await writeFile(
-              npmrcPath,
-              'registry=http://localhost:4873/\n//localhost:4873/:_authToken="dummy-token"\n',
+              item.path,
+              npmrcLines,
               'utf8'
             );
+          }
 
-            const msgPublish = `Publishing package ${pkg.name} to local Verdaccio registry...\n`;
-            console.log(`[od] ${msgPublish}`);
-            onProgress?.('info', msgPublish);
-            try {
-              await runCommand(`pnpm --filter ${pkg.name} publish --no-git-checks`, projectDir, onProgress);
-            } catch (err: any) {
-              console.error(`[od] pnpm publish failed for ${pkg.name}:`, err.message);
-              throw new Error(`Failed to publish package ${pkg.name} to registry: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
-            }
-          } finally {
-            const msgCleanup = `Cleaning up temporary .npmrc in ${pkgDir}...\n`;
+          // 4. Publish all packages topologically using recursive filter
+          const filterArgs = manifest.npmPackages.map(pkg => `--filter ${pkg.name}...`).join(' ');
+          const msgPublish = `Publishing packages using: pnpm ${filterArgs} publish --no-git-checks\n`;
+          console.log(`[od] ${msgPublish}`);
+          onProgress?.('info', msgPublish);
+          try {
+            await runCommand(`pnpm ${filterArgs} publish --no-git-checks`, projectDir, onProgress);
+          } catch (err: any) {
+            console.error(`[od] pnpm publish failed:`, err.message);
+            throw new Error(`Failed to publish design system packages: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+          }
+        } finally {
+          // 5. Clean up all temporary .npmrc files
+          for (const item of npmrcFilesToClean) {
+            const msgCleanup = `Cleaning up temporary .npmrc in ${item.path}...\n`;
             console.log(`[od] ${msgCleanup}`);
             onProgress?.('info', msgCleanup);
-            if (existed && originalContent !== null) {
-              await writeFile(npmrcPath, originalContent, 'utf8');
+            if (item.existed && item.originalContent !== null) {
+              await writeFile(item.path, item.originalContent, 'utf8');
             } else {
-            await rm(npmrcPath).catch(() => {});
+              await rm(item.path).catch(() => { });
+            }
           }
         }
       }
     }
   }
-}
   const now = new Date().toISOString();
   const title = normalizeTitle(input.title ?? existingMeta.title ?? firstHeading(existingBody) ?? dirId);
   const category = cleanText(input.category) || existingMeta.category || extractCategory(existingBody) || 'Custom';
@@ -1434,9 +1486,9 @@ async function migrateLegacyDesignSystemPackage(
     ),
     appKitExists
       ? writeIfMissing(
-          'ui_kits/app/README.md',
-          `# ${title} UI Kit\n\nThis package was migrated from an earlier Open Design design-system workspace. Use \`index.html\` as the applied interface example and replace it with source-backed modular components when new repository evidence is available.\n`,
-        )
+        'ui_kits/app/README.md',
+        `# ${title} UI Kit\n\nThis package was migrated from an earlier Open Design design-system workspace. Use \`index.html\` as the applied interface example and replace it with source-backed modular components when new repository evidence is available.\n`,
+      )
       : Promise.resolve(false),
     appKitExists
       ? writeDefaultUiKitComponentsIfMissing(dir, title)
@@ -2344,7 +2396,7 @@ function sanitizeRevisionId(raw: string | undefined): string | null {
 async function uniqueSlug(root: string, base: string): Promise<string> {
   let candidate = base || 'design-system';
   let index = 2;
-  for (;;) {
+  for (; ;) {
     try {
       await stat(path.join(root, candidate));
       candidate = `${base}-${index++}`;
@@ -2448,12 +2500,12 @@ function uniqueCleanList(values: string[] | undefined): string[] {
 function hasProvenance(provenance: DesignSystemProvenance): boolean {
   return Boolean(
     provenance.companyBlurb
-      || provenance.notes
-      || provenance.sourceNotes
-      || provenance.githubUrls?.length
-      || provenance.localCodeFiles?.length
-      || provenance.figFiles?.length
-      || provenance.assetFiles?.length,
+    || provenance.notes
+    || provenance.sourceNotes
+    || provenance.githubUrls?.length
+    || provenance.localCodeFiles?.length
+    || provenance.figFiles?.length
+    || provenance.assetFiles?.length,
   );
 }
 
@@ -2914,8 +2966,8 @@ function renderComponentCatalogHtml(
       <p class="lead">${escapeHtml(summary)}</p>
       <section class="component-grid">
         ${isInputs
-          ? `<label><span>Label</span><input value="Source-backed field" /></label><label><span>Search</span><input placeholder="Search components" /></label><textarea>Helpful multiline content.</textarea>`
-          : `<button class="primary">Primary action</button><button>Secondary action</button><button class="ghost">Icon action</button>`}
+      ? `<label><span>Label</span><input value="Source-backed field" /></label><label><span>Search</span><input placeholder="Search components" /></label><textarea>Helpful multiline content.</textarea>`
+      : `<button class="primary">Primary action</button><button>Secondary action</button><button class="ghost">Icon action</button>`}
       </section>
     </main>`,
     palette,

@@ -477,7 +477,7 @@ describe('design systems registry', () => {
 
     const calls = mockSpawn.mock.calls.map((c: any) => c[0]);
     expect(calls).toContain('pnpm run build');
-    expect(calls).toContain('pnpm --filter @mystaline/acme-lib publish --no-git-checks');
+    expect(calls).toContain('pnpm --filter @mystaline/acme-lib... publish --no-git-checks');
 
     const npmrcPath = path.join(packageDir, '.npmrc');
     const npmrcExists = await stat(npmrcPath).then(() => true).catch(() => false);

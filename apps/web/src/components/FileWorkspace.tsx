@@ -1,4 +1,5 @@
 import { Button } from '@open-design/components';
+import Ansi from 'ansi-to-react';
 import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { AnimatePresence } from 'motion/react';
@@ -2558,6 +2559,15 @@ function DesignSystemProjectPanel({
   const [feedbackText, setFeedbackText] = useState('');
   const [status, setStatus] = useState(system.status ?? 'draft');
   const [statusBusy, setStatusBusy] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishLogs, setPublishLogs] = useState<string[]>([]);
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [publishLogs]);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -2630,13 +2640,68 @@ function DesignSystemProjectPanel({
   async function togglePublished(nextPublished: boolean) {
     if (nextPublished && !githubEvidence.ready) return;
     setStatusBusy(true);
-    try {
-      const nextStatus = nextPublished ? 'published' : 'draft';
-      const updated = await updateDesignSystemDraft(system.id, { status: nextStatus });
-      if (updated) setStatus(updated.status ?? nextStatus);
-      await onDesignSystemsRefresh?.();
-    } finally {
-      setStatusBusy(false);
+    if (nextPublished) {
+      setIsPublishing(true);
+      setPublishLogs([]);
+
+      const es = new EventSource(`/api/design-systems/${encodeURIComponent(system.id)}/publish`);
+
+      es.addEventListener('progress', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          const prefix = payload.type === 'stdout' || payload.type === 'stderr' ? '' : `[${payload.type.toUpperCase()}] `;
+          setPublishLogs((prev) => [...prev, `${prefix}${payload.data}`]);
+        } catch {}
+      });
+
+      es.addEventListener('done', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.designSystem) {
+            setStatus(payload.designSystem.status ?? 'published');
+          }
+          setPublishLogs((prev) => [...prev, '\nSUCCESS: Design system published successfully!']);
+        } catch {}
+        es.close();
+        setStatusBusy(false);
+        setIsPublishing(false);
+        void onDesignSystemsRefresh?.();
+      });
+
+      es.addEventListener('publish-error', (e) => {
+        let msg = 'Unknown publishing error occurred.';
+        try {
+          const payload = JSON.parse(e.data);
+          msg = payload.message || msg;
+        } catch {}
+        setPublishLogs((prev) => [...prev, `\nERROR: ${msg}`]);
+        es.close();
+        setStatusBusy(false);
+        setIsPublishing(false);
+        void onDesignSystemsRefresh?.();
+      });
+
+      es.onerror = () => {
+        setPublishLogs((prev) => {
+          if (prev.some(line => line.includes('SUCCESS:') || line.includes('ERROR:'))) {
+            return prev;
+          }
+          return [...prev, '\nERROR: Lost connection to publishing server.'];
+        });
+        es.close();
+        setStatusBusy(false);
+        setIsPublishing(false);
+        void onDesignSystemsRefresh?.();
+      };
+    } else {
+      try {
+        const nextStatus = 'draft';
+        const updated = await updateDesignSystemDraft(system.id, { status: nextStatus });
+        if (updated) setStatus(updated.status ?? nextStatus);
+        await onDesignSystemsRefresh?.();
+      } finally {
+        setStatusBusy(false);
+      }
     }
   }
 
@@ -2882,6 +2947,80 @@ function DesignSystemProjectPanel({
           >
             <span style={{ width: `${generationProgress}%` }} />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  const hasFailedPublish = publishLogs.some((line) => line.includes('ERROR:'));
+  const hasSuccessfulPublish = publishLogs.some((line) => line.includes('SUCCESS:'));
+
+  if (isPublishing || publishLogs.length > 0) {
+    return (
+      <div className="ds-project-panel ds-project-panel--generating">
+        <div className="ds-project-generation-stage" style={{ width: 'min(800px, calc(100% - 48px))' }}>
+          <span className="ds-project-generation-mark">
+            {hasFailedPublish ? (
+              <Icon name="alert-triangle" size={24} style={{ color: 'var(--red)' }} />
+            ) : (
+              <Icon name="blocks" size={24} />
+            )}
+          </span>
+          <h1>
+            {hasFailedPublish
+              ? 'Publishing failed'
+              : hasSuccessfulPublish
+              ? 'Design system published!'
+              : 'Publishing your design system...'}
+          </h1>
+          <p>
+            {hasFailedPublish
+              ? 'Review the error logs below to diagnose the issue.'
+              : hasSuccessfulPublish
+              ? 'Your design system packages are published to Verdaccio successfully.'
+              : 'Keep this tab open. We are running the build and publishing to verdaccio.'}
+          </p>
+
+          <div
+            style={{
+              marginTop: 24,
+              width: '100%',
+              padding: '16px',
+              background: '#0f1115',
+              color: '#a9b1d6',
+              borderRadius: 8,
+              fontFamily: 'monospace',
+              fontSize: 12.5,
+              height: 400,
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              textAlign: 'left',
+              boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div style={{ color: hasFailedPublish ? '#f87171' : hasSuccessfulPublish ? '#4ade80' : '#38bdf8', marginBottom: 8, fontWeight: 'bold', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Console Logs</span>
+              {isPublishing && <span className="animate-pulse" style={{ fontSize: 11, color: '#a7f3d0' }}>● Running</span>}
+            </div>
+            <div style={{ lineHeight: 1.6 }}>
+              <Ansi>{publishLogs.join('\n')}</Ansi>
+            </div>
+            <div ref={logsEndRef} />
+          </div>
+
+          {!isPublishing && (
+            <div style={{ marginTop: 24 }}>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setPublishLogs([]);
+                }}
+              >
+                Back to Workspace
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );

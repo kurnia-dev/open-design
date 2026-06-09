@@ -1,7 +1,41 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { exec, spawn } from 'node:child_process';
+
+vi.mock('node:child_process', () => {
+  const mockSpawn = vi.fn((cmd, args, opts) => {
+    const mockChild: any = {
+      stdout: {
+        on: vi.fn((event, handler) => {
+          if (event === 'data') {
+            handler(Buffer.from('mock-stdout'));
+          }
+        }),
+      },
+      stderr: {
+        on: vi.fn(),
+      },
+      on: vi.fn((event, handler) => {
+        if (event === 'close') {
+          setTimeout(() => handler(0), 10);
+        }
+      }),
+    };
+    return mockChild;
+  });
+
+  return {
+    exec: vi.fn((cmd, opts, cb) => {
+      const callback = typeof opts === 'function' ? opts : cb;
+      if (callback) {
+        callback(null, { stdout: 'mock-stdout', stderr: '' });
+      }
+    }),
+    spawn: mockSpawn,
+  };
+});
 
 import {
   createUserDesignSystem,
@@ -388,5 +422,67 @@ describe('design systems registry', () => {
       ]),
     );
     expect(generatedFiles?.map((file) => file.path)).not.toEqual(expect.arrayContaining(['README.md']));
+  });
+
+  it('triggers build and publish to local Verdaccio registry when status transitions to published', async () => {
+    const projectsRoot = await mkdtemp(path.join(tmpdir(), 'od-projects-'));
+    const projectId = 'ds-acme-publish';
+    const projectDir = path.join(projectsRoot, projectId);
+    await mkdir(projectDir, { recursive: true });
+
+    const packageDir = path.join(projectDir, 'packages', 'acme-lib');
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({ name: '@mystaline/acme-lib', version: '1.0.0' }),
+      'utf8'
+    );
+
+    const manifestContent = {
+      schemaVersion: 'od-design-system-project/v1',
+      id: 'acme-publish',
+      name: 'Acme Publish',
+      category: 'Custom',
+      files: {
+        design: 'DESIGN.md',
+        tokens: 'tokens.css'
+      },
+      npmPackages: [
+        {
+          name: '@mystaline/acme-lib',
+          buildCommand: 'pnpm run build'
+        }
+      ]
+    };
+    await writeFile(path.join(projectDir, 'manifest.json'), JSON.stringify(manifestContent), 'utf8');
+
+    const created = await createUserDesignSystem(root, {
+      title: 'Acme Publish',
+      status: 'draft',
+    });
+
+    await linkUserDesignSystemProject(root, created.id, projectId);
+
+    const mockSpawn = spawn as any;
+    mockSpawn.mockClear();
+
+    const updated = await updateUserDesignSystem(
+      root,
+      created.id,
+      { status: 'published' },
+      projectsRoot
+    );
+
+    expect(updated?.status).toBe('published');
+
+    const calls = mockSpawn.mock.calls.map((c: any) => c[0]);
+    expect(calls).toContain('pnpm run build');
+    expect(calls).toContain('pnpm --filter @mystaline/acme-lib publish --no-git-checks');
+
+    const npmrcPath = path.join(packageDir, '.npmrc');
+    const npmrcExists = await stat(npmrcPath).then(() => true).catch(() => false);
+    expect(npmrcExists).toBe(false);
+
+    await rm(projectsRoot, { recursive: true, force: true });
   });
 });

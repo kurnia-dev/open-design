@@ -10,8 +10,12 @@
 // `surface`) fall back to frontmatter when the body has none.
 
 import { randomUUID } from 'node:crypto';
+import { exec, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+const execAsync = promisify(exec);
 
 import {
   type ComponentsManifest,
@@ -164,6 +168,10 @@ type DesignSystemProjectManifest = {
     suggested?: string[];
     exemptions?: string[];
   };
+  npmPackages?: Array<{
+    name: string;
+    buildCommand: string;
+  }>;
 };
 
 export type DesignSystemProvenance = {
@@ -884,10 +892,99 @@ export async function createUserDesignSystem(
   return listed.find((s) => s.id === `user:${dirId}`)!;
 }
 
+async function detectPackageManager(dir: string): Promise<string> {
+  const [hasPnpm, hasYarn] = await Promise.all([
+    stat(path.join(dir, 'pnpm-lock.yaml')).then(() => true).catch(() => false),
+    stat(path.join(dir, 'yarn.lock')).then(() => true).catch(() => false),
+  ]);
+  if (hasPnpm) return 'pnpm';
+  if (hasYarn) return 'yarn';
+  return 'npm';
+}
+
+async function findPackageDir(baseDir: string, packageName: string): Promise<string | null> {
+  try {
+    const pkgJsonPath = path.join(baseDir, 'package.json');
+    const content = await readFile(pkgJsonPath, 'utf8');
+    const pkg = JSON.parse(content) as Record<string, unknown>;
+    if (pkg && typeof pkg === 'object' && pkg.name === packageName) {
+      return baseDir;
+    }
+  } catch {}
+
+  let entries: string[] = [];
+  try {
+    entries = await readdir(baseDir);
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    if (entry === 'node_modules' || entry === '.git' || entry === '.od') {
+      continue;
+    }
+    const fullPath = path.join(baseDir, entry);
+    try {
+      const stats = await stat(fullPath);
+      if (stats.isDirectory()) {
+        const found = await findPackageDir(fullPath, packageName);
+        if (found) return found;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+function runCommand(
+  fullCommand: string,
+  cwd: string,
+  onProgress?: (type: 'info' | 'stdout' | 'stderr', data: string) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(fullCommand, [], { cwd, shell: true });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+      process.stdout.write(chunk);
+      onProgress?.('stdout', chunk);
+    });
+
+    child.stderr?.on('data', (data) => {
+      const chunk = data.toString();
+      stderr += chunk;
+      process.stderr.write(chunk);
+      onProgress?.('stderr', chunk);
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        const error = new Error(`Command "${fullCommand}" failed with exit code ${code}`);
+        (error as any).stdout = stdout;
+        (error as any).stderr = stderr;
+        reject(error);
+      }
+    });
+
+    child.on('error', (err) => {
+      (err as any).stdout = stdout;
+      (err as any).stderr = stderr;
+      reject(err);
+    });
+  });
+}
+
 export async function updateUserDesignSystem(
   root: string,
   id: string,
   input: UserDesignSystemInput,
+  projectsRoot?: string,
+  onProgress?: (type: 'info' | 'stdout' | 'stderr', data: string) => void,
 ): Promise<DesignSystemSummary | null> {
   const dirId = stripPrefixAndValidateId(id, 'user:');
   if (!dirId) return null;
@@ -900,6 +997,89 @@ export async function updateUserDesignSystem(
     return null;
   }
   const existingMeta = await readUserMetadata(root, dirId);
+
+  if (input.status === 'published' && existingMeta.status !== 'published') {
+    if (projectsRoot) {
+      const projectId = existingMeta.projectId || `ds-${dirId}`;
+      const projectDir = path.join(projectsRoot, projectId);
+      const manifest = await readProjectManifest(projectDir, dirId);
+      if (manifest && manifest.npmPackages && manifest.npmPackages.length > 0) {
+        onProgress?.('info', `Found ${manifest.npmPackages.length} package(s) to publish.\n`);
+        const nodeModulesExist = await stat(path.join(projectDir, 'node_modules')).then(() => true).catch(() => false);
+        if (!nodeModulesExist) {
+          const pm = await detectPackageManager(projectDir);
+          const msg = `Installing dependencies with ${pm} in ${projectDir}...\n`;
+          console.log(`[od] ${msg}`);
+          onProgress?.('info', msg);
+          try {
+            await runCommand(`${pm} install`, projectDir, onProgress);
+          } catch (err: any) {
+            console.error(`[od] Dependency install failed in ${projectDir}:`, err.message);
+            throw new Error(`Failed to install dependencies: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+          }
+        }
+
+        for (const pkg of manifest.npmPackages) {
+          const msgLocating = `Locating package directory for ${pkg.name} in ${projectDir}...\n`;
+          console.log(`[od] ${msgLocating}`);
+          onProgress?.('info', msgLocating);
+          const pkgDir = await findPackageDir(projectDir, pkg.name);
+          if (!pkgDir) {
+            throw new Error(`Package directory for ${pkg.name} not found in ${projectDir}`);
+          }
+
+          if (pkg.buildCommand) {
+            const msgBuild = `Running build command "${pkg.buildCommand}" in ${projectDir}...\n`;
+            console.log(`[od] ${msgBuild}`);
+            onProgress?.('info', msgBuild);
+            try {
+              await runCommand(pkg.buildCommand, projectDir, onProgress);
+            } catch (err: any) {
+              console.error(`[od] Build command failed for ${pkg.name}:`, err.message);
+              throw new Error(`Build command failed: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+            }
+          }
+
+          const npmrcPath = path.join(pkgDir, '.npmrc');
+          const existed = await stat(npmrcPath).then(() => true).catch(() => false);
+          let originalContent: string | null = null;
+          if (existed) {
+            originalContent = await readFile(npmrcPath, 'utf8');
+          }
+
+          try {
+            const msgNpmrc = `Writing temporary .npmrc to ${npmrcPath}...\n`;
+            console.log(`[od] ${msgNpmrc}`);
+            onProgress?.('info', msgNpmrc);
+            await writeFile(
+              npmrcPath,
+              'registry=http://localhost:4873/\n//localhost:4873/:_authToken="dummy-token"\n',
+              'utf8'
+            );
+
+            const msgPublish = `Publishing package ${pkg.name} to local Verdaccio registry...\n`;
+            console.log(`[od] ${msgPublish}`);
+            onProgress?.('info', msgPublish);
+            try {
+              await runCommand(`pnpm --filter ${pkg.name} publish --no-git-checks`, projectDir, onProgress);
+            } catch (err: any) {
+              console.error(`[od] pnpm publish failed for ${pkg.name}:`, err.message);
+              throw new Error(`Failed to publish package ${pkg.name} to registry: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+            }
+          } finally {
+            const msgCleanup = `Cleaning up temporary .npmrc in ${pkgDir}...\n`;
+            console.log(`[od] ${msgCleanup}`);
+            onProgress?.('info', msgCleanup);
+            if (existed && originalContent !== null) {
+              await writeFile(npmrcPath, originalContent, 'utf8');
+            } else {
+            await rm(npmrcPath).catch(() => {});
+          }
+        }
+      }
+    }
+  }
+}
   const now = new Date().toISOString();
   const title = normalizeTitle(input.title ?? existingMeta.title ?? firstHeading(existingBody) ?? dirId);
   const category = cleanText(input.category) || existingMeta.category || extractCategory(existingBody) || 'Custom';

@@ -3,7 +3,8 @@ import type { DesktopExportPdfInput, DesktopExportPdfResult } from '@open-design
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
-import { execFile, spawn } from 'node:child_process';
+import { exec, execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -223,7 +224,7 @@ import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
-import { startDevScript, getDevServerUrl } from './design-system-import.js';
+import { startDevScript, getDevServerUrl, killPortProcesses } from './design-system-import.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure } from './run-failure-classification.js';
@@ -4450,6 +4451,77 @@ function resolveAcpStageTimeoutMs(): number | undefined {
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
+let verdaccioChild: any = null;
+
+async function startVerdaccioServer(runtimeDataDir: string) {
+  const configDir = path.join(runtimeDataDir, 'verdaccio');
+  const configPath = path.join(configDir, 'config.yaml');
+
+  await fs.promises.mkdir(configDir, { recursive: true });
+
+  const configYaml = `
+storage: ./storage
+auth:
+  htpasswd:
+    file: ./htpasswd
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+packages:
+  '@*/*':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+  '**':
+    access: $all
+    publish: $all
+    unpublish: $all
+    proxy: npmjs
+middlewares:
+  audit:
+    enabled: true
+logs: { type: stdout, format: pretty, level: http }
+`;
+  await fs.promises.writeFile(configPath, configYaml.trim() + '\n', 'utf8');
+
+  // Terminate any process already on port 4873
+  await killPortProcesses(4873);
+
+  console.log(`[od] Starting Verdaccio server on port 4873...`);
+  verdaccioChild = spawn('pnpm', ['dlx', 'verdaccio', '--config', configPath, '--listen', 'localhost:4873'], {
+    cwd: configDir,
+    detached: true,
+    stdio: ['ignore', 'ignore', 'pipe'],
+    shell: process.platform === 'win32',
+  });
+
+  verdaccioChild.stderr?.on('data', (chunk: Buffer) => {
+    console.warn(`[verdaccio-stderr] ${chunk.toString().trim()}`);
+  });
+
+  verdaccioChild.stderr?.unref?.();
+  verdaccioChild.unref();
+}
+
+function stopVerdaccioServer() {
+  if (verdaccioChild) {
+    console.log('[od] Stopping Verdaccio server...');
+    try {
+      if (process.platform === 'win32') {
+        exec(`taskkill /pid ${verdaccioChild.pid} /t /f`);
+      } else {
+        process.kill(-verdaccioChild.pid, 'SIGKILL');
+      }
+    } catch {
+      try {
+        verdaccioChild.kill('SIGKILL');
+      } catch {}
+    }
+    verdaccioChild = null;
+  }
+}
+
 export async function startServer({
   port = 7456,
   host = process.env.OD_BIND_HOST || '127.0.0.1',
@@ -6884,6 +6956,7 @@ export async function startServer({
         USER_DESIGN_SYSTEMS_DIR,
         req.params.id,
         req.body || {},
+        PROJECTS_DIR,
       );
       if (!updated) {
         return res.status(404).json({ error: 'editable design system not found' });
@@ -6891,6 +6964,39 @@ export async function startServer({
       res.json({ ...updated, designSystem: updated });
     } catch (err) {
       res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/design-systems/:id/publish', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const writeEvent = (event: string, data: any) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const updated = await updateUserDesignSystem(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        { status: 'published' },
+        PROJECTS_DIR,
+        (type, data) => {
+          writeEvent('progress', { type, data });
+        }
+      );
+      if (!updated) {
+        writeEvent('publish-error', { message: 'editable design system not found' });
+      } else {
+        writeEvent('done', { success: true, designSystem: updated });
+      }
+    } catch (err: any) {
+      writeEvent('publish-error', { message: err.message || String(err) });
+    } finally {
+      res.end();
     }
   });
 
@@ -14922,6 +15028,7 @@ export async function startServer({
   return await new Promise((resolve, reject) => {
     let daemonShutdownStarted = false;
     const cleanupDaemonBackgroundWork = () => {
+      stopVerdaccioServer();
       composioConnectorProvider.stopCatalogRefreshLoop();
       orbitService.stop();
       routineService?.stop();
@@ -14987,6 +15094,13 @@ export async function startServer({
           console.log(`[od] daemon listening on ${url}`);
         }
         daemonUrl = url;
+        void (async () => {
+          try {
+            await startVerdaccioServer(RUNTIME_DATA_DIR);
+          } catch (err) {
+            console.error('[od] Failed to start Verdaccio server:', err);
+          }
+        })();
         resolve(returnServer ? { url, server, shutdown: shutdownDaemonRuns } : url);
       });
     } catch (error) {

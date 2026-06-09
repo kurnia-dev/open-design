@@ -600,7 +600,7 @@ export function getDevServerUrl(dir: string): string | undefined {
   return undefined;
 }
 
-async function killPortProcesses(port: number) {
+export async function killPortProcesses(port: number) {
   try {
     const { execSync } = await import('node:child_process');
     const pids = new Set<number>();

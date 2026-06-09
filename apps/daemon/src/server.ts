@@ -4489,9 +4489,9 @@ logs: { type: stdout, format: pretty, level: http }
   await killPortProcesses(4873);
 
   console.log(`[od] Starting Verdaccio server on port 4873...`);
-  verdaccioChild = spawn('pnpm', ['dlx', 'verdaccio', '--config', configPath, '--listen', 'localhost:4873'], {
+  verdaccioChild = spawn('pnpm', ['dlx', 'verdaccio', '--config', configPath, '--listen', '0.0.0.0:4873'], {
     cwd: configDir,
-    detached: true,
+    detached: process.platform !== 'win32',
     stdio: ['ignore', 'ignore', 'pipe'],
     shell: process.platform === 'win32',
   });

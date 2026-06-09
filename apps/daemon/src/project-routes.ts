@@ -891,9 +891,9 @@ async function initializeReactViteProject(
         }
       }
     }
-    let npmrcContent = 'registry=http://localhost:4873/\n//localhost:4873/:_authToken="dummy-token"\n';
+    let npmrcContent = 'registry=http://127.0.0.1:4873/\n//127.0.0.1:4873/:_authToken="dummy-token"\n';
     for (const scope of scopes) {
-      npmrcContent += `${scope}:registry=http://localhost:4873/\n`;
+      npmrcContent += `${scope}:registry=http://127.0.0.1:4873/\n`;
     }
     await writeFile(path.join(dir, '.npmrc'), npmrcContent, 'utf8');
   } else {

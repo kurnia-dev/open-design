@@ -10,12 +10,10 @@
 // `surface`) fall back to frontmatter when the body has none.
 
 import { randomUUID } from 'node:crypto';
-import { exec, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-
-const execAsync = promisify(exec);
 
 import {
   type ComponentsManifest,
@@ -1089,9 +1087,9 @@ export async function updateUserDesignSystem(
         try {
           // 3. Write temporary .npmrc to all paths
           const scopes = await findScopes(projectDir);
-          let npmrcLines = 'registry=http://localhost:4873/\n//localhost:4873/:_authToken="dummy-token"\n';
+          let npmrcLines = 'registry=http://127.0.0.1:4873/\n//127.0.0.1:4873/:_authToken="dummy-token"\n';
           for (const scope of scopes) {
-            npmrcLines += `${scope}:registry=http://localhost:4873/\n`;
+            npmrcLines += `${scope}:registry=http://127.0.0.1:4873/\n`;
           }
 
           for (const item of npmrcFilesToClean) {
@@ -1717,7 +1715,12 @@ function generatedDesignSystemFileWrites(
           private: true,
           type: 'module',
           scripts: {
-            preview: 'open index.html',
+            preview:
+              process.platform === 'win32'
+                ? 'start index.html'
+                : process.platform === 'linux'
+                  ? 'xdg-open index.html'
+                  : 'open index.html',
           },
         },
         null,

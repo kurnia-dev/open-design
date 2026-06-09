@@ -699,11 +699,12 @@ export async function startDevScript(dir: string): Promise<void> {
     const pm = await detectPackageManager(resolvedDir);
     console.log(`[design-system-import] Starting dev server using ${pm} run dev in ${resolvedDir}`);
 
+    const isWindows = process.platform === 'win32';
     const child = spawn(pm, ['run', 'dev'], {
       cwd: resolvedDir,
-      detached: true,
+      detached: !isWindows,
       stdio: ['ignore', 'ignore', 'pipe'],
-      shell: process.platform === 'win32',
+      shell: isWindows,
     });
 
     child.stderr?.on('data', (chunk) => {

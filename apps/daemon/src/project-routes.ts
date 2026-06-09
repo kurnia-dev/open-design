@@ -1136,7 +1136,7 @@ function broadcastNpmInstallLog(
 
 function checkPnpmInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
-    const child = spawn('pnpm', ['--version'], { stdio: 'ignore' });
+    const child = spawn('pnpm', ['--version'], { stdio: 'ignore', shell: process.platform === 'win32' });
     child.on('error', () => {
       resolve(false);
     });
@@ -1149,7 +1149,7 @@ function checkPnpmInstalled(): Promise<boolean> {
 function installPnpmGlobally(projectId: string): Promise<boolean> {
   return new Promise((resolve) => {
     console.log('[project-routes] Installing pnpm globally for project ' + projectId);
-    const child = spawn('npm', ['install', '-g', 'pnpm'], { stdio: 'ignore' });
+    const child = spawn('npm', ['install', '-g', 'pnpm'], { stdio: 'ignore', shell: process.platform === 'win32' });
     activeInstallProcesses.set(projectId, child);
     child.on('error', (err) => {
       console.error('[project-routes] Failed to run global pnpm install:', err);
@@ -1184,7 +1184,8 @@ function runProjectInstall(
     const child = spawn(tool, args, {
       cwd: dir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
+      detached: process.platform !== 'win32',
+      shell: process.platform === 'win32',
     });
     child.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();

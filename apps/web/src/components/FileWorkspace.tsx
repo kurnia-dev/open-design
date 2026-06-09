@@ -445,6 +445,17 @@ export function FileWorkspace({
     fileManagerViewedProjectRef.current = projectId;
     trackPageView(analytics.track, { page_name: 'file_manager' });
   }, [projectId, analytics.track]);
+
+  useEffect(() => {
+    return () => {
+      // Use keepalive: true so the request completes even if the tab/page is unloading
+      fetch(`/api/projects/${projectId}/dev-server`, {
+        method: 'DELETE',
+        keepalive: true,
+      }).catch(() => { });
+    };
+  }, [projectId]);
+
   const defaultRootTab = designSystemProject
     ? (designSystemProject.devServerUrl ? DEV_SERVER_PREVIEW_TAB : DESIGN_SYSTEM_TAB)
     : DESIGN_FILES_TAB;

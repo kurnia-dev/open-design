@@ -1,8 +1,8 @@
 import { execFile, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { copyFile, cp, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
-import { promisify } from 'node:util';
 import path from 'node:path';
+import { promisify } from 'node:util';
 
 import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
 import { renderDesignTokensJson, renderTailwindV4Css } from '@open-design/contracts/design-systems/derived-token-outputs';
@@ -612,6 +612,72 @@ export function getDevServerUrl(dir: string): string | undefined {
   return undefined;
 }
 
+async function killPortProcesses(port: number) {
+  try {
+    const { execSync } = await import('node:child_process');
+    const pids = new Set<number>();
+    if (process.platform === 'win32') {
+      try {
+        const stdout = execSync('netstat -ano').toString();
+        const lines = stdout.split('\n');
+        for (const line of lines) {
+          const parts = line.trim().split(/\s+/);
+          if (parts.length >= 5 && parts[3] === 'LISTENING') {
+            const localAddress = parts[1];
+            const pidStr = parts[4];
+            if (localAddress && pidStr && localAddress.endsWith(`:${port}`)) {
+              const pid = Number(pidStr);
+              if (!isNaN(pid) && pid > 0) {
+                pids.add(pid);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[design-system-import] Failed to run netstat on Windows:`, err);
+      }
+    } else {
+      try {
+        const stdout = execSync(`lsof -t -i:${port}`).toString().trim();
+        if (stdout) {
+          const lines = stdout.split('\n').map(p => Number(p.trim())).filter(p => !isNaN(p));
+          for (const pid of lines) {
+            pids.add(pid);
+          }
+        }
+      } catch {
+        // Ignored
+      }
+    }
+
+    if (pids.size > 0) {
+      for (const pid of pids) {
+        console.log(`[design-system-import] Port ${port} is in use by PID ${pid}. Terminating it.`);
+        try { process.kill(pid, 'SIGKILL'); } catch { }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  } catch (err) {
+    // Ignored
+  }
+}
+
+export async function stopDevScript(dir: string): Promise<void> {
+  const resolvedDir = path.resolve(dir);
+  const manifestPath = path.join(resolvedDir, 'manifest.json');
+  if (existsSync(manifestPath)) {
+    try {
+      const content = readFileSync(manifestPath, 'utf8');
+      const manifest = JSON.parse(content) as Record<string, any>;
+      if (manifest.devServer?.port) {
+        await killPortProcesses(manifest.devServer.port);
+      }
+    } catch {
+      // Ignored
+    }
+  }
+}
+
 /**
  * Starts the `dev` script if present in `package.json`.
  * Spawns it as a detached background process so it continues running.
@@ -630,54 +696,7 @@ export async function startDevScript(dir: string): Promise<void> {
       const content = readFileSync(manifestPath, 'utf8');
       const manifest = JSON.parse(content) as Record<string, any>;
       if (manifest.devServer?.port) {
-        const port = manifest.devServer.port;
-        try {
-          const { execSync } = await import('node:child_process');
-          const pids = new Set<number>();
-          if (process.platform === 'win32') {
-            try {
-              const stdout = execSync('netstat -ano').toString();
-              const lines = stdout.split('\n');
-              for (const line of lines) {
-                const parts = line.trim().split(/\s+/);
-                if (parts.length >= 5 && parts[3] === 'LISTENING') {
-                  const localAddress = parts[1];
-                  const pidStr = parts[4];
-                  if (localAddress && pidStr && localAddress.endsWith(`:${port}`)) {
-                    const pid = Number(pidStr);
-                    if (!isNaN(pid) && pid > 0) {
-                      pids.add(pid);
-                    }
-                  }
-                }
-              }
-            } catch (err) {
-              console.warn(`[design-system-import] Failed to run netstat on Windows:`, err);
-            }
-          } else {
-            try {
-              const stdout = execSync(`lsof -t -i:${port}`).toString().trim();
-              if (stdout) {
-                const lines = stdout.split('\n').map(p => Number(p.trim())).filter(p => !isNaN(p));
-                for (const pid of lines) {
-                  pids.add(pid);
-                }
-              }
-            } catch {
-              // Ignored
-            }
-          }
-
-          if (pids.size > 0) {
-            for (const pid of pids) {
-              console.log(`[design-system-import] Port ${port} is in use by PID ${pid}. Terminating it.`);
-              try { process.kill(pid, 'SIGKILL'); } catch { }
-            }
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        } catch (err) {
-          // Ignored
-        }
+        await killPortProcesses(manifest.devServer.port);
       }
     } catch {
       // Ignored

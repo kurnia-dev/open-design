@@ -1237,8 +1237,7 @@ async function installDependencies(
     }
 
     if (installSuccess) {
-      updateStatus('completed', 'Dependencies installed successfully. Starting dev server...');
-      await startDevScript(dir);
+      updateStatus('completed', 'Dependencies installed successfully.');
     } else {
       updateStatus('failed', `Failed to install dependencies using ${tool}.`);
     }
@@ -1959,6 +1958,19 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       res.json(body);
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.post('/api/projects/:id/dev-server', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (project) {
+        const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+        await startDevScript(resolvedDir);
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_SERVER_ERROR', String(err));
     }
   });
 

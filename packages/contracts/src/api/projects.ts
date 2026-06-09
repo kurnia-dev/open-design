@@ -191,6 +191,7 @@ export interface Project {
   customInstructions?: string;
   npmInstallStatus?: 'idle' | 'running' | 'completed' | 'failed';
   npmInstallMessage?: string;
+  devServerUrl?: string;
 }
 
 export interface ProjectTemplate {
@@ -539,9 +540,9 @@ export interface DeployProjectFileRequest {
   cloudflarePages?: CloudflarePagesDeploySelection;
 }
 
-export interface DeployProjectFileResponse extends DeploymentInfo {}
+export interface DeployProjectFileResponse extends DeploymentInfo { }
 
-export interface CheckDeploymentLinkResponse extends DeploymentInfo {}
+export interface CheckDeploymentLinkResponse extends DeploymentInfo { }
 
 // Preflight inspects the file set that would be uploaded for a deploy
 // without sending anything to the provider. Lets the UI show file count,

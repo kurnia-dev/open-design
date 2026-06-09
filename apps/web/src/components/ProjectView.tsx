@@ -1526,8 +1526,21 @@ export function ProjectView({
     hasAppliedInitialPrimaryOpenRef.current = false;
     setOpenTabsState({ tabs: [], active: null });
     (async () => {
-      const state = await loadTabs(project.id);
+      let state = await loadTabs(project.id);
       if (cancelled) return;
+
+      // If we have an active dev server, we don't want index.html lingering around
+      // from past sessions or confusing the focus.
+      const entryFile = project.metadata?.entryFile || 'index.html';
+      const devServerUrl = projectDetail.project?.devServerUrl ?? project.devServerUrl;
+      if (devServerUrl) {
+        state = {
+          ...state,
+          tabs: state.tabs.filter((t) => t !== entryFile),
+          active: state.active === entryFile ? null : state.active,
+        };
+      }
+
       const routeActive = routeFileNameRef.current;
       let nextState = routeActive
         ? {
@@ -1549,7 +1562,7 @@ export function ProjectView({
     return () => {
       cancelled = true;
     };
-  }, [project.id]);
+  }, [project.id, project.devServerUrl, projectDetail.project?.devServerUrl]);
 
   // Debounce the canonical (daemon + SQLite) tab-state write. The embedded
   // browser fans out url/title/favicon updates in bursts on a single page load
@@ -1666,10 +1679,14 @@ export function ProjectView({
       return;
     }
     const primaryFile = selectPrimaryProjectFile(projectFiles);
-    if (!primaryFile) return;
+    const activeDevServerUrl = projectDetail.project?.devServerUrl ?? project.devServerUrl;
+    if (!primaryFile || activeDevServerUrl) {
+      hasAppliedInitialPrimaryOpenRef.current = true;
+      return;
+    }
     hasAppliedInitialPrimaryOpenRef.current = true;
     persistTabsState({ tabs: [primaryFile.name], active: primaryFile.name });
-  }, [openTabsState.active, openTabsState.tabs.length, persistTabsState, projectFiles, routeFileName]);
+  }, [openTabsState.active, openTabsState.tabs.length, persistTabsState, projectFiles, routeFileName, project.devServerUrl, projectDetail.project?.devServerUrl]);
 
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
@@ -5699,6 +5716,7 @@ export function ProjectView({
         ) : (
           <FileWorkspace
             projectId={project.id}
+            devServerUrl={projectDetail.project?.devServerUrl ?? project.devServerUrl}
             npmInstallStatus={npmInstallStatus}
             npmInstallMessage={npmInstallMessage}
             projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}

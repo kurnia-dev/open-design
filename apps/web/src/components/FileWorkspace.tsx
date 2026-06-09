@@ -98,6 +98,7 @@ interface Props {
   rootDirName?: string;
   // True while a working-dir replace is reindexing; shows a loading state.
   reloading?: boolean;
+  devServerUrl?: string;
   /** Absolute on-disk project directory (from GET /api/projects/:id). Used by
    * the Design Files panel's "copy absolute path" action. */
   resolvedDir?: string | null;
@@ -428,6 +429,7 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
   npmInstallStatus = 'idle',
   npmInstallMessage = '',
+  devServerUrl,
 }: Props) {
   const t = useT();
   // The chat column only shows a compact Questions banner; the form itself
@@ -446,7 +448,18 @@ export function FileWorkspace({
     trackPageView(analytics.track, { page_name: 'file_manager' });
   }, [projectId, analytics.track]);
 
+  const devServerStartedRef = useRef<string | null>(null);
+  const [devServerReady, setDevServerReady] = useState(false);
+
   useEffect(() => {
+    // Only attempt to start the dev server if dependencies are fully installed
+    // and we haven't already sent the start request for this project.
+    if (npmInstallStatus === 'completed' && devServerStartedRef.current !== projectId) {
+      devServerStartedRef.current = projectId;
+      setDevServerReady(false);
+      fetch(`/api/projects/${projectId}/dev-server`, { method: 'POST' }).catch(() => {});
+    }
+
     return () => {
       // Use keepalive: true so the request completes even if the tab/page is unloading
       fetch(`/api/projects/${projectId}/dev-server`, {
@@ -454,11 +467,44 @@ export function FileWorkspace({
         keepalive: true,
       }).catch(() => { });
     };
-  }, [projectId]);
+  }, [projectId, npmInstallStatus]);
 
-  const defaultRootTab = designSystemProject
-    ? (designSystemProject.devServerUrl ? DEV_SERVER_PREVIEW_TAB : DESIGN_SYSTEM_TAB)
-    : DESIGN_FILES_TAB;
+  const activeDevServerUrl = devServerUrl ?? designSystemProject?.devServerUrl;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeDevServerUrl) {
+      setDevServerReady(false);
+      return;
+    }
+    
+    // If we already know it's ready, we don't need to poll
+    if (devServerReady) return;
+
+    // Poll until dev server responds with HTTP OK
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const res = await fetch(activeDevServerUrl, { mode: 'no-cors' });
+          if (!cancelled) {
+            setDevServerReady(true);
+            break;
+          }
+        } catch {
+          // connection refused, wait 1s and retry
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    };
+    void poll();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDevServerUrl, devServerReady]);
+  const defaultRootTab = activeDevServerUrl
+    ? DEV_SERVER_PREVIEW_TAB
+    : (designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
   const persistedTabs = tabsState.tabs;
@@ -752,7 +798,7 @@ export function FileWorkspace({
     if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB || name === DEV_SERVER_PREVIEW_TAB) {
       const nextActive =
         (name === DESIGN_SYSTEM_TAB && !designSystemProject) ||
-          (name === DEV_SERVER_PREVIEW_TAB && !designSystemProject?.devServerUrl)
+        (name === DEV_SERVER_PREVIEW_TAB && !activeDevServerUrl)
           ? DESIGN_FILES_TAB
           : name;
       onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
@@ -863,7 +909,7 @@ export function FileWorkspace({
       return;
     }
     if (tabId === DEV_SERVER_PREVIEW_TAB) {
-      setPersistedActive(designSystemProject?.devServerUrl ? DEV_SERVER_PREVIEW_TAB : DESIGN_FILES_TAB);
+      setPersistedActive(activeDevServerUrl ? DEV_SERVER_PREVIEW_TAB : DESIGN_FILES_TAB);
       return;
     }
     if (tabId === DESIGN_FILES_TAB) {
@@ -1484,7 +1530,7 @@ export function FileWorkspace({
         tabId: activeTab,
       };
     }
-    if (activeTab === DEV_SERVER_PREVIEW_TAB && designSystemProject?.devServerUrl) {
+    if (activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl) {
       return {
         id: 'workspace:dev-server-preview',
         kind: 'preview',
@@ -1595,7 +1641,7 @@ export function FileWorkspace({
   const workspaceTabIds = useMemo(() => {
     const ids: string[] = [];
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
-    if (designSystemProject?.devServerUrl) ids.push(DEV_SERVER_PREVIEW_TAB);
+    if (activeDevServerUrl) ids.push(DEV_SERVER_PREVIEW_TAB);
     ids.push(DESIGN_FILES_TAB);
     if (showQuestionsTab) ids.push(QUESTIONS_TAB);
     for (const entry of orderedWorkspaceTabs) {
@@ -1624,7 +1670,7 @@ export function FileWorkspace({
       });
     }
 
-    if (designSystemProject?.devServerUrl) {
+    if (activeDevServerUrl) {
       push({
         id: 'workspace:dev-server-preview',
         kind: 'preview',
@@ -1823,7 +1869,7 @@ export function FileWorkspace({
       className={[
         'workspace',
         designSystemProject ? 'has-design-system-tab' : '',
-        designSystemProject?.devServerUrl ? 'has-dev-server-preview-tab' : '',
+        activeDevServerUrl ? 'has-dev-server-preview-tab' : '',
       ].filter(Boolean).join(' ')}
       data-testid="file-workspace"
     >
@@ -1884,7 +1930,7 @@ export function FileWorkspace({
               <span className="ws-tab-label">Design System</span>
             </button>
           ) : null}
-          {designSystemProject?.devServerUrl ? (
+          {activeDevServerUrl ? (
             <button
               type="button"
               className={`ws-tab dev-server-preview-tab ${activeTab === DEV_SERVER_PREVIEW_TAB ? 'active' : ''}`}
@@ -2182,11 +2228,11 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : activeTab === DEV_SERVER_PREVIEW_TAB && designSystemProject?.devServerUrl ? (
+        ) : activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl ? (
           <div className="dev-server-preview" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: 'var(--bg, #0c0d0e)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid var(--border-subtle, #202224)', background: 'var(--chrome-bg, #121315)' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-muted, #888)', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {designSystemProject.devServerUrl}
+                {activeDevServerUrl}
               </span>
               <Button
                 size="icon"
@@ -2194,20 +2240,27 @@ export function FileWorkspace({
                 onClick={() => {
                   const iframe = document.getElementById('dev-server-preview-iframe') as HTMLIFrameElement | null;
                   if (iframe) {
-                    iframe.src = designSystemProject.devServerUrl!;
+                    iframe.src = activeDevServerUrl!;
                   }
                 }}
               >
                 <Icon name="reload" size={12} />
               </Button>
             </div>
-            <iframe
-              id="dev-server-preview-iframe"
-              src={designSystemProject.devServerUrl}
-              style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
-              sandbox="allow-scripts allow-downloads allow-same-origin allow-popups"
-              title="Dev Server Preview"
-            />
+            {devServerReady ? (
+              <iframe
+                id="dev-server-preview-iframe"
+                src={activeDevServerUrl}
+                style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
+                sandbox="allow-scripts allow-downloads allow-same-origin allow-popups"
+                title="Dev Server Preview"
+              />
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+                <Spinner size={24} />
+                <span style={{ color: 'var(--text-muted, #888)', fontSize: 13 }}>Waiting for dev server to boot...</span>
+              </div>
+            )}
           </div>
         ) : showGenerationPreview && generationPreview ? (
           <GenerationPreviewStage
@@ -2380,7 +2433,7 @@ export function FileWorkspace({
             onOpenFileReplacing={openFileReplacing}
             commentPortalId={commentPortalId}
             onCommentModeChange={onCommentModeChange}
-            devServerUrl={designSystemProject?.devServerUrl}
+            devServerUrl={activeDevServerUrl}
             shareRequest={
               shareRequest && shareRequest.name === activeFile.name
                 ? { nonce: shareRequest.nonce }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
+import { Spinner } from './Loading';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
   buildSocialSharePayload,
@@ -181,23 +182,23 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
   label: string;
   extension: string;
 }> = [
-  { value: 'png', label: 'PNG', extension: '.png' },
-  { value: 'jpeg', label: 'JPEG', extension: '.jpg' },
-  { value: 'webp', label: 'WebP', extension: '.webp' },
-];
+    { value: 'png', label: 'PNG', extension: '.png' },
+    { value: 'jpeg', label: 'JPEG', extension: '.jpg' },
+    { value: 'webp', label: 'WebP', extension: '.webp' },
+  ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
   labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
   tokenLink: string;
   tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
   tokenPlaceholderKey:
-    | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
+  | 'fileViewer.vercelTokenPlaceholder'
+  | 'fileViewer.cloudflareApiTokenPlaceholder';
   tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
   tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
   tokenLabelKey:
-    | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
+  | 'fileViewer.vercelToken'
+  | 'fileViewer.cloudflareApiToken';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -961,6 +962,7 @@ interface Props {
   // send for this file just started processing).
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
   devServerUrl?: string;
+  devServerReady?: boolean,
 }
 
 export function FileViewer({
@@ -985,6 +987,7 @@ export function FileViewer({
   shareRequest,
   slideNavRequest,
   devServerUrl,
+  devServerReady,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1029,6 +1032,7 @@ export function FileViewer({
         shareRequest={shareRequest}
         slideNavRequest={slideNavRequest}
         devServerUrl={devServerUrl}
+        devServerReady={devServerReady}
       />
     );
   }
@@ -1162,75 +1166,75 @@ export function LiveArtifactViewer({
     processedLiveArtifactEventIdRef.current = pendingEvents[pendingEvents.length - 1]?.id ?? processedLiveArtifactEventIdRef.current;
 
     for (const { event: liveArtifactEvent } of pendingEvents) {
-    if (
-      (liveArtifactEvent.kind !== 'live_artifact' && liveArtifactEvent.kind !== 'live_artifact_refresh') ||
-      liveArtifactEvent.projectId !== projectId ||
-      liveArtifactEvent.artifactId !== liveArtifact.artifactId
-    ) {
-      continue;
-    }
-
-    if (liveArtifactEvent.kind === 'live_artifact') {
-      setRefreshError(null);
-      if (liveArtifactEvent.action === 'deleted') {
-        setRefreshSuccess(`Live artifact deleted: ${liveArtifactEvent.title}`);
+      if (
+        (liveArtifactEvent.kind !== 'live_artifact' && liveArtifactEvent.kind !== 'live_artifact_refresh') ||
+        liveArtifactEvent.projectId !== projectId ||
+        liveArtifactEvent.artifactId !== liveArtifact.artifactId
+      ) {
         continue;
       }
-      setRefreshSuccess(
-        liveArtifactEvent.action === 'created'
-          ? `Live artifact created: ${liveArtifactEvent.title}`
-          : `Live artifact updated: ${liveArtifactEvent.title}`,
+
+      if (liveArtifactEvent.kind === 'live_artifact') {
+        setRefreshError(null);
+        if (liveArtifactEvent.action === 'deleted') {
+          setRefreshSuccess(`Live artifact deleted: ${liveArtifactEvent.title}`);
+          continue;
+        }
+        setRefreshSuccess(
+          liveArtifactEvent.action === 'created'
+            ? `Live artifact created: ${liveArtifactEvent.title}`
+            : `Live artifact updated: ${liveArtifactEvent.title}`,
+        );
+        void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
+          if (next) setDetail(next);
+        });
+        void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
+        setReloadKey((n) => n + 1);
+        continue;
+      }
+
+      if (liveArtifactEvent.phase === 'started') {
+        setRefreshing(true);
+        setRefreshError(null);
+        setRefreshSuccess(null);
+        setRefreshEvents((prev) => appendRefreshEvent(prev, { phase: 'started' }));
+        continue;
+      }
+
+      if (liveArtifactEvent.phase === 'failed') {
+        setRefreshing(false);
+        setRefreshError(liveArtifactEvent.error ?? t('liveArtifact.refresh.genericFailure'));
+        setRefreshEvents((prev) =>
+          appendRefreshEvent(prev, {
+            phase: 'failed',
+            error: liveArtifactEvent.error ?? undefined,
+          }),
+        );
+        void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
+          if (next) setDetail(next);
+        });
+        void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
+        continue;
+      }
+
+      setRefreshing(false);
+      setRefreshError(null);
+      setRefreshEvents((prev) =>
+        appendRefreshEvent(prev, {
+          phase: 'succeeded',
+          refreshedSourceCount: liveArtifactEvent.refreshedSourceCount ?? 0,
+        }),
       );
+      if ((liveArtifactEvent.refreshedSourceCount ?? 0) > 0) {
+        setRefreshSuccess(t('liveArtifact.refresh.successOne'));
+      } else {
+        setRefreshError(t('liveArtifact.refresh.noSourceTitle'));
+      }
       void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
         if (next) setDetail(next);
       });
       void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
       setReloadKey((n) => n + 1);
-      continue;
-    }
-
-    if (liveArtifactEvent.phase === 'started') {
-      setRefreshing(true);
-      setRefreshError(null);
-      setRefreshSuccess(null);
-      setRefreshEvents((prev) => appendRefreshEvent(prev, { phase: 'started' }));
-      continue;
-    }
-
-    if (liveArtifactEvent.phase === 'failed') {
-      setRefreshing(false);
-      setRefreshError(liveArtifactEvent.error ?? t('liveArtifact.refresh.genericFailure'));
-      setRefreshEvents((prev) =>
-        appendRefreshEvent(prev, {
-          phase: 'failed',
-          error: liveArtifactEvent.error ?? undefined,
-        }),
-      );
-      void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
-        if (next) setDetail(next);
-      });
-      void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
-      continue;
-    }
-
-    setRefreshing(false);
-    setRefreshError(null);
-    setRefreshEvents((prev) =>
-      appendRefreshEvent(prev, {
-        phase: 'succeeded',
-        refreshedSourceCount: liveArtifactEvent.refreshedSourceCount ?? 0,
-      }),
-    );
-    if ((liveArtifactEvent.refreshedSourceCount ?? 0) > 0) {
-      setRefreshSuccess(t('liveArtifact.refresh.successOne'));
-    } else {
-      setRefreshError(t('liveArtifact.refresh.noSourceTitle'));
-    }
-    void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
-      if (next) setDetail(next);
-    });
-    void fetchLiveArtifactRefreshes(projectId, liveArtifact.artifactId).then(setRefreshHistory);
-    setReloadKey((n) => n + 1);
     }
   }, [liveArtifactEvents, liveArtifact.artifactId, projectId, t]);
 
@@ -1319,7 +1323,7 @@ export function LiveArtifactViewer({
     setMode('preview');
     const target = previewBodyRef.current ?? iframeRef.current;
     if (target?.requestFullscreen) {
-      void target.requestFullscreen().catch(() => {});
+      void target.requestFullscreen().catch(() => { });
     }
   };
   const presentNewTab = () => {
@@ -1402,15 +1406,15 @@ export function LiveArtifactViewer({
       ) : null}
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-            <button
-              type="button"
-              className="icon-only od-tooltip"
-              onClick={() => setReloadKey((n) => n + 1)}
-              title={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
-              data-tooltip={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
-              data-tooltip-placement="bottom"
-              aria-label={`${t('fileViewer.reloadAria')} ${t('fileViewer.preview')}`}
-            >
+          <button
+            type="button"
+            className="icon-only od-tooltip"
+            onClick={() => setReloadKey((n) => n + 1)}
+            title={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+            data-tooltip={`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+            data-tooltip-placement="bottom"
+            aria-label={`${t('fileViewer.reloadAria')} ${t('fileViewer.preview')}`}
+          >
             <Icon name="reload" size={14} />
           </button>
         </div>
@@ -1734,13 +1738,13 @@ function liveArtifactMetadataPayload(liveArtifact: LiveArtifact): unknown {
     },
     document: liveArtifact.document
       ? {
-          format: liveArtifact.document.format,
-          templatePath: liveArtifact.document.templatePath,
-          generatedPreviewPath: liveArtifact.document.generatedPreviewPath,
-          dataPath: liveArtifact.document.dataPath,
-          dataSchemaJson: liveArtifact.document.dataSchemaJson,
-          sourceJson: liveArtifact.document.sourceJson,
-        }
+        format: liveArtifact.document.format,
+        templatePath: liveArtifact.document.templatePath,
+        generatedPreviewPath: liveArtifact.document.generatedPreviewPath,
+        dataPath: liveArtifact.document.dataPath,
+        dataSchemaJson: liveArtifact.document.dataSchemaJson,
+        sourceJson: liveArtifact.document.sourceJson,
+      }
       : null,
   };
 }
@@ -1996,10 +2000,10 @@ export function LiveArtifactRefreshHistoryPanel({
   const reversedPersistedEvents = [...persistedEvents].reverse().slice(0, 25);
   const rawDebugPayload = liveArtifact
     ? {
-        refresh: liveArtifactRefreshPayload(liveArtifact),
-        metadata: liveArtifactMetadataPayload(liveArtifact),
-        provenance: liveArtifactProvenancePayload(liveArtifact),
-      }
+      refresh: liveArtifactRefreshPayload(liveArtifact),
+      metadata: liveArtifactMetadataPayload(liveArtifact),
+      provenance: liveArtifactProvenancePayload(liveArtifact),
+    }
     : null;
 
   return (
@@ -3983,7 +3987,7 @@ function pointInPolygon(point: StrokePoint, polygon: StrokePoint[]): boolean {
     const intersects =
       pi.y > point.y !== pj.y > point.y &&
       point.x <
-        ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || Number.EPSILON) + pi.x;
+      ((pj.x - pi.x) * (point.y - pi.y)) / ((pj.y - pi.y) || Number.EPSILON) + pi.x;
     if (intersects) inside = !inside;
   }
   return inside;
@@ -4427,6 +4431,7 @@ function HtmlViewer({
   shareRequest,
   slideNavRequest,
   devServerUrl,
+  devServerReady,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -4448,6 +4453,7 @@ function HtmlViewer({
   shareRequest?: { nonce: number } | null;
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
   devServerUrl?: string;
+  devServerReady?: boolean;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -4803,7 +4809,7 @@ function HtmlViewer({
           canvasLeft: snapshot.canvasLeft,
           canvasTop: snapshot.canvasTop,
         }, '*');
-      } catch {}
+      } catch { }
     };
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -5406,7 +5412,7 @@ function HtmlViewer({
     wasUrlLoadPreviewRef.current = false;
     activateSrcDocTransport();
   }, [activateSrcDocTransport, useUrlLoadPreview]);
-  
+
   useEffect(() => {
     restorePreviewScrollPosition();
   }, [boardMode, drawOverlayOpen, manualEditMode, srcDoc, restorePreviewScrollPosition]);
@@ -5592,9 +5598,9 @@ function HtmlViewer({
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as
         | {
-            type?: string;
-            targets?: Array<Partial<PreviewCommentSnapshot>>;
-          }
+          type?: string;
+          targets?: Array<Partial<PreviewCommentSnapshot>>;
+        }
         | null;
       if (data?.type !== 'od:comment-targets' || !Array.isArray(data.targets)) return;
       const next = new Map<string, PreviewCommentSnapshot>();
@@ -5723,9 +5729,9 @@ function HtmlViewer({
       },
       hoverPoint: data.hoverPoint
         ? {
-            x: clampBridgeCoordinate(data.hoverPoint.x),
-            y: clampBridgeCoordinate(data.hoverPoint.y),
-          }
+          x: clampBridgeCoordinate(data.hoverPoint.x),
+          y: clampBridgeCoordinate(data.hoverPoint.y),
+        }
         : undefined,
       htmlHint: String(data.htmlHint || ''),
       style: normalizeAnnotationStyle(data.style),
@@ -6303,23 +6309,23 @@ function HtmlViewer({
       if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as
         | {
-            type?: string;
-            elementId?: string;
-            selector?: string;
-            label?: string;
-            text?: string;
-            style?: InspectStyleSnapshot;
-            clickedDescendant?: Partial<InspectClickedDescendant>;
-          }
+          type?: string;
+          elementId?: string;
+          selector?: string;
+          label?: string;
+          text?: string;
+          style?: InspectStyleSnapshot;
+          clickedDescendant?: Partial<InspectClickedDescendant>;
+        }
         | null;
       if (!data || data.type !== 'od:comment-target') return;
       if (!data.elementId || !data.selector) return;
       const clickedDescendant =
         data.clickedDescendant && typeof data.clickedDescendant === 'object'
           ? {
-              label: String(data.clickedDescendant.label || ''),
-              text: String(data.clickedDescendant.text || ''),
-            }
+            label: String(data.clickedDescendant.label || ''),
+            text: String(data.clickedDescendant.text || ''),
+          }
           : null;
       setActiveInspectTarget({
         elementId: String(data.elementId),
@@ -7129,15 +7135,15 @@ function HtmlViewer({
     const target: PreviewCommentTarget = activeCommentTarget
       ? targetFromSnapshot(activeCommentTarget)
       : {
-          filePath: file.name,
-          elementId: `file-comment-${idSeed}-${Math.floor(Math.random() * 1e6).toString(36)}`,
-          selector: 'html',
-          label: file.name,
-          text: '',
-          position: { x: 0, y: 0, width: 0, height: 0 },
-          htmlHint: '',
-          selectionKind: 'element',
-        };
+        filePath: file.name,
+        elementId: `file-comment-${idSeed}-${Math.floor(Math.random() * 1e6).toString(36)}`,
+        selector: 'html',
+        label: file.name,
+        text: '',
+        position: { x: 0, y: 0, width: 0, height: 0 },
+        htmlHint: '',
+        selectionKind: 'element',
+      };
     setSendingBoardBatch(true);
     try {
       const saved = await onSavePreviewComment(target, cleanNote, false);
@@ -7310,13 +7316,13 @@ function HtmlViewer({
         result === 'copied'
           ? { message: t('fileViewer.screenshotCopied'), tone: 'success' }
           : {
-              message: t(
-                result === 'denied'
-                  ? 'fileViewer.screenshotClipboardDenied'
-                  : 'fileViewer.screenshotCaptureFailed',
-              ),
-              tone: 'error',
-            },
+            message: t(
+              result === 'denied'
+                ? 'fileViewer.screenshotClipboardDenied'
+                : 'fileViewer.screenshotCaptureFailed',
+            ),
+            tone: 'error',
+          },
       );
     } catch (err) {
       console.warn('[handleCopyScreenshot] failed:', err);
@@ -7473,46 +7479,46 @@ function HtmlViewer({
       : '';
   const deployResultCards: DeployResultCard[] = activeCloudflarePages
     ? (() => {
-        const cards: DeployResultCard[] = [];
-        const pagesDevUrl = activeCloudflarePages.pagesDev?.url || activeDeployedUrl;
-        if (pagesDevUrl) {
-          cards.push({
-            id: 'pages-dev',
-            label: t('fileViewer.cloudflarePagesDevLinkLabel'),
-            url: pagesDevUrl,
-            status: activeCloudflarePages.pagesDev?.status || activeDeployment?.status || 'link-delayed',
-            message: activeCloudflarePages.pagesDev?.statusMessage,
-          });
-        }
-        if (activeCloudflareCustomDomain?.url) {
-          cards.push({
-            id: 'custom-domain',
-            label: t('fileViewer.cloudflareCustomDomainLinkLabel'),
-            url: activeCloudflareCustomDomain.url,
-            status: activeCloudflareCustomDomain.status,
-            message:
-              activeCloudflareCustomDomain.errorMessage ||
-              activeCloudflareCustomDomain.statusMessage,
-          });
-        }
-        return cards;
-      })()
+      const cards: DeployResultCard[] = [];
+      const pagesDevUrl = activeCloudflarePages.pagesDev?.url || activeDeployedUrl;
+      if (pagesDevUrl) {
+        cards.push({
+          id: 'pages-dev',
+          label: t('fileViewer.cloudflarePagesDevLinkLabel'),
+          url: pagesDevUrl,
+          status: activeCloudflarePages.pagesDev?.status || activeDeployment?.status || 'link-delayed',
+          message: activeCloudflarePages.pagesDev?.statusMessage,
+        });
+      }
+      if (activeCloudflareCustomDomain?.url) {
+        cards.push({
+          id: 'custom-domain',
+          label: t('fileViewer.cloudflareCustomDomainLinkLabel'),
+          url: activeCloudflareCustomDomain.url,
+          status: activeCloudflareCustomDomain.status,
+          message:
+            activeCloudflareCustomDomain.errorMessage ||
+            activeCloudflareCustomDomain.statusMessage,
+        });
+      }
+      return cards;
+    })()
     : activeDeployedUrl
       ? [{
-          id: 'default',
-          label: activeDeploymentProtected
-            ? t('fileViewer.deployLinkProtectedLabel')
-            : activeDeploymentDelayed
-              ? t('fileViewer.deployLinkPreparingLabel')
-              : t('fileViewer.deployResultLabel'),
-          url: activeDeployedUrl,
-          status: activeDeployment?.status || 'ready',
-          message: activeDeploymentProtected
-            ? t('fileViewer.deployLinkProtected')
-            : activeDeploymentDelayed
-              ? t('fileViewer.deployLinkDelayed')
-              : activeDeployment?.statusMessage,
-        }]
+        id: 'default',
+        label: activeDeploymentProtected
+          ? t('fileViewer.deployLinkProtectedLabel')
+          : activeDeploymentDelayed
+            ? t('fileViewer.deployLinkPreparingLabel')
+            : t('fileViewer.deployResultLabel'),
+        url: activeDeployedUrl,
+        status: activeDeployment?.status || 'ready',
+        message: activeDeploymentProtected
+          ? t('fileViewer.deployLinkProtected')
+          : activeDeploymentDelayed
+            ? t('fileViewer.deployLinkDelayed')
+            : activeDeployment?.statusMessage,
+      }]
       : [];
   const deployActionLabelFor = (providerId: WebDeployProviderId) => {
     const option = getDeployProviderOption(providerId);
@@ -7533,8 +7539,8 @@ function HtmlViewer({
     shareableDeploymentUrl
       ? null
       : deployedEntries.find((item) => deployResultState(item.status) === 'protected' && !publicShareUrlForDeployment(item)) ??
-        deployedEntries.find((item) => !publicShareUrlForDeployment(item)) ??
-        null;
+      deployedEntries.find((item) => !publicShareUrlForDeployment(item)) ??
+      null;
   const socialShareBlockedState = socialShareBlockedDeployment
     ? deployResultState(socialShareBlockedDeployment.status)
     : null;
@@ -7602,7 +7608,7 @@ function HtmlViewer({
       : socialShareBlockedState === 'protected'
         ? t('fileViewer.deployLinkProtectedLabel')
         : socialShareBlockedState === 'delayed'
-        ? t('fileViewer.deployLinkPreparingLabel')
+          ? t('fileViewer.deployLinkPreparingLabel')
           : t('socialShare.deployFirst');
   const deployActionIconFor = (providerId: WebDeployProviderId) => {
     if (providerId === 'cloudflare-pages') return 'pages-line';
@@ -7628,10 +7634,10 @@ function HtmlViewer({
     streaming
       ? t('fileViewer.shareAfterGenerationComplete')
       : latestShareState === 'delayed'
-      ? t('fileViewer.deployLinkDelayed')
-      : latestShareState === 'protected'
-        ? t('fileViewer.deployLinkProtected')
-        : '';
+        ? t('fileViewer.deployLinkDelayed')
+        : latestShareState === 'protected'
+          ? t('fileViewer.deployLinkProtected')
+          : '';
   const shareUnavailableHint = streaming
     ? t('fileViewer.shareAfterGenerationComplete')
     : t('fileViewer.shareLinkRequiresDeploy');
@@ -7718,13 +7724,13 @@ function HtmlViewer({
       floatingClassName={manualEditPageCardActive ? 'manual-edit-page-card' : undefined}
       floatingStyle={selectedManualEditTarget
         ? {
-            ...manualEditFloatingPanelStyle(
-              selectedManualEditTarget,
-              overlayPreviewScale,
-              previewBodySize,
-            ),
-            ...(manualEditPanelPosition ?? {}),
-          }
+          ...manualEditFloatingPanelStyle(
+            selectedManualEditTarget,
+            overlayPreviewScale,
+            previewBodySize,
+          ),
+          ...(manualEditPanelPosition ?? {}),
+        }
         : { top: 12, right: 12, width: 320 }}
       onFloatingPositionChange={selectedManualEditTarget ? setManualEditPanelPosition : undefined}
       onPickImage={async (pickedFile) => {
@@ -7741,8 +7747,8 @@ function HtmlViewer({
   ) : null;
   const manualEditHoverAffordance =
     manualEditMode &&
-    manualEditHoverTarget &&
-    manualEditHoverTarget.id !== selectedManualEditTarget?.id ? (
+      manualEditHoverTarget &&
+      manualEditHoverTarget.id !== selectedManualEditTarget?.id ? (
       <button
         type="button"
         className="manual-edit-hover-action"
@@ -7827,34 +7833,34 @@ function HtmlViewer({
     boardPreviewIndex !== null ? boardImagePreviews[boardPreviewIndex] ?? null : null;
   const boardImagePreviewModal = boardPreviewImage
     ? createPortal(
-        <div
-          className="staged-preview-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={boardPreviewImage.file.name}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setBoardPreviewIndex(null);
-          }}
-        >
-          <div className="staged-preview-card">
-            <div className="staged-preview-head">
-              <span title={boardPreviewImage.file.name}>{boardPreviewImage.file.name}</span>
-              <button
-                type="button"
-                className="icon-only od-tooltip"
-                onClick={() => setBoardPreviewIndex(null)}
-                aria-label={t('common.close')}
-                title={t('common.close')}
-                data-tooltip={t('common.close')}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-            <img src={boardPreviewImage.url} alt={boardPreviewImage.file.name} />
+      <div
+        className="staged-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={boardPreviewImage.file.name}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) setBoardPreviewIndex(null);
+        }}
+      >
+        <div className="staged-preview-card">
+          <div className="staged-preview-head">
+            <span title={boardPreviewImage.file.name}>{boardPreviewImage.file.name}</span>
+            <button
+              type="button"
+              className="icon-only od-tooltip"
+              onClick={() => setBoardPreviewIndex(null)}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              data-tooltip={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
           </div>
-        </div>,
-        document.body,
-      )
+          <img src={boardPreviewImage.url} alt={boardPreviewImage.file.name} />
+        </div>
+      </div>,
+      document.body,
+    )
     : null;
   const commentSidePanel = commentPanelOpen ? (
     <CommentSideDock
@@ -7951,26 +7957,28 @@ function HtmlViewer({
           >
             <Icon name="reload" size={14} />
           </button>
-          <div className="viewer-tabs" role="tablist" aria-label="View mode">
-            {([
-              ['preview', t('fileViewer.preview')],
-              ['source', t('fileViewer.source')],
-            ] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                className={`viewer-tab ${mode === id ? 'active' : ''}`}
-                aria-selected={mode === id}
-                onClick={() => {
-                  fireArtifactToolbarClick(id);
-                  selectMode(id);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {!devServerUrl ? (
+            <div className="viewer-tabs" role="tablist" aria-label="View mode">
+              {([
+                ['preview', t('fileViewer.preview')],
+                ['source', t('fileViewer.source')],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  className={`viewer-tab ${mode === id ? 'active' : ''}`}
+                  aria-selected={mode === id}
+                  onClick={() => {
+                    fireArtifactToolbarClick(id);
+                    selectMode(id);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {showPreviewToolbarControls ? (
             <>
               <span className="viewer-divider" aria-hidden />
@@ -8143,326 +8151,335 @@ function HtmlViewer({
       {((filePrimaryActions: ReactNode) => (
         chromeActionsHost ? createPortal(filePrimaryActions, chromeActionsHost) : filePrimaryActions
       ))(<>
-          {showPresent ? (
-            <div className="present-wrap chrome-present-wrap">
-              <button
-                className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
-                aria-haspopup="menu"
-                aria-expanded={presentMenuOpen}
-                aria-label={t('fileViewer.present')}
-                data-tooltip={t('fileViewer.present')}
-                data-tooltip-placement="bottom"
-                title={t('fileViewer.present')}
-                onClick={() => {
-                  fireArtifactHeaderClick('present_dropdown');
-                  setPresentMenuOpen((v) => !v);
-                }}
-              >
-                <RemixIcon name="slideshow-3-line" size={15} />
-              </button>
-              {presentMenuOpen ? (
-                <div className="present-menu" role="menu">
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
-                    <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentInTab')}
-                  </button>
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
-                    <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentFullscreen')}
-                  </button>
-                  <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
-                    <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
-                    {t('fileViewer.presentNewTab')}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {canShare || canDownload ? (
-            <div className="chrome-file-action-menus" ref={shareRef}>
-              {canShare ? (
-                <div className="share-menu chrome-share-menu">
-                  <button
-                    type="button"
-                    className="chrome-action chrome-action-secondary chrome-action-with-label"
-                    aria-haspopup="menu"
-                    aria-expanded={deployMenuOpen}
-                    aria-label={shareMenuLabel}
-                    onClick={openDeployMenu}
-                  >
-                    <RemixIcon name="share-forward-line" size={15} />
-                    <span>{shareMenuLabel}</span>
-                  </button>
-                  {deployMenuOpen ? (
-                    <div className="share-menu-popover" role="menu">
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuShareLink')}
-                      </div>
-                      {sharePageUrl ? (
-                        <>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            disabled={!canCopyShareLink}
-                            title={!canCopyShareLink ? shareUnavailableHint : shareLinkStatusHint || undefined}
-                            onClick={() => {
-                              if (!canCopyShareLink || !sharePageUrl) return;
-                              fireShareExport('share_link', async () => {
-                                const ok = await copyShareLink(sharePageUrl);
-                                if (!ok) throw new Error('copy_share_link_failed');
-                              });
-                            }}
-                          >
-                            <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                            <span className="share-menu-text">
-                              <span>{copyShareLinkLabel}</span>
-                              {shareLinkStatusHint ? (
-                                <small>{shareLinkStatusHint}</small>
-                              ) : null}
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            disabled={!canOpenSharePage}
-                            title={!canOpenSharePage ? shareLinkStatusHint || shareUnavailableHint : shareLinkStatusHint || undefined}
-                            onClick={() => {
-                              if (!canOpenSharePage || !sharePageUrl) return;
-                              setDeployMenuOpen(false);
-                              fireShareExport('share_page', () => {
-                                window.open(sharePageUrl, '_blank', 'noopener');
-                              });
-                            }}
-                          >
-                            <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
-                            <span className="share-menu-text">
-                              <span>{t('fileViewer.openSharePage')}</span>
-                              {shareLinkStatusHint ? (
-                                <small>{shareLinkStatusHint}</small>
-                              ) : null}
-                            </span>
-                          </button>
-                        </>
-                      ) : (
+        {showPresent ? (
+          <div className="present-wrap chrome-present-wrap">
+            <button
+              className="chrome-action chrome-action-secondary chrome-action-icon present-trigger od-tooltip"
+              aria-haspopup="menu"
+              aria-expanded={presentMenuOpen}
+              aria-label={t('fileViewer.present')}
+              data-tooltip={t('fileViewer.present')}
+              data-tooltip-placement="bottom"
+              title={t('fileViewer.present')}
+              onClick={() => {
+                fireArtifactHeaderClick('present_dropdown');
+                setPresentMenuOpen((v) => !v);
+              }}
+            >
+              <RemixIcon name="slideshow-3-line" size={15} />
+            </button>
+            {presentMenuOpen ? (
+              <div className="present-menu" role="menu">
+                <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
+                  <span className="present-icon"><RemixIcon name="eye-line" size={14} /></span>{' '}
+                  {t('fileViewer.presentInTab')}
+                </button>
+                <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
+                  <span className="present-icon"><RemixIcon name="play-line" size={14} /></span>{' '}
+                  {t('fileViewer.presentFullscreen')}
+                </button>
+                <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
+                  <span className="present-icon"><RemixIcon name="share-forward-line" size={14} /></span>{' '}
+                  {t('fileViewer.presentNewTab')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {canShare || canDownload ? (
+          <div className="chrome-file-action-menus" ref={shareRef}>
+            {canShare ? (
+              <div className="share-menu chrome-share-menu">
+                <button
+                  type="button"
+                  className="chrome-action chrome-action-secondary chrome-action-with-label"
+                  aria-haspopup="menu"
+                  aria-expanded={deployMenuOpen}
+                  aria-label={shareMenuLabel}
+                  onClick={openDeployMenu}
+                >
+                  <RemixIcon name="share-forward-line" size={15} />
+                  <span>{shareMenuLabel}</span>
+                </button>
+                {deployMenuOpen ? (
+                  <div className="share-menu-popover" role="menu">
+                    <div className="share-menu-section-label" role="presentation">
+                      {t('fileViewer.shareMenuShareLink')}
+                    </div>
+                    {sharePageUrl ? (
+                      <>
                         <button
-                          type="button"
-                          className="share-menu-item share-menu-guide"
-                          role="menuitem"
-                          title={shareUnavailableHint}
-                          onClick={() => {
-                            setShareGuideToast(shareUnavailableHint);
-                          }}
-                        >
-                          <span className="share-menu-icon"><RemixIcon name="link" size={15} /></span>
-                          <span className="share-menu-text">
-                            <span>
-                              {streaming
-                                ? t('fileViewer.shareAfterGenerationComplete')
-                                : t('fileViewer.shareLinkPublishGuide')}
-                            </span>
-                          </span>
-                        </button>
-                      )}
-                      <div className="share-menu-divider" />
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuPublishOnline')}
-                      </div>
-                      {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
                           type="button"
                           className="share-menu-item"
                           role="menuitem"
+                          disabled={!canCopyShareLink}
+                          title={!canCopyShareLink ? shareUnavailableHint : shareLinkStatusHint || undefined}
                           onClick={() => {
-                            const format =
-                              option.id === 'cloudflare-pages'
-                                ? 'cloudflare_pages'
-                                : option.id === 'vercel-self'
-                                  ? 'vercel'
-                                  : 'vercel';
-                            fireShareExport(format, () => openDeployModal(option.id));
+                            if (!canCopyShareLink || !sharePageUrl) return;
+                            fireShareExport('share_link', async () => {
+                              const ok = await copyShareLink(sharePageUrl);
+                              if (!ok) throw new Error('copy_share_link_failed');
+                            });
                           }}
                         >
-                          <span className="share-menu-icon">
-                            <RemixIcon name={deployActionIconFor(option.id)} size={15} />
+                          <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
+                          <span className="share-menu-text">
+                            <span>{copyShareLinkLabel}</span>
+                            {shareLinkStatusHint ? (
+                              <small>{shareLinkStatusHint}</small>
+                            ) : null}
                           </span>
-                          <span>{deployActionLabelFor(option.id)}</span>
                         </button>
-                      ))}
-                      <div className="share-menu-divider" />
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('socialShare.projectSection')}
-                      </div>
+                        <button
+                          type="button"
+                          className="share-menu-item"
+                          role="menuitem"
+                          disabled={!canOpenSharePage}
+                          title={!canOpenSharePage ? shareLinkStatusHint || shareUnavailableHint : shareLinkStatusHint || undefined}
+                          onClick={() => {
+                            if (!canOpenSharePage || !sharePageUrl) return;
+                            setDeployMenuOpen(false);
+                            fireShareExport('share_page', () => {
+                              window.open(sharePageUrl, '_blank', 'noopener');
+                            });
+                          }}
+                        >
+                          <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
+                          <span className="share-menu-text">
+                            <span>{t('fileViewer.openSharePage')}</span>
+                            {shareLinkStatusHint ? (
+                              <small>{shareLinkStatusHint}</small>
+                            ) : null}
+                          </span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="share-menu-item share-menu-guide"
+                        role="menuitem"
+                        title={shareUnavailableHint}
+                        onClick={() => {
+                          setShareGuideToast(shareUnavailableHint);
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="link" size={15} /></span>
+                        <span className="share-menu-text">
+                          <span>
+                            {streaming
+                              ? t('fileViewer.shareAfterGenerationComplete')
+                              : t('fileViewer.shareLinkPublishGuide')}
+                          </span>
+                        </span>
+                      </button>
+                    )}
+                    <div className="share-menu-divider" />
+                    <div className="share-menu-section-label" role="presentation">
+                      {t('fileViewer.shareMenuPublishOnline')}
+                    </div>
+                    {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          const format =
+                            option.id === 'cloudflare-pages'
+                              ? 'cloudflare_pages'
+                              : option.id === 'vercel-self'
+                                ? 'vercel'
+                                : 'vercel';
+                          fireShareExport(format, () => openDeployModal(option.id));
+                        }}
+                      >
+                        <span className="share-menu-icon">
+                          <RemixIcon name={deployActionIconFor(option.id)} size={15} />
+                        </span>
+                        <span>{deployActionLabelFor(option.id)}</span>
+                      </button>
+                    ))}
+                    <div className="share-menu-divider" />
+                    <div className="share-menu-section-label" role="presentation">
+                      {t('socialShare.projectSection')}
+                    </div>
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDeployMenuOpen(false);
+                        fireShareExport('vercel', () => openSocialShareFlow());
+                      }}
+                    >
+                      <span className="share-menu-icon">
+                        <RemixIcon
+                          name={activeProjectSocialShare ? 'share-forward-line' : 'upload-cloud-line'}
+                          size={15}
+                        />
+                      </span>
+                      <span>{socialShareMenuLabel}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {canDownload ? (
+              <div className="share-menu chrome-share-menu">
+                <button
+                  type="button"
+                  className={
+                    'chrome-action chrome-action-primary chrome-action-export' +
+                    (exportReadyNudge ? ' export-ready-nudge' : '')
+                  }
+                  aria-haspopup="menu"
+                  aria-expanded={downloadMenuOpen}
+                  onClick={openDownloadMenu}
+                >
+                  <RemixIcon name="download-line" size={15} />
+                  <span>{t('fileViewer.download')}</span>
+                </button>
+                {downloadMenuOpen ? (
+                  <div className="share-menu-popover" role="menu">
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('pdf', () => exportProjectAsPdf({
+                          deck: effectiveDeck,
+                          fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
+                          filePath: file.name,
+                          projectId,
+                          title: exportTitle,
+                        }));
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                      <span>{t('fileViewer.exportPdf')}</span>
+                    </button>
+                    {showPptxExport ? (
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        disabled={!canPptx}
+                        title={
+                          onExportAsPptx
+                            ? streaming
+                              ? t('fileViewer.exportPptxBusy')
+                              : t('fileViewer.exportPptxHint')
+                            : t('fileViewer.exportPptxNa')
+                        }
+                        onClick={() => {
+                          setDownloadMenuOpen(false);
+                          fireShareExport('pptx', () => {
+                            if (onExportAsPptx) onExportAsPptx(file.name);
+                          });
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
+                        <span>{t('fileViewer.exportPptx')}</span>
+                      </button>
+                    ) : null}
+                    {showImageExport ? (
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        onClick={openImageExportModal}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
+                        <span>{t('fileViewer.exportImage')}</span>
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('zip', () => exportProjectAsZip({
+                          projectId,
+                          filePath: file.name,
+                          fallbackHtml: source ?? '',
+                          fallbackTitle: exportTitle,
+                        }));
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
+                      <span>{t('fileViewer.exportZip')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="share-menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setDownloadMenuOpen(false);
+                        fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
+                      }}
+                    >
+                      <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
+                      <span>{t('fileViewer.exportHtml')}</span>
+                    </button>
+                    {showMarkdownExport ? (
                       <button
                         type="button"
                         className="share-menu-item"
                         role="menuitem"
                         onClick={() => {
-                          setDeployMenuOpen(false);
-                          fireShareExport('vercel', () => openSocialShareFlow());
+                          setDownloadMenuOpen(false);
+                          fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
                         }}
                       >
-                        <span className="share-menu-icon">
-                          <RemixIcon
-                            name={activeProjectSocialShare ? 'share-forward-line' : 'upload-cloud-line'}
-                            size={15}
-                          />
-                        </span>
-                        <span>{socialShareMenuLabel}</span>
+                        <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
+                        <span>{t('fileViewer.exportMd')}</span>
                       </button>
+                    ) : null}
+                    <div className="share-menu-divider" />
+                    <div className="share-menu-section-label" role="presentation">
+                      {t('fileViewer.shareMenuSave')}
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {canDownload ? (
-                <div className="share-menu chrome-share-menu">
-                  <button
-                    type="button"
-                    className={
-                      'chrome-action chrome-action-primary chrome-action-export' +
-                      (exportReadyNudge ? ' export-ready-nudge' : '')
-                    }
-                    aria-haspopup="menu"
-                    aria-expanded={downloadMenuOpen}
-                    onClick={openDownloadMenu}
-                  >
-                    <RemixIcon name="download-line" size={15} />
-                    <span>{t('fileViewer.download')}</span>
-                  </button>
-                  {downloadMenuOpen ? (
-                    <div className="share-menu-popover" role="menu">
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setDownloadMenuOpen(false);
-                      fireShareExport('pdf', () => exportProjectAsPdf({
-                        deck: effectiveDeck,
-                        fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: effectiveDeck }),
-                        filePath: file.name,
-                        projectId,
-                        title: exportTitle,
-                      }));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                    <span>{t('fileViewer.exportPdf')}</span>
-                  </button>
-                  {showPptxExport ? (
                     <button
                       type="button"
                       className="share-menu-item"
                       role="menuitem"
-                      disabled={!canPptx}
-                      title={
-                        onExportAsPptx
-                          ? streaming
-                            ? t('fileViewer.exportPptxBusy')
-                            : t('fileViewer.exportPptxHint')
-                          : t('fileViewer.exportPptxNa')
-                      }
+                      disabled={savingTemplate}
                       onClick={() => {
-                        setDownloadMenuOpen(false);
-                        fireShareExport('pptx', () => {
-                          if (onExportAsPptx) onExportAsPptx(file.name);
+                        fireShareExport('template', () => {
+                          openSaveAsTemplateModal();
                         });
                       }}
                     >
-                      <span className="share-menu-icon"><RemixIcon name="file-ppt-line" size={15} /></span>
-                      <span>{t('fileViewer.exportPptx')}</span>
+                      <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
+                      <span>
+                        {savingTemplate
+                          ? t('fileViewer.savingTemplate')
+                          : templateNote
+                            ? templateNote
+                            : t('fileViewer.saveAsTemplate')}
+                      </span>
                     </button>
-                  ) : null}
-                  {showImageExport ? (
-                    <button
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={openImageExportModal}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
-                      <span>{t('fileViewer.exportImage')}</span>
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setDownloadMenuOpen(false);
-                      fireShareExport('zip', () => exportProjectAsZip({
-                        projectId,
-                        filePath: file.name,
-                        fallbackHtml: source ?? '',
-                        fallbackTitle: exportTitle,
-                      }));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
-                    <span>{t('fileViewer.exportZip')}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      setDownloadMenuOpen(false);
-                      fireShareExport('html', () => exportAsHtml(source ?? '', exportTitle));
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
-                    <span>{t('fileViewer.exportHtml')}</span>
-                  </button>
-                  {showMarkdownExport ? (
-                    <button
-                      type="button"
-                      className="share-menu-item"
-                      role="menuitem"
-                      onClick={() => {
-                        setDownloadMenuOpen(false);
-                        fireShareExport('markdown', () => exportAsMd(source ?? '', exportTitle));
-                      }}
-                    >
-                      <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
-                      <span>{t('fileViewer.exportMd')}</span>
-                    </button>
-                  ) : null}
-                  <div className="share-menu-divider" />
-                  <div className="share-menu-section-label" role="presentation">
-                    {t('fileViewer.shareMenuSave')}
                   </div>
-                  <button
-                    type="button"
-                    className="share-menu-item"
-                    role="menuitem"
-                    disabled={savingTemplate}
-                    onClick={() => {
-                      fireShareExport('template', () => {
-                        openSaveAsTemplateModal();
-                      });
-                    }}
-                  >
-                    <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                    <span>
-                      {savingTemplate
-                        ? t('fileViewer.savingTemplate')
-                        : templateNote
-                          ? templateNote
-                          : t('fileViewer.saveAsTemplate')}
-                    </span>
-                  </button>
-                </div>
                 ) : null}
               </div>
-              ) : null}
-            </div>
-          ) : null}
-        </>)}
+            ) : null}
+          </div>
+        ) : null}
+      </>)}
       <div className="viewer-body" ref={previewBodyRef}>
-        {source === null ? (
-          <div className="viewer-empty">{t('fileViewer.loading')}</div>
+        {source === null || devServerReady === false ? (
+          <div className="viewer-empty">
+            {devServerReady === false ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+                <Spinner size={24} />
+                <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Waiting for dev server to boot...</span>
+              </div>
+            ) : (
+              t('fileViewer.loading')
+            )}
+          </div>
         ) : mode === 'preview' ? (
           <div
             className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
@@ -8645,16 +8662,16 @@ function HtmlViewer({
                   preview pane's transform + overflow:hidden. */}
               {exportToast
                 ? createPortal(
-                    <Toast
-                      message={exportToast.message}
-                      tone={exportToast.tone}
-                      role={exportToast.tone === 'error' ? 'alert' : 'status'}
-                      ttlMs={exportToast.tone === 'loading' ? 8000 : 2200}
-                      placement="top"
-                      onDismiss={() => setExportToast(null)}
-                    />,
-                    document.body,
-                  )
+                  <Toast
+                    message={exportToast.message}
+                    tone={exportToast.tone}
+                    role={exportToast.tone === 'error' ? 'alert' : 'status'}
+                    ttlMs={exportToast.tone === 'loading' ? 8000 : 2200}
+                    placement="top"
+                    onDismiss={() => setExportToast(null)}
+                  />,
+                  document.body,
+                )
                 : null}
               {commentSavedToast ? (
                 <div className="comment-toast-anchor">
@@ -9023,239 +9040,239 @@ function HtmlViewer({
                     </div>
                   ) : null}
                 </div>
-              <label className="deploy-provider-field">
-                <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
-                <select
-                  value={deployProviderId}
-                  onChange={(e) => {
-                    void changeDeployProvider(e.target.value as WebDeployProviderId);
-                  }}
-                >
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {t(option.labelKey)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="field-label-row deploy-token-label-row">
-                <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
-                <a
-                  href={deployProvider.tokenLink}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  {t(deployProvider.tokenLinkKey)}
-                </a>
-              </div>
-              <div className="deploy-token-input-row">
-                <input
-                  ref={deployTokenInputRef}
-                  id="deploy-token"
-                  type="password"
-                  value={deployToken}
-                  placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
-                  onChange={(e) => setDeployToken(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="ghost-link button-like"
-                  disabled={savingDeployConfig}
-                  onClick={() => {
-                    void saveDeployConfig();
-                  }}
-                >
-                  {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
-                </button>
-              </div>
-              {deployConfig?.configured || deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <div className="deploy-token-hints">
-                  {deployConfig?.configured ? (
-                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
-                  ) : null}
-                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
+                <label className="deploy-provider-field">
+                  <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
+                  <select
+                    value={deployProviderId}
+                    onChange={(e) => {
+                      void changeDeployProvider(e.target.value as WebDeployProviderId);
+                    }}
+                  >
+                    {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {t(option.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="field-label-row deploy-token-label-row">
+                  <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
+                  <a
+                    href={deployProvider.tokenLink}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    {t(deployProvider.tokenLinkKey)}
+                  </a>
                 </div>
-              ) : null}
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <>
-                  <div className="deploy-field-grid single-field">
-                    <label>
-                      <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
-                      <input
-                        value={cloudflareAccountId}
-                        onChange={(e) => setCloudflareAccountId(e.target.value)}
-                      />
-                      <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
-                    </label>
+                <div className="deploy-token-input-row">
+                  <input
+                    ref={deployTokenInputRef}
+                    id="deploy-token"
+                    type="password"
+                    value={deployToken}
+                    placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                    onChange={(e) => setDeployToken(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="ghost-link button-like"
+                    disabled={savingDeployConfig}
+                    onClick={() => {
+                      void saveDeployConfig();
+                    }}
+                  >
+                    {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
+                  </button>
+                </div>
+                {deployConfig?.configured || deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                  <div className="deploy-token-hints">
+                    {deployConfig?.configured ? (
+                      <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                    ) : null}
+                    {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                      <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                    ) : null}
                   </div>
-                  <div className="deploy-field-grid cloudflare-domain-grid">
-                    <label>
-                      <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
-                      <input
-                        value={cloudflareDomainPrefix}
-                        placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
-                        onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
-                      />
-                    </label>
-                    <div className="deploy-field-control">
-                      <span className="deploy-field-title-row">
-                        <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
-                          {t('fileViewer.cloudflareZoneLabel')}
-                        </label>
-                        <button
-                          type="button"
-                          className="ghost-link deploy-field-inline-action"
-                          disabled={cloudflareZonesLoading || !deployConfig?.configured}
-                          onClick={() => {
-                            void loadCloudflareZones();
-                          }}
-                        >
-                          <RemixIcon name="refresh-line" size={13} />
-                          {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
-                        </button>
-                      </span>
-                      <select
-                        id="cloudflare-zone-select"
-                        value={cloudflareZoneId}
-                        disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
-                        onChange={(e) => setCloudflareZoneId(e.target.value)}
-                      >
-                        {cloudflareZones.length === 0 ? (
-                          <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
-                        ) : null}
-                        {cloudflareZones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
+                ) : null}
+                {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                  <>
+                    <div className="deploy-field-grid single-field">
+                      <label>
+                        <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
+                        <input
+                          value={cloudflareAccountId}
+                          onChange={(e) => setCloudflareAccountId(e.target.value)}
+                        />
+                        <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
+                      </label>
                     </div>
-                  </div>
-                  {cloudflareZonesError ? (
-                    <p className="deploy-error">{cloudflareZonesError}</p>
-                  ) : cloudflareZonesLoading ? (
-                    <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
-                  ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
-                    <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
-                  ) : null}
-                  {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
-                    <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
-                  ) : cloudflareHostnamePreview ? (
-                    <p className="hint">
-                      {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
-                    </p>
-                  ) : null}
-                </>
-              ) : (
-                <div className="deploy-field-grid">
-                  <label>
-                    <span className="deploy-field-title">{t('fileViewer.vercelTeamId')}</span>
-                    <input
-                      value={teamId}
-                      placeholder={t('fileViewer.optional')}
-                      onChange={(e) => setTeamId(e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span className="deploy-field-title">{t('fileViewer.vercelTeamSlug')}</span>
-                    <input
-                      value={teamSlug}
-                      placeholder={t('fileViewer.optional')}
-                      onChange={(e) => setTeamSlug(e.target.value)}
-                    />
-                  </label>
-                </div>
-              )}
-              {deployError ? <p className="deploy-error">{deployError}</p> : null}
-              {!deployError
-                && deployPhase === 'idle'
-                && deployResultCards.length > 0
-                && deployResultState(activeDeployment?.status) === 'ready' ? (
-                <p className="hint" role="status">
-                  {t('fileViewer.deployLinkReady')} · {t('fileViewer.deployResultLabel')}
-                </p>
-              ) : null}
-              {deployResultCards.length > 0 ? (
-                <div className={`deploy-result-block ${deployResultState(activeDeployment?.status)}`}>
-                  <div className="deploy-result-summary">
-                    <div className="deploy-result-summary-head">
-                      <div className="deploy-result-label">{t('fileViewer.deployResultLabel')}</div>
-                      <div className={`deploy-result-badge ${deployResultState(activeDeployment?.status)}`}>
-                        {statusLabelFor(deployResultState(activeDeployment?.status))}
+                    <div className="deploy-field-grid cloudflare-domain-grid">
+                      <label>
+                        <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                        <input
+                          value={cloudflareDomainPrefix}
+                          placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
+                          onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
+                        />
+                      </label>
+                      <div className="deploy-field-control">
+                        <span className="deploy-field-title-row">
+                          <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
+                            {t('fileViewer.cloudflareZoneLabel')}
+                          </label>
+                          <button
+                            type="button"
+                            className="ghost-link deploy-field-inline-action"
+                            disabled={cloudflareZonesLoading || !deployConfig?.configured}
+                            onClick={() => {
+                              void loadCloudflareZones();
+                            }}
+                          >
+                            <RemixIcon name="refresh-line" size={13} />
+                            {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                          </button>
+                        </span>
+                        <select
+                          id="cloudflare-zone-select"
+                          value={cloudflareZoneId}
+                          disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
+                          onChange={(e) => setCloudflareZoneId(e.target.value)}
+                        >
+                          {cloudflareZones.length === 0 ? (
+                            <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
+                          ) : null}
+                          {cloudflareZones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
-                    {activeDeployment?.statusMessage ? (
-                      <p className="deploy-result-message">{activeDeployment.statusMessage}</p>
+                    {cloudflareZonesError ? (
+                      <p className="deploy-error">{cloudflareZonesError}</p>
+                    ) : cloudflareZonesLoading ? (
+                      <p className="hint">{t('fileViewer.cloudflareZonesLoading')}</p>
+                    ) : deployConfig?.configured && cloudflareZones.length === 0 ? (
+                      <p className="hint">{t('fileViewer.cloudflareZonesEmpty')}</p>
                     ) : null}
-                    <div className="deploy-result-links">
-                      {deployResultCards.map((card) => {
-                        const state = deployResultState(card.status);
-                        const canRetry = state === 'delayed' || state === 'protected';
-                        const isDisabled = state === 'protected' || state === 'failed';
-                        return (
-                          <div key={card.id} className={`deploy-result-link ${state}`}>
-                            <div className="deploy-result-link-main">
-                              <div className="deploy-result-link-head">
-                                <span className="deploy-result-link-label">{card.label}</span>
-                                <span className={`deploy-result-link-state ${state}`}>{statusLabelFor(state)}</span>
+                    {cloudflareDomainPrefix.trim() && !isValidCloudflareDomainPrefixInput(cloudflareDomainPrefix) ? (
+                      <p className="deploy-error">{t('fileViewer.cloudflareDomainPrefixInvalid')}</p>
+                    ) : cloudflareHostnamePreview ? (
+                      <p className="hint">
+                        {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="deploy-field-grid">
+                    <label>
+                      <span className="deploy-field-title">{t('fileViewer.vercelTeamId')}</span>
+                      <input
+                        value={teamId}
+                        placeholder={t('fileViewer.optional')}
+                        onChange={(e) => setTeamId(e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      <span className="deploy-field-title">{t('fileViewer.vercelTeamSlug')}</span>
+                      <input
+                        value={teamSlug}
+                        placeholder={t('fileViewer.optional')}
+                        onChange={(e) => setTeamSlug(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                )}
+                {deployError ? <p className="deploy-error">{deployError}</p> : null}
+                {!deployError
+                  && deployPhase === 'idle'
+                  && deployResultCards.length > 0
+                  && deployResultState(activeDeployment?.status) === 'ready' ? (
+                  <p className="hint" role="status">
+                    {t('fileViewer.deployLinkReady')} · {t('fileViewer.deployResultLabel')}
+                  </p>
+                ) : null}
+                {deployResultCards.length > 0 ? (
+                  <div className={`deploy-result-block ${deployResultState(activeDeployment?.status)}`}>
+                    <div className="deploy-result-summary">
+                      <div className="deploy-result-summary-head">
+                        <div className="deploy-result-label">{t('fileViewer.deployResultLabel')}</div>
+                        <div className={`deploy-result-badge ${deployResultState(activeDeployment?.status)}`}>
+                          {statusLabelFor(deployResultState(activeDeployment?.status))}
+                        </div>
+                      </div>
+                      {activeDeployment?.statusMessage ? (
+                        <p className="deploy-result-message">{activeDeployment.statusMessage}</p>
+                      ) : null}
+                      <div className="deploy-result-links">
+                        {deployResultCards.map((card) => {
+                          const state = deployResultState(card.status);
+                          const canRetry = state === 'delayed' || state === 'protected';
+                          const isDisabled = state === 'protected' || state === 'failed';
+                          return (
+                            <div key={card.id} className={`deploy-result-link ${state}`}>
+                              <div className="deploy-result-link-main">
+                                <div className="deploy-result-link-head">
+                                  <span className="deploy-result-link-label">{card.label}</span>
+                                  <span className={`deploy-result-link-state ${state}`}>{statusLabelFor(state)}</span>
+                                </div>
+                                {card.message ? (
+                                  <p className="deploy-result-link-message">{card.message}</p>
+                                ) : null}
+                                <a
+                                  className="deploy-result-url"
+                                  href={card.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                >
+                                  {card.url}
+                                </a>
                               </div>
-                              {card.message ? (
-                                <p className="deploy-result-link-message">{card.message}</p>
-                              ) : null}
-                              <a
-                                className="deploy-result-url"
-                                href={card.url}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                              >
-                                {card.url}
-                              </a>
-                            </div>
-                            <div className="deploy-result-actions">
-                              {canRetry ? (
+                              <div className="deploy-result-actions">
+                                {canRetry ? (
+                                  <button
+                                    type="button"
+                                    className="viewer-action"
+                                    disabled={deployPhase === 'preparing-link'}
+                                    onClick={() => {
+                                      void retryDeploymentLink();
+                                    }}
+                                  >
+                                    {deployPhase === 'preparing-link'
+                                      ? t('fileViewer.preparingPublicLink')
+                                      : t('fileViewer.retryLink')}
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="viewer-action"
-                                  disabled={deployPhase === 'preparing-link'}
                                   onClick={() => {
-                                    void retryDeploymentLink();
+                                    void copyDeployLink(card.url);
                                   }}
                                 >
-                                  {deployPhase === 'preparing-link'
-                                    ? t('fileViewer.preparingPublicLink')
-                                    : t('fileViewer.retryLink')}
+                                  <Icon name="copy" size={14} />
+                                  <span>{copyDeployLabel(card.url)}</span>
                                 </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="viewer-action"
-                                onClick={() => {
-                                  void copyDeployLink(card.url);
-                                }}
-                              >
-                                <Icon name="copy" size={14} />
-                                <span>{copyDeployLabel(card.url)}</span>
-                              </button>
-                              <a
-                                className={`ghost-link ${isDisabled ? 'disabled' : ''}`}
-                                href={isDisabled ? undefined : card.url}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                                aria-disabled={isDisabled}
-                              >
-                                <Icon name="upload" size={14} />
-                                {t('fileViewer.open')}
-                              </a>
+                                <a
+                                  className={`ghost-link ${isDisabled ? 'disabled' : ''}`}
+                                  href={isDisabled ? undefined : card.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  aria-disabled={isDisabled}
+                                >
+                                  <Icon name="upload" size={14} />
+                                  {t('fileViewer.open')}
+                                </a>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
+                ) : null}
               </div>
             </div>
             <div className="modal-foot">
@@ -9391,11 +9408,11 @@ async function inlineRelativeAssets(
         css == null
           ? null
           : {
-              from: tag,
-              to:
-                `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
-                `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
-            },
+            from: tag,
+            to:
+              `<style data-od-inline-asset="${escapeHtmlAttr(href)}">\n` +
+              `${css.replace(/<\/style/gi, '<\\/style')}\n</style>`,
+          },
       ),
     );
   }

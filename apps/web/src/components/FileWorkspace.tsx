@@ -435,6 +435,15 @@ export function FileWorkspace({
   devServerUrl,
 }: Props) {
   const t = useT();
+  const devPreviewFile = useMemo<ProjectFile>(() => ({
+    name: 'live-preview.html',
+    path: 'live-preview.html',
+    size: 0,
+    mtime: Date.now(),
+    kind: 'code',
+    mime: 'text/html',
+    hasWriteCapability: false,
+  }), []);
   // The chat column only shows a compact Questions banner; the form itself
   // lives here, including after submission when a banner click can reopen the
   // answered preview.
@@ -1543,7 +1552,7 @@ export function FileWorkspace({
       return {
         id: 'workspace:dev-server-preview',
         kind: 'preview',
-        label: 'Dev Preview',
+        label: 'Live Preview',
         tabId: activeTab,
       };
     }
@@ -1692,7 +1701,7 @@ export function FileWorkspace({
       push({
         id: 'workspace:dev-server-preview',
         kind: 'preview',
-        label: 'Dev Preview',
+        label: 'Live Preview',
         tabId: DEV_SERVER_PREVIEW_TAB,
       });
     }
@@ -1964,12 +1973,12 @@ export function FileWorkspace({
               tabIndex={0}
               data-testid="dev-server-preview-tab"
               onClick={() => setPersistedActive(DEV_SERVER_PREVIEW_TAB)}
-              title="Dev Preview"
+              title="Preview"
             >
               <span className="tab-icon" aria-hidden>
                 <Icon name="globe" size={13} />
               </span>
-              <span className="ws-tab-label">Dev Preview</span>
+              <span className="ws-tab-label">Preview</span>
             </button>
           ) : null}
           <button
@@ -2266,39 +2275,24 @@ export function FileWorkspace({
             githubConnected={githubConnected}
           />
         ) : activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl ? (
-          <div className="dev-server-preview" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: 'var(--bg, #0c0d0e)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid var(--border-subtle, #202224)', background: 'var(--chrome-bg, #121315)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted, #888)', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {activeDevServerUrl}
-              </span>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => {
-                  const iframe = document.getElementById('dev-server-preview-iframe') as HTMLIFrameElement | null;
-                  if (iframe) {
-                    iframe.src = activeDevServerUrl!;
-                  }
-                }}
-              >
-                <Icon name="reload" size={12} />
-              </Button>
-            </div>
-            {devServerReady ? (
-              <iframe
-                id="dev-server-preview-iframe"
-                src={activeDevServerUrl}
-                style={{ flex: 1, border: 'none', width: '100%', height: '100%' }}
-                sandbox="allow-scripts allow-downloads allow-same-origin allow-popups"
-                title="Dev Server Preview"
-              />
-            ) : (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
-                <Spinner size={24} />
-                <span style={{ color: 'var(--text-muted, #888)', fontSize: 13 }}>Waiting for dev server to boot...</span>
-              </div>
-            )}
-          </div>
+          <FileViewer
+            projectId={projectId}
+            projectKind={projectKind}
+            file={devPreviewFile}
+            devServerUrl={activeDevServerUrl}
+            devServerReady={devServerReady}
+            liveHtml=""
+            isDeck={false}
+            filesRefreshKey={filesRefreshKey}
+            commentQueueOnSend={commentQueueOnSend}
+            commentSendDisabled={commentSendDisabled}
+            previewComments={previewComments}
+            onSavePreviewComment={onSavePreviewComment}
+            onRemovePreviewComment={onRemovePreviewComment}
+            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+            commentPortalId={commentPortalId}
+            onCommentModeChange={onCommentModeChange}
+          />
         )
           : activeTab === GIT_TAB ? (
             <GitWorkspacePanel
@@ -2478,7 +2472,6 @@ export function FileWorkspace({
               onOpenFileReplacing={openFileReplacing}
               commentPortalId={commentPortalId}
               onCommentModeChange={onCommentModeChange}
-              devServerUrl={activeDevServerUrl}
               shareRequest={
                 shareRequest && shareRequest.name === activeFile.name
                   ? { nonce: shareRequest.nonce }

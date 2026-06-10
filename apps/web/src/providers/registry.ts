@@ -15,9 +15,11 @@ import type {
   OpenDesignGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
-  ReplaceProjectWorkingDirResponse,
   SocialShareRequest,
   SocialShareResponse,
+  GitStatusResponse,
+  GitDiffResponse,
+  ReplaceProjectWorkingDirResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -2254,3 +2256,69 @@ export async function uninstallDesignSystem(
     return { error: 'Network error' };
   }
 }
+
+export async function fetchProjectGitStatus(projectId: string): Promise<GitStatusResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/status`);
+  if (!resp.ok) {
+    throw new Error(`Git status failed (${resp.status})`);
+  }
+  return (await resp.json()) as GitStatusResponse;
+}
+
+export async function fetchProjectGitDiff(projectId: string, file?: string): Promise<GitDiffResponse> {
+  const fileParam = file ? `?file=${encodeURIComponent(file)}` : '';
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/diff${fileParam}`);
+  if (!resp.ok) {
+    throw new Error(`Git diff failed (${resp.status})`);
+  }
+  return (await resp.json()) as GitDiffResponse;
+}
+
+export async function stageProjectGitFiles(projectId: string, files: string[]): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/stage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Git stage failed (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function unstageProjectGitFiles(projectId: string, files: string[]): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/unstage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Git unstage failed (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function restoreProjectGitFiles(projectId: string, files: string[]): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Git restore failed (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function commitProjectGit(projectId: string, message: string): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/commit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Git commit failed (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+

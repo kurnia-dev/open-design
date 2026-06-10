@@ -181,7 +181,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'path', 'dir', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
-  'title', 'against', 'seed-from', 'fork-after', 'mode',
+  'title', 'against', 'seed-from', 'fork-after', 'mode', 'file',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
@@ -4844,6 +4844,8 @@ async function runProject(args) {
   od project handoff <id> --conversation <id> --api-key <key> --model <model>
                     [--base-url <url>] [--max-tokens <n>]
                     Synthesize a resume-conversation handoff prompt.
+  od project git <status|diff|stage|unstage|restore|commit> <id> [options]
+                    Manage git status, changes, diffs, and commits.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -5039,6 +5041,118 @@ Common options:
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
       console.log(`[project] opened ${id} in ${editor} (${data.path ?? ''})`);
       return;
+    }
+    case 'git': {
+      const gitAction = rest.find((a) => !a.startsWith('-'));
+      if (!gitAction) {
+        console.error('Usage:\n  od project git <status|diff|stage|unstage|restore|commit> <projectId> [options]');
+        process.exit(2);
+      }
+      const gitRest = rest.filter((a) => a !== gitAction);
+      const id = gitRest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error(`Usage: od project git ${gitAction} <projectId> [options]`);
+        process.exit(2);
+      }
+      const fileArgs = gitRest.filter((a) => !a.startsWith('-') && a !== id);
+
+      switch (gitAction) {
+        case 'status': {
+          const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/git/status`);
+          if (!resp.ok) return structuredHttpFailure(resp);
+          const data = await resp.json();
+          if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+          console.log(`Branch: ${data.branch}`);
+          if (data.files.length === 0) {
+            console.log('No changes.');
+          } else {
+            console.log('Changes:');
+            for (const f of data.files) {
+              console.log(`  ${f.indexStatus}${f.workingDirStatus}  ${f.path} (${f.status})`);
+            }
+          }
+          return;
+        }
+        case 'diff': {
+          const fileParam = flags.file ? `?file=${encodeURIComponent(flags.file)}` : '';
+          const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/git/diff${fileParam}`);
+          if (!resp.ok) return structuredHttpFailure(resp);
+          const data = await resp.json();
+          if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+          if (data.cachedDiff) {
+            console.log('--- Staged Changes ---');
+            console.log(data.cachedDiff);
+          }
+          if (data.diff) {
+            console.log('--- Unstaged Changes ---');
+            console.log(data.diff);
+          }
+          if (!data.diff && !data.cachedDiff) {
+            console.log('No diff.');
+          }
+          return;
+        }
+        case 'stage': {
+          if (fileArgs.length === 0) {
+            console.error('Usage: od project git stage <projectId> <files...>');
+            process.exit(2);
+          }
+          const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/git/stage`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ files: fileArgs }),
+          });
+          if (!resp.ok) return structuredHttpFailure(resp);
+          console.log(`[git] staged ${fileArgs.length} files`);
+          return;
+        }
+        case 'unstage': {
+          if (fileArgs.length === 0) {
+            console.error('Usage: od project git unstage <projectId> <files...>');
+            process.exit(2);
+          }
+          const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/git/unstage`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ files: fileArgs }),
+          });
+          if (!resp.ok) return structuredHttpFailure(resp);
+          console.log(`[git] unstaged ${fileArgs.length} files`);
+          return;
+        }
+        case 'restore': {
+          if (fileArgs.length === 0) {
+            console.error('Usage: od project git restore <projectId> <files...>');
+            process.exit(2);
+          }
+          const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/git/restore`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ files: fileArgs }),
+          });
+          if (!resp.ok) return structuredHttpFailure(resp);
+          console.log(`[git] restored ${fileArgs.length} files`);
+          return;
+        }
+        case 'commit': {
+          const message = flags.message;
+          if (!message) {
+            console.error('--message "<msg>" is required.');
+            process.exit(2);
+          }
+          const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/git/commit`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ message }),
+          });
+          if (!resp.ok) return structuredHttpFailure(resp);
+          console.log('[git] committed changes');
+          return;
+        }
+        default:
+          console.error(`unknown git action: ${gitAction}`);
+          process.exit(2);
+      }
     }
     default:
       console.error(`unknown subcommand: od project ${sub}`);

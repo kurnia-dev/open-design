@@ -3168,6 +3168,223 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  // --- Git Management Endpoints ---
+
+  app.get('/api/projects/:id/git/status', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      // Ensure it is a git repository
+      try {
+        await execGit(['rev-parse', '--is-inside-work-tree']);
+      } catch (err) {
+        return res.json({ hasChanges: false, branch: 'no-git', files: [] });
+      }
+
+      const [statusOutput, branchOutput] = await Promise.all([
+        execGit(['status', '--porcelain']),
+        execGit(['branch', '--show-current']).catch(() => 'main'),
+      ]);
+
+      const branch = branchOutput.trim() || 'main';
+      const statusLines = statusOutput.split('\n').filter(Boolean);
+      const files = statusLines.map(line => {
+        const indexStatus = line[0] || ' ';
+        const workingDirStatus = line[1] || ' ';
+        let filePath = line.slice(3);
+        if (filePath.startsWith('"') && filePath.endsWith('"')) {
+          filePath = filePath.slice(1, -1);
+        }
+        
+        let status: 'modified' | 'added' | 'deleted' | 'untracked' | 'staged_modified' | 'staged_added' | 'staged_deleted' | 'renamed' | 'unknown' = 'unknown';
+        if (indexStatus === '?' && workingDirStatus === '?') {
+          status = 'untracked';
+        } else if (indexStatus === 'A') {
+          status = 'staged_added';
+        } else if (indexStatus === 'M') {
+          status = 'staged_modified';
+        } else if (indexStatus === 'D') {
+          status = 'staged_deleted';
+        } else if (indexStatus === 'R') {
+          status = 'renamed';
+        } else if (workingDirStatus === 'M') {
+          status = 'modified';
+        } else if (workingDirStatus === 'D') {
+          status = 'deleted';
+        }
+
+        return {
+          path: filePath,
+          workingDirStatus,
+          indexStatus,
+          status,
+        };
+      });
+
+      res.json({
+        hasChanges: files.length > 0,
+        branch,
+        files,
+      });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.get('/api/projects/:id/git/diff', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const targetFile = typeof req.query.file === 'string' ? req.query.file : null;
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else if (stdout) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      const diffArgs = ['diff'];
+      const cachedDiffArgs = ['diff', '--cached'];
+      if (targetFile) {
+        diffArgs.push('--', targetFile);
+        cachedDiffArgs.push('--', targetFile);
+      }
+
+      const [diff, cachedDiff] = await Promise.all([
+        execGit(diffArgs).catch(() => ''),
+        execGit(cachedDiffArgs).catch(() => ''),
+      ]);
+
+      res.json({ diff, cachedDiff });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/stage', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const { files } = req.body || {};
+
+      if (!Array.isArray(files) || files.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'files array is required');
+      }
+
+      const runGit = (args: string[]) => new Promise((resolve, reject) => {
+        const child = spawn('git', args, { cwd: dir, stdio: 'ignore' });
+        child.on('close', (code) => code === 0 ? resolve(undefined) : reject(new Error(`git ${args.join(' ')} failed with code ${code}`)));
+        child.on('error', reject);
+      });
+
+      await runGit(['add', '--', ...files]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/unstage', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const { files } = req.body || {};
+
+      if (!Array.isArray(files) || files.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'files array is required');
+      }
+
+      const runGit = (args: string[]) => new Promise((resolve, reject) => {
+        const child = spawn('git', args, { cwd: dir, stdio: 'ignore' });
+        child.on('close', (code) => code === 0 ? resolve(undefined) : reject(new Error(`git ${args.join(' ')} failed with code ${code}`)));
+        child.on('error', reject);
+      });
+
+      await runGit(['restore', '--staged', '--', ...files]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/restore', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const { files } = req.body || {};
+
+      if (!Array.isArray(files) || files.length === 0) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'files array is required');
+      }
+
+      const runGit = (args: string[]) => new Promise((resolve, reject) => {
+        const child = spawn('git', args, { cwd: dir, stdio: 'ignore' });
+        child.on('close', (code) => code === 0 ? resolve(undefined) : reject(new Error(`git ${args.join(' ')} failed with code ${code}`)));
+        child.on('error', reject);
+      });
+
+      await runGit(['restore', '--', ...files]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/commit', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const { message } = req.body || {};
+
+      if (typeof message !== 'string' || !message.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'commit message is required');
+      }
+
+      const runGit = (args: string[]) => new Promise((resolve, reject) => {
+        const child = spawn('git', args, { cwd: dir, stdio: 'ignore' });
+        child.on('close', (code) => code === 0 ? resolve(undefined) : reject(new Error(`git ${args.join(' ')} failed with code ${code}`)));
+        child.on('error', reject);
+      });
+
+      await runGit(['commit', '-m', message.trim()]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
 }
 
 export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> { }

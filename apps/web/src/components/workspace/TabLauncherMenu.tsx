@@ -366,6 +366,7 @@ function workspaceContextIconName(kind: WorkspaceContextItem['kind']): IconName 
   if (kind === 'terminal') return 'terminal';
   if (kind === 'side-chat') return 'comment';
   if (kind === 'live-artifact') return 'file-code';
+  if (kind === 'git') return 'history';
   return 'file';
 }
 
@@ -385,6 +386,8 @@ function workspaceContextKindLabel(kind: WorkspaceContextItem['kind']): string {
       return 'Side chat';
     case 'live-artifact':
       return 'Live artifact';
+    case 'git':
+      return 'Git';
     case 'file':
     default:
       return 'File';

@@ -89,6 +89,7 @@ import { SideChatTab, type ActiveConversationChatState } from './workspace/SideC
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
+import { GitWorkspacePanel } from './GitWorkspacePanel';
 
 interface Props {
   projectId: string;
@@ -234,6 +235,7 @@ interface SketchState {
 export const DESIGN_FILES_TAB = '__design_files__';
 export const DESIGN_SYSTEM_TAB = '__design_system__';
 export const DEV_SERVER_PREVIEW_TAB = '__dev_server_preview__';
+export const GIT_TAB = '__git__';
 const QUESTIONS_TAB = '__questions__';
 const BROWSER_TAB_PREFIX = '__browser__:';
 // Keep at most this many embedded-browser `<webview>`s mounted at once. Each is
@@ -458,7 +460,7 @@ export function FileWorkspace({
     if (npmInstallStatus === 'completed' && devServerStartedRef.current !== projectId) {
       devServerStartedRef.current = projectId;
       setDevServerReady(false);
-      fetch(`/api/projects/${projectId}/dev-server`, { method: 'POST' }).catch(() => {});
+      fetch(`/api/projects/${projectId}/dev-server`, { method: 'POST' }).catch(() => { });
     }
 
     return () => {
@@ -478,7 +480,7 @@ export function FileWorkspace({
       setDevServerReady(false);
       return;
     }
-    
+
     // If we already know it's ready, we don't need to poll
     if (devServerReady) return;
 
@@ -775,7 +777,7 @@ export function FileWorkspace({
   // back to the last remaining tab. Skip transient activeTab values
   // (DESIGN_FILES_TAB, pending sketches) since those aren't in persistedTabs.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === QUESTIONS_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === QUESTIONS_TAB || activeTab === GIT_TAB) return;
     if (isBrowserTabId(activeTab)) {
       if (!browserTabs.some((tab) => tab.id === activeTab)) {
         setActiveTab(DESIGN_FILES_TAB);
@@ -796,10 +798,10 @@ export function FileWorkspace({
     if (!openRequest) return;
     const name = openRequest.name;
     if (!name) return;
-    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB || name === DEV_SERVER_PREVIEW_TAB) {
+    if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB || name === DEV_SERVER_PREVIEW_TAB || name === GIT_TAB) {
       const nextActive =
         (name === DESIGN_SYSTEM_TAB && !designSystemProject) ||
-        (name === DEV_SERVER_PREVIEW_TAB && !activeDevServerUrl)
+          (name === DEV_SERVER_PREVIEW_TAB && !activeDevServerUrl)
           ? DESIGN_FILES_TAB
           : name;
       onTabsStateChange(workspaceTabsState(persistedTabs, nextActive));
@@ -917,6 +919,10 @@ export function FileWorkspace({
       setPersistedActive(DESIGN_FILES_TAB);
       return;
     }
+    if (tabId === GIT_TAB) {
+      setPersistedActive(GIT_TAB);
+      return;
+    }
     if (isBrowserTabId(tabId)) {
       if (!browserTabs.some((tab) => tab.id === tabId)) return;
       commitTabsState(workspaceTabsState(persistedTabs, tabId, browserTabs));
@@ -962,7 +968,7 @@ export function FileWorkspace({
 
   function closeActiveWorkspaceTab() {
     if (!workspaceTabIds.includes(activeTab)) return;
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === GIT_TAB) return;
     if (activeTab === QUESTIONS_TAB) {
       setActiveTab(defaultRootTab);
       return;
@@ -1159,7 +1165,7 @@ export function FileWorkspace({
   // The Design Files entry is already sticky-pinned, so we only scroll
   // for real workspace tabs. Issue #775.
   useEffect(() => {
-    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === QUESTIONS_TAB) return;
+    if (activeTab === DESIGN_FILES_TAB || activeTab === DESIGN_SYSTEM_TAB || activeTab === DEV_SERVER_PREVIEW_TAB || activeTab === QUESTIONS_TAB || activeTab === GIT_TAB) return;
     const tabBar = tabsBarRef.current;
     if (!tabBar) return;
     const el = tabBar.querySelector<HTMLElement>('.ws-tab.active');
@@ -1495,6 +1501,7 @@ export function FileWorkspace({
       || activeTab === DESIGN_SYSTEM_TAB
       || activeTab === DEV_SERVER_PREVIEW_TAB
       || activeTab === QUESTIONS_TAB
+      || activeTab === GIT_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     const onDisk = visibleFiles.find((f) => f.name === activeTab);
@@ -1517,6 +1524,7 @@ export function FileWorkspace({
       || activeTab === DESIGN_SYSTEM_TAB
       || activeTab === DEV_SERVER_PREVIEW_TAB
       || activeTab === QUESTIONS_TAB
+      || activeTab === GIT_TAB
       || isBrowserTabId(activeTab)
     ) return null;
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
@@ -1536,6 +1544,14 @@ export function FileWorkspace({
         id: 'workspace:dev-server-preview',
         kind: 'preview',
         label: 'Dev Preview',
+        tabId: activeTab,
+      };
+    }
+    if (activeTab === GIT_TAB) {
+      return {
+        id: 'workspace:git',
+        kind: 'git',
+        label: 'Git Changes',
         tabId: activeTab,
       };
     }
@@ -1644,6 +1660,7 @@ export function FileWorkspace({
     if (designSystemProject) ids.push(DESIGN_SYSTEM_TAB);
     if (activeDevServerUrl) ids.push(DEV_SERVER_PREVIEW_TAB);
     ids.push(DESIGN_FILES_TAB);
+    ids.push(GIT_TAB);
     if (showQuestionsTab) ids.push(QUESTIONS_TAB);
     for (const entry of orderedWorkspaceTabs) {
       ids.push(entry.kind === 'browser' ? entry.browserTab.id : entry.name);
@@ -1679,6 +1696,13 @@ export function FileWorkspace({
         tabId: DEV_SERVER_PREVIEW_TAB,
       });
     }
+
+    push({
+      id: 'workspace:git',
+      kind: 'git',
+      label: 'Git Changes',
+      tabId: GIT_TAB,
+    });
 
     const trimmedDir = uploadDir.trim();
     const designFilesLabel = trimmedDir.split('/').filter(Boolean).pop() || t('workspace.designFiles');
@@ -1963,6 +1987,7 @@ export function FileWorkspace({
             </span>
             <span className="ws-tab-label">{t('workspace.designFiles')}</span>
           </button>
+
           {showQuestionsTab ? (
             <button
               type="button"
@@ -2113,6 +2138,17 @@ export function FileWorkspace({
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
           />
+          <button
+            type="button"
+            className={`ws-action-btn git-action-btn od-tooltip${activeTab === GIT_TAB ? ' active' : ''}`}
+            data-testid="git-action-btn"
+            onClick={() => setPersistedActive(GIT_TAB)}
+            data-tooltip="Git Changes"
+            data-tooltip-placement="bottom"
+            aria-label="Git Changes"
+          >
+            <Icon name="fork" size={15} />
+          </button>
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
@@ -2361,6 +2397,12 @@ export function FileWorkspace({
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
+          />
+        ) : activeTab === GIT_TAB ? (
+          <GitWorkspacePanel
+            projectId={projectId}
+            filesRefreshKey={filesRefreshKey}
+            onRefreshFiles={onRefreshFiles}
           />
         ) : isBrowserTabId(activeTab) ? (
           null
@@ -2651,7 +2693,7 @@ function DesignSystemProjectPanel({
           const payload = JSON.parse(e.data);
           const prefix = payload.type === 'stdout' || payload.type === 'stderr' ? '' : `[${payload.type.toUpperCase()}] `;
           setPublishLogs((prev) => [...prev, `${prefix}${payload.data}`]);
-        } catch {}
+        } catch { }
       });
 
       es.addEventListener('done', (e) => {
@@ -2661,7 +2703,7 @@ function DesignSystemProjectPanel({
             setStatus(payload.designSystem.status ?? 'published');
           }
           setPublishLogs((prev) => [...prev, '\nSUCCESS: Design system published successfully!']);
-        } catch {}
+        } catch { }
         es.close();
         setStatusBusy(false);
         setIsPublishing(false);
@@ -2673,7 +2715,7 @@ function DesignSystemProjectPanel({
         try {
           const payload = JSON.parse(e.data);
           msg = payload.message || msg;
-        } catch {}
+        } catch { }
         setPublishLogs((prev) => [...prev, `\nERROR: ${msg}`]);
         es.close();
         setStatusBusy(false);
@@ -2970,15 +3012,15 @@ function DesignSystemProjectPanel({
             {hasFailedPublish
               ? 'Publishing failed'
               : hasSuccessfulPublish
-              ? 'Design system published!'
-              : 'Publishing your design system...'}
+                ? 'Design system published!'
+                : 'Publishing your design system...'}
           </h1>
           <p>
             {hasFailedPublish
               ? 'Review the error logs below to diagnose the issue.'
               : hasSuccessfulPublish
-              ? 'Your design system packages are published to Verdaccio successfully.'
-              : 'Keep this tab open. We are running the build and publishing to verdaccio.'}
+                ? 'Your design system packages are published to Verdaccio successfully.'
+                : 'Keep this tab open. We are running the build and publishing to verdaccio.'}
           </p>
 
           <div

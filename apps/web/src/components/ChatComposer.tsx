@@ -2490,6 +2490,7 @@ function workspaceContextIcon(item: WorkspaceContextItem): IconName {
   if (item.kind === 'terminal') return 'terminal';
   if (item.kind === 'side-chat') return 'comment';
   if (item.kind === 'design-system') return 'blocks';
+  if (item.kind === 'git') return 'history';
   return 'file';
 }
 
@@ -2506,6 +2507,7 @@ function workspaceContextTitle(item: WorkspaceContextItem): string {
 function workspaceContextDescription(item: WorkspaceContextItem): string {
   if (item.kind === 'design-files') return item.path || 'Project files';
   if (item.kind === 'terminal') return item.title || 'Terminal session';
+  if (item.kind === 'git') return 'Git changes';
   return item.url || item.path || item.absolutePath || item.title || item.tabId || item.id;
 }
 
@@ -2553,6 +2555,8 @@ function workspaceContextKindLabel(kind: WorkspaceContextItem['kind']): string {
       return 'Side chat';
     case 'live-artifact':
       return 'Live artifact';
+    case 'git':
+      return 'Git';
     case 'file':
     default:
       return 'File';

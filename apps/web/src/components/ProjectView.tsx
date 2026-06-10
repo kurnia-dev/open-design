@@ -5816,7 +5816,6 @@ export function ProjectView({
             onDesignSystemNeedsWork={sendDesignSystemFeedback}
             designSystemReview={project.metadata?.designSystemReview}
             onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
-            onGenerateAICompletion={handleGenerateAICompletion}
             onConnectRepo={handleConnectRepo}
             githubConnected={githubConnected}
             commentPortalId={commentInspectorPortalId}

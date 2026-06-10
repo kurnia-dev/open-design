@@ -244,6 +244,7 @@ function canUseLocalCliForMemory(agentId, provider) {
   if (agentId === 'claude' && provider === 'anthropic') return true;
   if (agentId === 'codex' && provider === 'openai') return true;
   if (agentId === 'opencode' && provider === 'openai') return true;
+  if (agentId === 'gemini' && provider === 'google') return true;
   return false;
 }
 
@@ -374,7 +375,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       apiVersion:
         override.provider === 'azure'
           ? (typeof override.apiVersion === 'string' && override.apiVersion.trim())
-            || PROVIDER_DEFAULTS.azure.apiVersion
+          || PROVIDER_DEFAULTS.azure.apiVersion
           : '',
       credentialSource,
     };
@@ -480,8 +481,8 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
           apiVersion:
             chatProvider.provider === 'azure'
               ? (typeof chatProvider.apiVersion === 'string'
-                  && chatProvider.apiVersion.trim())
-                || PROVIDER_DEFAULTS.azure.apiVersion
+                && chatProvider.apiVersion.trim())
+              || PROVIDER_DEFAULTS.azure.apiVersion
               : '',
           credentialSource: 'chat-byok',
         };
@@ -865,13 +866,14 @@ async function callLocalCli(provider, system, user, options) {
       { cwd },
     );
     parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
-  } else if (provider.agentId === 'opencode') {
+  } else if (provider.agentId === 'opencode' || provider.agentId === 'gemini') {
     // Deliver the prompt on stdin, matching the chat-run path
     // (def.promptViaStdin). `opencode run`'s `-f, --file` is a yargs array
     // option that greedily consumes every trailing non-flag token, so
     // `--file <prompt-file> "<message>"` made OpenCode treat the message
     // text as a second attachment and exit with "File not found". Bare
     // `opencode run --format json` reads the message from stdin instead.
+    // Gemini behaves similarly: it reads from stdin when `-p` is omitted.
     args = def.buildArgs(
       '',
       [],
@@ -881,7 +883,7 @@ async function callLocalCli(provider, system, user, options) {
     );
     parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
   } else {
-    throw new Error(`Local CLI memory extraction is not supported for ${provider.agentId}`);
+    throw new Error(`Local CLI execution is not supported for ${provider.agentId}`);
   }
 
   const env = applyAgentLaunchEnv(
@@ -1202,4 +1204,52 @@ export async function extractWithLLM(dataDir, input, options) {
   });
 
   return written;
+}
+
+// ---------------------------------------------------------------------------
+// Generic one-shot LLM call
+// ---------------------------------------------------------------------------
+// Reuse all the provider-resolution and call-layer logic above for callers
+// that just need a plain text completion (no memory store, no extraction
+// records). Pass `dataDir` to allow the memory-config override path; pass
+// `null` to skip it and go straight to env-var / chatProvider resolution.
+//
+// Throws when no provider can be resolved (caller should surface the error).
+export async function callLlmOnce(params) {
+  const {
+    systemPrompt,
+    userPrompt,
+    projectRoot = null,
+    dataDir = null,
+    chatAgentId = null,
+    chatProvider = null,
+    chatModel = null,
+  } = params || {};
+
+  const provider = await pickProvider(
+    projectRoot,
+    dataDir,
+    chatAgentId,
+    chatProvider,
+    chatModel,
+  );
+
+  console.log("provider", params)
+
+  if (!provider) {
+    throw Object.assign(
+      new Error(
+        'No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY, or use API-key mode.',
+      ),
+      { code: 'NO_AI_PROVIDER' },
+    );
+  }
+
+  if (provider.transport === 'chat-cli') {
+    return callLocalCli(provider, systemPrompt, userPrompt, { projectRoot, dataDir });
+  }
+  if (provider.kind === 'anthropic') return callAnthropic(provider, systemPrompt, userPrompt);
+  if (provider.kind === 'azure') return callAzure(provider, systemPrompt, userPrompt);
+  if (provider.kind === 'google') return callGoogle(provider, systemPrompt, userPrompt);
+  return callOpenAI(provider, systemPrompt, userPrompt);
 }

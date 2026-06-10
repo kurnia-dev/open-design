@@ -219,13 +219,6 @@ interface Props {
   focusQuestionsRequest?: { nonce: number } | null;
   npmInstallStatus?: 'idle' | 'running' | 'completed' | 'failed';
   npmInstallMessage?: string;
-  onGenerateAICompletion?: (
-    systemPrompt: string,
-    userPrompt: string,
-    onDelta: (delta: string) => void,
-    onDone: (fullText: string) => void,
-    onError: (err: Error) => void,
-  ) => void;
 }
 
 interface SketchState {
@@ -440,7 +433,6 @@ export function FileWorkspace({
   npmInstallStatus = 'idle',
   npmInstallMessage = '',
   devServerUrl,
-  onGenerateAICompletion,
 }: Props) {
   const t = useT();
   // The chat column only shows a compact Questions banner; the form itself
@@ -2307,212 +2299,213 @@ export function FileWorkspace({
               </div>
             )}
           </div>
-        ) : showGenerationPreview && generationPreview ? (
-          <GenerationPreviewStage
-            model={generationPreview}
-            onRetry={
-              generationPreview.retryTarget && onRetry
-                ? () => onRetry(generationPreview.retryTarget!)
-                : undefined
-            }
-            onAuthorizeAndRetry={
-              generationPreview.retryTarget && onAuthorizeAndRetry
-                ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
-                : undefined
-            }
-            onLaunchTerminalAuth={onLaunchTerminalAuth}
-            amrAuthorizeSourceDetail="generation_preview_authorize_retry"
-            amrRechargeSourceDetail="generation_preview_recharge"
-            amrGuidance={
-              generationPreview.promoteAmrSwitch
-                && generationPreview.errorCode
-                && generationPreview.retryTarget
-                && onAuthorizeAndRetry ? (
-                <AmrGuidance
-                  errorCode={generationPreview.errorCode}
-                  projectId={projectId}
-                  projectKind={projectKind}
-                  conversationId={conversationId ?? null}
-                  assistantMessageId={generationPreview.retryTarget.id}
-                  runId={generationPreview.retryTarget.runId ?? null}
-                  sourceDetail="generation_preview_switch_retry_card"
-                  onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
-                />
-              ) : undefined
-            }
-          />
-        ) : activeTab === DESIGN_FILES_TAB ? (
-          <DesignFilesPanel
-            key={projectId}
-            projectId={projectId}
-            rootDirName={rootDirName}
-            reloading={reloading}
-            files={visibleFiles}
-            folders={projectFolders}
-            liveArtifacts={liveArtifactEntries}
-            onRefreshFiles={onRefreshFiles}
-            onCurrentDirChange={setUploadDir}
-            navState={designFilesNavRef.current}
-            onNavStateChange={onDesignFilesNavStateChange}
-            onOpenFile={openFile}
-            onOpenLiveArtifact={(tabId) => openFile(tabId)}
-            onRenameFile={handleRename}
-            onDeleteFile={(name) => {
-              trackFileManagerClick(analytics.track, {
-                page_name: 'file_manager',
-                area: 'file_manager',
-                element: 'delete',
-              });
-              void handleDelete(name);
-            }}
-            onDeleteFiles={(names) => {
-              trackFileManagerClick(analytics.track, {
-                page_name: 'file_manager',
-                area: 'file_manager',
-                element: 'delete',
-              });
-              return handleDeleteMany(names);
-            }}
-            onUpload={() => {
-              trackFileManagerClick(analytics.track, {
-                page_name: 'file_manager',
-                area: 'file_manager',
-                element: 'upload',
-              });
-              fileInputRef.current?.click();
-            }}
-            onUploadFiles={(picked) => void uploadFiles(picked)}
-            onPaste={() => {
-              trackFileManagerClick(analytics.track, {
-                page_name: 'file_manager',
-                area: 'file_manager',
-                element: 'paste',
-              });
-              setShowPasteDialog(true);
-            }}
-            onNewSketch={() => {
-              trackFileManagerClick(analytics.track, {
-                page_name: 'file_manager',
-                area: 'file_manager',
-                element: 'new_sketch',
-              });
-              startNewSketch();
-            }}
-            uploadError={uploadError}
-            onClearUploadError={() => setUploadError(null)}
-            preferredPreviewFile={preferredPreviewFile}
-            autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
-            onPluginFolderAgentAction={onPluginFolderAgentAction}
-            activePluginActionPaths={activePluginActionPaths}
-            hiddenPluginActionPaths={hiddenPluginActionPaths}
-          />
-        ) : activeTab === GIT_TAB ? (
-          <GitWorkspacePanel
-            projectId={projectId}
-            filesRefreshKey={filesRefreshKey}
-            onRefreshFiles={onRefreshFiles}
-            onGenerateAICompletion={onGenerateAICompletion}
-          />
-        ) : isBrowserTabId(activeTab) ? (
-          null
-        ) : isActiveSketch && activeSketch && activeFile ? (
-          activeSketch.loaded ? (
-            <SketchEditor
-              fileName={activeFile.name}
-              items={activeSketch.items}
-              hasPreservedRawItems={
-                !activeSketch.discardRawItemsOnSave && activeSketch.rawItems.length > activeSketch.items.length
+        )
+          : activeTab === GIT_TAB ? (
+            <GitWorkspacePanel
+              projectId={projectId}
+              filesRefreshKey={filesRefreshKey}
+              onRefreshFiles={onRefreshFiles}
+              chatConfig={chatConfig}
+            />
+          ) : isBrowserTabId(activeTab) ? (
+            null
+          ) : showGenerationPreview && generationPreview ? (
+            <GenerationPreviewStage
+              model={generationPreview}
+              onRetry={
+                generationPreview.retryTarget && onRetry
+                  ? () => onRetry(generationPreview.retryTarget!)
+                  : undefined
               }
-              onItemsChange={(items) => setSketchItems(activeFile.name, items)}
-              onClear={() => clearSketch(activeFile.name)}
-              onSave={() => saveSketch(activeFile.name)}
-              saving={activeSketch.saving}
-              dirty={activeSketch.dirty || !activeSketch.persisted}
-              onCancel={() => closeTab(activeFile.name)}
+              onAuthorizeAndRetry={
+                generationPreview.retryTarget && onAuthorizeAndRetry
+                  ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
+                  : undefined
+              }
+              onLaunchTerminalAuth={onLaunchTerminalAuth}
+              amrAuthorizeSourceDetail="generation_preview_authorize_retry"
+              amrRechargeSourceDetail="generation_preview_recharge"
+              amrGuidance={
+                generationPreview.promoteAmrSwitch
+                  && generationPreview.errorCode
+                  && generationPreview.retryTarget
+                  && onAuthorizeAndRetry ? (
+                  <AmrGuidance
+                    errorCode={generationPreview.errorCode}
+                    projectId={projectId}
+                    projectKind={projectKind}
+                    conversationId={conversationId ?? null}
+                    assistantMessageId={generationPreview.retryTarget.id}
+                    runId={generationPreview.retryTarget.runId ?? null}
+                    sourceDetail="generation_preview_switch_retry_card"
+                    onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
+                  />
+                ) : undefined
+              }
+            />
+          ) : activeTab === DESIGN_FILES_TAB ? (
+            <DesignFilesPanel
+              key={projectId}
+              projectId={projectId}
+              rootDirName={rootDirName}
+              reloading={reloading}
+              files={visibleFiles}
+              folders={projectFolders}
+              liveArtifacts={liveArtifactEntries}
+              onRefreshFiles={onRefreshFiles}
+              onCurrentDirChange={setUploadDir}
+              navState={designFilesNavRef.current}
+              onNavStateChange={onDesignFilesNavStateChange}
+              onOpenFile={openFile}
+              onOpenLiveArtifact={(tabId) => openFile(tabId)}
+              onRenameFile={handleRename}
+              onDeleteFile={(name) => {
+                trackFileManagerClick(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'file_manager',
+                  element: 'delete',
+                });
+                void handleDelete(name);
+              }}
+              onDeleteFiles={(names) => {
+                trackFileManagerClick(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'file_manager',
+                  element: 'delete',
+                });
+                return handleDeleteMany(names);
+              }}
+              onUpload={() => {
+                trackFileManagerClick(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'file_manager',
+                  element: 'upload',
+                });
+                fileInputRef.current?.click();
+              }}
+              onUploadFiles={(picked) => void uploadFiles(picked)}
+              onPaste={() => {
+                trackFileManagerClick(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'file_manager',
+                  element: 'paste',
+                });
+                setShowPasteDialog(true);
+              }}
+              onNewSketch={() => {
+                trackFileManagerClick(analytics.track, {
+                  page_name: 'file_manager',
+                  area: 'file_manager',
+                  element: 'new_sketch',
+                });
+                startNewSketch();
+              }}
+              uploadError={uploadError}
+              onClearUploadError={() => setUploadError(null)}
+              preferredPreviewFile={preferredPreviewFile}
+              autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
+              onPluginFolderAgentAction={onPluginFolderAgentAction}
+              activePluginActionPaths={activePluginActionPaths}
+              hiddenPluginActionPaths={hiddenPluginActionPaths}
+            />
+          ) : isActiveSketch && activeSketch && activeFile ? (
+            activeSketch.loaded ? (
+              <SketchEditor
+                fileName={activeFile.name}
+                items={activeSketch.items}
+                hasPreservedRawItems={
+                  !activeSketch.discardRawItemsOnSave && activeSketch.rawItems.length > activeSketch.items.length
+                }
+                onItemsChange={(items) => setSketchItems(activeFile.name, items)}
+                onClear={() => clearSketch(activeFile.name)}
+                onSave={() => saveSketch(activeFile.name)}
+                saving={activeSketch.saving}
+                dirty={activeSketch.dirty || !activeSketch.persisted}
+                onCancel={() => closeTab(activeFile.name)}
+              />
+            ) : (
+              <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
+            )
+          ) : isSideChatTabId(activeTab) && chatConfig && chatAgentsById ? (
+            <SideChatTab
+              key={`${projectId}:${activeTab}`}
+              projectId={projectId}
+              conversationId={conversationIdFromSideChatTabId(activeTab)}
+              config={chatConfig}
+              agentsById={chatAgentsById}
+              locale={chatLocale ?? 'en'}
+              projectFiles={visibleFiles}
+              conversations={conversations}
+              onSelectConversation={onSelectConversation ?? (() => { })}
+              onDeleteConversation={onDeleteConversation ?? (() => { })}
+              onRenameConversation={onRenameConversation}
+              onSessionModeChange={onConversationSessionModeChange}
+              onNewConversation={onNewConversation}
+              activeConversationChat={activeConversationChat}
+              onRequestOpenFile={openFile}
+            />
+          ) : isTerminalTabId(activeTab) ? (
+            <TerminalViewer
+              key={activeTab}
+              projectId={projectId}
+              terminalId={terminalIdFromTabId(activeTab)}
+              onClose={() => closeTab(activeTab)}
+              onSessionIdChange={handleTerminalSessionChange}
+            />
+          ) : activeLiveArtifact ? (
+            <LiveArtifactViewer
+              projectId={projectId}
+              liveArtifact={activeLiveArtifact}
+              liveArtifactEvents={liveArtifactEvents}
+              onRefreshArtifacts={onRefreshFiles}
+            />
+          ) : activeFile ? (
+            <FileViewer
+              projectId={projectId}
+              projectKind={projectKind}
+              file={activeFile}
+              filesRefreshKey={filesRefreshKey}
+              isDeck={isDeck}
+              onExportAsPptx={onExportAsPptx}
+              streaming={streaming}
+              commentQueueOnSend={commentQueueOnSend}
+              commentSendDisabled={commentSendDisabled}
+              previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
+              onSavePreviewComment={onSavePreviewComment}
+              onRemovePreviewComment={onRemovePreviewComment}
+              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+              onFileSaved={onRefreshFiles}
+              onOpenFileReplacing={openFileReplacing}
+              commentPortalId={commentPortalId}
+              onCommentModeChange={onCommentModeChange}
+              devServerUrl={activeDevServerUrl}
+              shareRequest={
+                shareRequest && shareRequest.name === activeFile.name
+                  ? { nonce: shareRequest.nonce }
+                  : null
+              }
+              slideNavRequest={deliverableSlideNavForActiveFile(
+                slideNavRequest,
+                activeFile.name,
+                slideNavDeliverableNonce,
+              )}
             />
           ) : (
-            <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
-          )
-        ) : isSideChatTabId(activeTab) && chatConfig && chatAgentsById ? (
-          <SideChatTab
-            key={`${projectId}:${activeTab}`}
-            projectId={projectId}
-            conversationId={conversationIdFromSideChatTabId(activeTab)}
-            config={chatConfig}
-            agentsById={chatAgentsById}
-            locale={chatLocale ?? 'en'}
-            projectFiles={visibleFiles}
-            conversations={conversations}
-            onSelectConversation={onSelectConversation ?? (() => { })}
-            onDeleteConversation={onDeleteConversation ?? (() => { })}
-            onRenameConversation={onRenameConversation}
-            onSessionModeChange={onConversationSessionModeChange}
-            onNewConversation={onNewConversation}
-            activeConversationChat={activeConversationChat}
-            onRequestOpenFile={openFile}
-          />
-        ) : isTerminalTabId(activeTab) ? (
-          <TerminalViewer
-            key={activeTab}
-            projectId={projectId}
-            terminalId={terminalIdFromTabId(activeTab)}
-            onClose={() => closeTab(activeTab)}
-            onSessionIdChange={handleTerminalSessionChange}
-          />
-        ) : activeLiveArtifact ? (
-          <LiveArtifactViewer
-            projectId={projectId}
-            liveArtifact={activeLiveArtifact}
-            liveArtifactEvents={liveArtifactEvents}
-            onRefreshArtifacts={onRefreshFiles}
-          />
-        ) : activeFile ? (
-          <FileViewer
-            projectId={projectId}
-            projectKind={projectKind}
-            file={activeFile}
-            filesRefreshKey={filesRefreshKey}
-            isDeck={isDeck}
-            onExportAsPptx={onExportAsPptx}
-            streaming={streaming}
-            commentQueueOnSend={commentQueueOnSend}
-            commentSendDisabled={commentSendDisabled}
-            previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
-            onSavePreviewComment={onSavePreviewComment}
-            onRemovePreviewComment={onRemovePreviewComment}
-            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-            onFileSaved={onRefreshFiles}
-            onOpenFileReplacing={openFileReplacing}
-            commentPortalId={commentPortalId}
-            onCommentModeChange={onCommentModeChange}
-            devServerUrl={activeDevServerUrl}
-            shareRequest={
-              shareRequest && shareRequest.name === activeFile.name
-                ? { nonce: shareRequest.nonce }
-                : null
-            }
-            slideNavRequest={deliverableSlideNavForActiveFile(
-              slideNavRequest,
-              activeFile.name,
-              slideNavDeliverableNonce,
-            )}
-          />
-        ) : (
-          <div className="viewer-empty">
-            {t('workspace.openFromDesignFiles')}{' '}
-            <a
-              className="link"
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab(DESIGN_FILES_TAB);
-              }}
-            >
-              {t('workspace.designFilesLink')}
-            </a>
-            .
-          </div>
-        )}
+            <div className="viewer-empty">
+              {t('workspace.openFromDesignFiles')}{' '}
+              <a
+                className="link"
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveTab(DESIGN_FILES_TAB);
+                }}
+              >
+                {t('workspace.designFilesLink')}
+              </a>
+              .
+            </div>
+          )}
       </div>
       <input
         ref={fileInputRef}

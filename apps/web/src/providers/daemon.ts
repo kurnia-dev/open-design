@@ -277,9 +277,9 @@ function daemonSseErrorMessage(data: SseErrorPayload): string {
 
   const detail =
     data.error?.details &&
-    typeof data.error.details === 'object' &&
-    !Array.isArray(data.error.details) &&
-    typeof data.error.details.detail === 'string'
+      typeof data.error.details === 'object' &&
+      !Array.isArray(data.error.details) &&
+      typeof data.error.details.detail === 'string'
       ? data.error.details.detail
       : null;
   if (!detail || detail === message || message.includes(detail)) return message;
@@ -873,7 +873,7 @@ async function consumeDaemonRun({
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
-    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => { });
   };
 
   cancelSignal?.addEventListener('abort', cancelRun, { once: true });
@@ -1094,10 +1094,10 @@ function translateAgentEvent(data: DaemonAgentPayload): AgentEvent | null {
         typeof data.detail === 'string'
           ? data.detail
           : typeof data.model === 'string'
-          ? data.model
-          : typeof data.ttftMs === 'number'
-            ? `first token in ${Math.round((data.ttftMs as number) / 100) / 10}s`
-            : undefined,
+            ? data.model
+            : typeof data.ttftMs === 'number'
+              ? `first token in ${Math.round((data.ttftMs as number) / 100) / 10}s`
+              : undefined,
     };
   }
   if (t === 'text_delta' && typeof data.delta === 'string') {

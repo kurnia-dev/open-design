@@ -9,6 +9,8 @@ import {
   restoreProjectGitFiles,
   commitProjectGit,
 } from '../providers/registry';
+import { streamMessage } from '../providers/anthropic';
+import type { AppConfig, ChatMessage } from '../types';
 import type { GitStatusFile } from '@open-design/contracts';
 import styles from './GitWorkspacePanel.module.css';
 
@@ -16,20 +18,16 @@ interface Props {
   projectId: string;
   filesRefreshKey?: number;
   onRefreshFiles?: () => void;
-  onGenerateAICompletion?: (
-    systemPrompt: string,
-    userPrompt: string,
-    onDelta: (delta: string) => void,
-    onDone: (fullText: string) => void,
-    onError: (err: Error) => void,
-  ) => void;
+  /** AppConfig for simple AI text completions (commit message generation).
+   *  streamMessage is called directly — no agent session, no file edits. */
+  chatConfig?: AppConfig;
 }
 
 export function GitWorkspacePanel({
   projectId,
   filesRefreshKey = 0,
   onRefreshFiles,
-  onGenerateAICompletion,
+  chatConfig,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const [branch, setBranch] = useState('main');
@@ -48,7 +46,7 @@ export function GitWorkspacePanel({
   const untrackedFiles = files.filter((f) => f.indexStatus === '?' && f.workingDirStatus === '?');
 
   const handleGenerateCommitMsg = async () => {
-    if (stagedFiles.length === 0 || !onGenerateAICompletion) return;
+    if (stagedFiles.length === 0 || !chatConfig) return;
 
     try {
       setGenerating(true);
@@ -171,22 +169,61 @@ Co-Authored-By: Claude <noreply@anthropic.com>
       const stagedPaths = stagedFiles.map((f) => f.path).join('\n');
       const userPrompt = `Staged files:\n${stagedPaths}\n\nStaged diff:\n\`\`\`diff\n${cachedDiff}\n\`\`\``;
 
-      let accumulatedText = '';
-      onGenerateAICompletion(
-        systemPrompt,
-        userPrompt,
-        (delta) => {
-          accumulatedText += delta;
-          setCommitMsg(accumulatedText);
-        },
-        () => {
+      if (chatConfig.mode === 'daemon') {
+        // In daemon mode there is no BYOK api key in the browser.
+        // The daemon resolves the provider from its own env vars (or the
+        // forwarded chatProvider credentials for BYOK-style daemon configs).
+        const chatProvider = chatConfig.apiKey
+          ? {
+            provider: chatConfig.apiProtocol || 'anthropic',
+            apiKey: chatConfig.apiKey,
+            model: chatConfig.model,
+            baseUrl: chatConfig.baseUrl,
+          }
+          : undefined;
+
+        const resp = await fetch(
+          `/api/projects/${encodeURIComponent(projectId)}/git/suggest-commit`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemPrompt,
+              userPrompt,
+              chatProvider,
+              chatAgentId: chatConfig.agentId,
+            }),
+          },
+        );
+        if (!resp.ok) {
+          const json = await resp.json().catch(() => ({})) as any;
+          const errorMessage = typeof json.error === 'object' ? json.error?.message : json.error;
+          setError(errorMessage || `AI generation failed (${resp.status})`);
           setGenerating(false);
-        },
-        (err) => {
-          setError(err.message);
-          setGenerating(false);
-        },
-      );
+          return;
+        }
+        const json = await resp.json() as { text?: string };
+        setCommitMsg(json.text ?? '');
+        setGenerating(false);
+      } else {
+        // API-key mode — call the provider directly from the browser.
+        const controller = new AbortController();
+        const history: ChatMessage[] = [
+          { id: crypto.randomUUID(), role: 'user', content: userPrompt, createdAt: Date.now() },
+        ];
+        void streamMessage(chatConfig, systemPrompt, history, controller.signal, {
+          onDelta: (delta) => {
+            setCommitMsg((prev) => prev + delta);
+          },
+          onDone: () => {
+            setGenerating(false);
+          },
+          onError: (err) => {
+            setError(err.message);
+            setGenerating(false);
+          },
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setGenerating(false);
@@ -408,7 +445,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                 }
               }}
             />
-            {onGenerateAICompletion && (
+            {chatConfig && (
               <button
                 type="button"
                 className={`${styles.generateBtn} od-tooltip`}

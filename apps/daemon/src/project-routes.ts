@@ -32,6 +32,7 @@ import {
   writeProjectManifest,
 } from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
+import { callLlmOnce } from './memory-llm.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> { }
 
@@ -1728,7 +1729,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
           try {
             const projectDir = await ensureProject(PROJECTS_DIR, id, projectMetadata);
-            
+
             let isPublishedDesignSystem = false;
             let publishedPackages: string[] = [];
 
@@ -1748,7 +1749,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 if (parsedMeta && typeof parsedMeta.status === 'string') {
                   status = parsedMeta.status;
                 }
-              } catch {}
+              } catch { }
 
               if (status === 'published') {
                 isPublishedDesignSystem = true;
@@ -3212,7 +3213,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         if (filePath.startsWith('"') && filePath.endsWith('"')) {
           filePath = filePath.slice(1, -1);
         }
-        
+
         let status: 'modified' | 'added' | 'deleted' | 'untracked' | 'staged_modified' | 'staged_added' | 'staged_deleted' | 'renamed' | 'unknown' = 'unknown';
         if (indexStatus === '?' && workingDirStatus === '?') {
           status = 'untracked';
@@ -3385,6 +3386,32 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  // POST /api/projects/:id/git/suggest-commit
+  // Generates a commit message via a simple LLM text completion using env-var
+  // keys or the BYOK chatProvider the web client sends. Never spawns an agent
+  // session — pure text completion only.
+  app.post('/api/projects/:id/git/suggest-commit', async (req, res) => {
+    try {
+      const { systemPrompt, userPrompt, chatProvider, chatAgentId } = req.body || {};
+      if (typeof systemPrompt !== 'string' || typeof userPrompt !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'systemPrompt and userPrompt required');
+      }
+
+      const commitText = await callLlmOnce({
+        systemPrompt,
+        userPrompt,
+        chatProvider,
+        chatAgentId,
+      });
+
+      res.json({ text: commitText.trim() });
+    } catch (err: any) {
+      if (err?.code === 'NO_AI_PROVIDER') {
+        return sendApiError(res, 422, 'NO_AI_PROVIDER', err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
 }
 
 export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> { }

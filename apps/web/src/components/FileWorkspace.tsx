@@ -219,6 +219,13 @@ interface Props {
   focusQuestionsRequest?: { nonce: number } | null;
   npmInstallStatus?: 'idle' | 'running' | 'completed' | 'failed';
   npmInstallMessage?: string;
+  onGenerateAICompletion?: (
+    systemPrompt: string,
+    userPrompt: string,
+    onDelta: (delta: string) => void,
+    onDone: (fullText: string) => void,
+    onError: (err: Error) => void,
+  ) => void;
 }
 
 interface SketchState {
@@ -433,6 +440,7 @@ export function FileWorkspace({
   npmInstallStatus = 'idle',
   npmInstallMessage = '',
   devServerUrl,
+  onGenerateAICompletion,
 }: Props) {
   const t = useT();
   // The chat column only shows a compact Questions banner; the form itself
@@ -2403,6 +2411,7 @@ export function FileWorkspace({
             projectId={projectId}
             filesRefreshKey={filesRefreshKey}
             onRefreshFiles={onRefreshFiles}
+            onGenerateAICompletion={onGenerateAICompletion}
           />
         ) : isBrowserTabId(activeTab) ? (
           null

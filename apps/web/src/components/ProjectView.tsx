@@ -3767,6 +3767,57 @@ export function ProjectView({
     removeQueuedChatSend,
   ]);
 
+  const handleGenerateAICompletion = useCallback(
+    async (
+      systemPrompt: string,
+      userPrompt: string,
+      onDelta: (delta: string) => void,
+      onDone: (fullText: string) => void,
+      onError: (err: Error) => void,
+    ) => {
+      const controller = new AbortController();
+      const handlers = {
+        onDelta,
+        onDone,
+        onError,
+      };
+
+      if (config.mode === 'daemon') {
+        if (!config.agentId) {
+          onError(new Error('Pick a local agent first (top bar).'));
+          return;
+        }
+
+        const agent = agentsById.get(config.agentId);
+        const choice = effectiveAgentModelChoice(agent, config.agentModels?.[config.agentId]);
+
+        void streamViaDaemon({
+          agentId: config.agentId,
+          history: [{ id: randomUUID(), role: 'user', content: userPrompt, createdAt: Date.now() }],
+          signal: controller.signal,
+          handlers: {
+            ...handlers,
+            onAgentEvent: (ev) => {
+              if (ev.kind === 'text') handlers.onDelta(ev.text);
+            },
+            onToolInputDelta: () => { },
+          },
+          projectId: project.id,
+          sessionMode: activeSessionMode,
+          model: choice?.model ?? null,
+          reasoning: choice?.reasoning ?? null,
+          locale,
+        });
+      } else {
+        const apiHistory: ChatMessage[] = [
+          { id: randomUUID(), role: 'user', content: userPrompt, createdAt: Date.now() },
+        ];
+        void streamMessage(config, systemPrompt, apiHistory, controller.signal, handlers);
+      }
+    },
+    [config, project.id, activeSessionMode, agentsById, locale],
+  );
+
   const handleRetry = useCallback(
     (assistantMessage: ChatMessage) => {
       if (currentConversationActionDisabled) return;
@@ -5765,6 +5816,7 @@ export function ProjectView({
             onDesignSystemNeedsWork={sendDesignSystemFeedback}
             designSystemReview={project.metadata?.designSystemReview}
             onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
+            onGenerateAICompletion={handleGenerateAICompletion}
             onConnectRepo={handleConnectRepo}
             githubConnected={githubConnected}
             commentPortalId={commentInspectorPortalId}

@@ -2263,7 +2263,12 @@ export async function uninstallDesignSystem(
 export async function fetchProjectGitStatus(projectId: string): Promise<GitStatusResponse> {
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/status`);
   if (!resp.ok) {
-    throw new Error(`Git status failed (${resp.status})`);
+    let msg = `Git status failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as GitStatusResponse;
 }
@@ -2284,7 +2289,12 @@ export async function stageProjectGitFiles(projectId: string, files: string[]): 
     body: JSON.stringify({ files }),
   });
   if (!resp.ok) {
-    throw new Error(`Git stage failed (${resp.status})`);
+    let msg = `Git stage failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2296,7 +2306,12 @@ export async function unstageProjectGitFiles(projectId: string, files: string[])
     body: JSON.stringify({ files }),
   });
   if (!resp.ok) {
-    throw new Error(`Git unstage failed (${resp.status})`);
+    let msg = `Git unstage failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2308,7 +2323,12 @@ export async function restoreProjectGitFiles(projectId: string, files: string[])
     body: JSON.stringify({ files }),
   });
   if (!resp.ok) {
-    throw new Error(`Git restore failed (${resp.status})`);
+    let msg = `Git restore failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2320,7 +2340,12 @@ export async function commitProjectGit(projectId: string, message: string): Prom
     body: JSON.stringify({ message }),
   });
   if (!resp.ok) {
-    throw new Error(`Git commit failed (${resp.status})`);
+    let msg = `Git commit failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2358,7 +2383,12 @@ export async function disconnectGitHub(): Promise<{ ok: boolean }> {
 export async function fetchProjectGitRemote(projectId: string): Promise<GitRemoteInfoResponse> {
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/remote`);
   if (!resp.ok) {
-    throw new Error(`Failed to fetch git remote (${resp.status})`);
+    let msg = `Failed to fetch git remote (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as GitRemoteInfoResponse;
 }
@@ -2370,7 +2400,12 @@ export async function setProjectGitRemote(projectId: string, remoteUrl: string):
     body: JSON.stringify({ remoteUrl }),
   });
   if (!resp.ok) {
-    throw new Error(`Failed to set git remote (${resp.status})`);
+    let msg = `Failed to set git remote (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2380,7 +2415,12 @@ export async function pullProjectGit(projectId: string): Promise<{ ok: boolean }
     method: 'POST',
   });
   if (!resp.ok) {
-    throw new Error(`Git pull failed (${resp.status})`);
+    let msg = `Git pull failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2390,7 +2430,12 @@ export async function pushProjectGit(projectId: string): Promise<{ ok: boolean }
     method: 'POST',
   });
   if (!resp.ok) {
-    throw new Error(`Git push failed (${resp.status})`);
+    let msg = `Git push failed (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
 }
@@ -2398,7 +2443,12 @@ export async function pushProjectGit(projectId: string): Promise<{ ok: boolean }
 export async function fetchProjectGitSyncStatus(projectId: string): Promise<GitSyncStatusResponse> {
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/sync-status`);
   if (!resp.ok) {
-    throw new Error(`Failed to fetch git sync status (${resp.status})`);
+    let msg = `Failed to fetch git sync status (${resp.status})`;
+    try {
+      const json = await resp.json();
+      if (json?.error?.message) msg = json.error.message;
+    } catch {}
+    throw new Error(msg);
   }
   return (await resp.json()) as GitSyncStatusResponse;
 }

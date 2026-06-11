@@ -59,11 +59,12 @@
   transition: background-color 0.2s var(--ease);
 }
 
-.connectBtn:hover:not(:disabled) {
+.connectBtn:hover:not(:disabled):not([aria-disabled="true"]) {
   background: var(--accent-hover);
 }
 
-.connectBtn:disabled {
+.connectBtn:disabled,
+.connectBtn[aria-disabled="true"] {
   opacity: 0.5;
   cursor: not-allowed;
 }

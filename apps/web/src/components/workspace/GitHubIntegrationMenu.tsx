@@ -128,12 +128,12 @@ export function GitHubIntegrationMenu({
               <span className={styles.githubStatusText}>GitHub Connected</span>
             </div>
             {onOpenGitHubSettings && (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   onOpenGitHubSettings();
                   onClose();
-                }} 
+                }}
                 className={styles.disconnectBtn}
               >
                 Manage
@@ -147,12 +147,12 @@ export function GitHubIntegrationMenu({
               <span className={styles.githubUser}>GitHub Integration</span>
               <span className={styles.githubStatusText}>Not connected</span>
             </div>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => {
                 onOpenGitHubSettings?.();
                 onClose();
-              }} 
+              }}
               className={styles.connectBtn}
             >
               Connect
@@ -171,24 +171,33 @@ export function GitHubIntegrationMenu({
           )}
         </div>
         {showRemoteForm ? (
-          <div className={styles.connectForm}>
+          <form
+            className={styles.connectForm}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newRemoteUrl.trim() && !loading) {
+                void handleSetRemote();
+              }
+            }}
+          >
             <input
               type="text"
               placeholder="https://github.com/owner/repo.git"
               value={newRemoteUrl}
               onChange={(e) => setNewRemoteUrl(e.target.value)}
               className={styles.connectInput}
+              autoFocus
             />
             {error && <div style={{ color: 'var(--red)', fontSize: '11px' }}>{error}</div>}
             <div className={styles.connectActionGroup}>
               <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>
                 Cancel
               </button>
-              <button type="button" onClick={handleSetRemote} className={styles.connectBtn} disabled={!newRemoteUrl.trim() || loading}>
+              <button type="submit" className={styles.connectBtn} aria-disabled={!newRemoteUrl.trim() || loading}>
                 {loading ? <Spinner size={10} /> : 'Save'}
               </button>
             </div>
-          </div>
+          </form>
         ) : (
           <span className={styles.remoteUrl}>
             {loading ? <Spinner size={12} /> : remoteUrl || 'No remote configured'}

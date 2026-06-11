@@ -1348,7 +1348,7 @@ export function SettingsDialog({
       ? cfg.agentModels?.[cfg.agentId]?.model
       ?? selectedMemoryChatAgent?.models?.[0]?.id
       ?? null
-    : null;
+      : null;
   const agentChoiceForTest =
     cfg.mode === 'daemon' && cfg.agentId
       ? cfg.agentModels?.[cfg.agentId]
@@ -1458,8 +1458,8 @@ export function SettingsDialog({
     const value = Number(trimmed);
     const nextMaxTokens =
       Number.isInteger(value) &&
-      value >= MIN_MAX_TOKENS &&
-      value <= MAX_MAX_TOKENS
+        value >= MIN_MAX_TOKENS &&
+        value <= MAX_MAX_TOKENS
         ? value
         : undefined;
     setCfg((c) => ({ ...c, maxTokens: nextMaxTokens }));
@@ -2356,8 +2356,8 @@ export function SettingsDialog({
     cfg.apiProviderBaseUrl == null
       ? -1
       : protocolProviders.findIndex(
-          (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
-        );
+        (p) => p.baseUrl === cfg.apiProviderBaseUrl && p.baseUrl === cfg.baseUrl,
+      );
   const selectedProvider = selectedProviderIndex >= 0 ? protocolProviders[selectedProviderIndex] : undefined;
   const showProviderPreset =
     protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
@@ -2544,7 +2544,7 @@ export function SettingsDialog({
   ]);
   const currentProviderModelsResult =
     providerModelsState.status === 'done' &&
-    providerModelsState.cacheKey === providerModelsKey
+      providerModelsState.cacheKey === providerModelsKey
       ? providerModelsState.result
       : null;
   const loadedAccountModelCount =
@@ -2557,10 +2557,10 @@ export function SettingsDialog({
   const providerModelsFailureMessage =
     currentProviderModelsResult?.ok === false && !apiKeyAuthFailed
       ? t('settings.fetchModelsFailed', {
-          detail:
-            currentProviderModelsResult.detail ||
-            currentProviderModelsResult.kind,
-        })
+        detail:
+          currentProviderModelsResult.detail ||
+          currentProviderModelsResult.kind,
+      })
       : null;
   const providerTestBaseUrlInvalid =
     providerTestState.status === 'done' &&
@@ -2806,8 +2806,8 @@ export function SettingsDialog({
     };
     const modelValue =
       selected.id === 'amr' &&
-      configuredModel &&
-      !knownModelIds.includes(configuredModel)
+        configuredModel &&
+        !knownModelIds.includes(configuredModel)
         ? selected.models?.[0]?.id ?? ''
         : configuredModel ?? selected.models?.[0]?.id ?? '';
     const reasoningValue =
@@ -2881,11 +2881,11 @@ export function SettingsDialog({
                   additionalOptions={
                     allowCustomModel
                       ? [
-                          {
-                            value: CUSTOM_MODEL_SENTINEL,
-                            label: t('settings.modelCustom'),
-                          },
-                        ]
+                        {
+                          value: CUSTOM_MODEL_SENTINEL,
+                          label: t('settings.modelCustom'),
+                        },
+                      ]
                       : undefined
                   }
                 />
@@ -3218,590 +3218,590 @@ export function SettingsDialog({
             </button>
           </aside>
           <div className="settings-content" ref={settingsContentRef}>
-          {activeSection === 'execution' ? (
-            <>
-              <div
-                className="seg-control"
-                role="tablist"
-                aria-label={t('settings.modeAria')}
-                style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={cfg.mode === 'daemon'}
-                  className={
-                    'seg-btn seg-btn--inline' +
-                    (cfg.mode === 'daemon' ? ' active' : '')
-                  }
-                  disabled={!daemonLive}
-                  onClick={() => setMode('daemon')}
-                  title={
-                    daemonLive
-                      ? t('settings.modeDaemonHelp')
-                      : t('settings.modeDaemonOffline')
-                  }
-                >
-                  <span className="seg-title">{t('settings.localCli')}</span>
-                  <span className="seg-meta">
-                    {daemonLive
-                      ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
-                      : t('settings.modeDaemonOfflineMeta')}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={cfg.mode === 'api'}
-                  className={
-                    'seg-btn seg-btn--inline' +
-                    (cfg.mode === 'api' ? ' active' : '')
-                  }
-                  onClick={() => setMode('api')}
-                >
-                  <span className="seg-title">{t('settings.modeApiMeta')}</span>
-                  <span className="seg-meta">{t('settings.modeApi')}</span>
-                </button>
-              </div>
-              {cfg.mode === 'api' ? (
+            {activeSection === 'execution' ? (
+              <>
                 <div
-                  className="protocol-chips"
+                  className="seg-control"
                   role="tablist"
-                  aria-label={t('settings.protocolAria')}
+                  aria-label={t('settings.modeAria')}
+                  style={{ ['--seg-cols' as string]: 2 } as CSSProperties}
                 >
-                  {apiProtocolTabGroups.map((group) => (
-                    <div className="protocol-chip-group" key={group.id}>
-                      <span className="protocol-chip-group-label">
-                        {group.label}
-                      </span>
-                      <div className="protocol-chip-group-options">
-                        {group.tabs.map((tab) => (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={apiProtocol === tab.id}
-                            className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
-                            onClick={() => {
-                              const byokProviderId = byokProtocolToTracking(tab.id);
-                              if (byokProviderId) {
-                                trackSettingsByokProviderOptionClick(analytics.track, {
-                                  page_name: 'settings',
-                                  area: 'configure_execution_mode_byok',
-                                  element: 'byok_provider_option',
-                                  action: 'select_byok_provider',
-                                  provider_id: byokProviderId,
-                                  is_selected: apiProtocol === tab.id,
-                                });
-                              }
-                              setApiProtocol(tab.id);
-                            }}
-                          >
-                            {tab.title}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={cfg.mode === 'daemon'}
+                    className={
+                      'seg-btn seg-btn--inline' +
+                      (cfg.mode === 'daemon' ? ' active' : '')
+                    }
+                    disabled={!daemonLive}
+                    onClick={() => setMode('daemon')}
+                    title={
+                      daemonLive
+                        ? t('settings.modeDaemonHelp')
+                        : t('settings.modeDaemonOffline')
+                    }
+                  >
+                    <span className="seg-title">{t('settings.localCli')}</span>
+                    <span className="seg-meta">
+                      {daemonLive
+                        ? t('settings.modeDaemonInstalledMeta', { count: installedCount })
+                        : t('settings.modeDaemonOfflineMeta')}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={cfg.mode === 'api'}
+                    className={
+                      'seg-btn seg-btn--inline' +
+                      (cfg.mode === 'api' ? ' active' : '')
+                    }
+                    onClick={() => setMode('api')}
+                  >
+                    <span className="seg-title">{t('settings.modeApiMeta')}</span>
+                    <span className="seg-meta">{t('settings.modeApi')}</span>
+                  </button>
                 </div>
-              ) : null}
-          {cfg.mode === 'daemon' ? (
-            <section className="settings-section">
-              <div className="section-head">
-                <div>
-                  <p className="hint">{t('settings.codeAgentHint')}</p>
-                </div>
-              </div>
-              {initialAgentScanRunning ? (
-                <div className="agent-scan-card" role="status" aria-live="polite">
-                  <div className="agent-scan-card__stage">
-                    <span className="agent-scan-card__ring" aria-hidden />
-                    <strong>{t('settings.rescanRunning')}</strong>
-                    <span>{t('settings.codeAgentHint')}</span>
-                    <div className="agent-scan-card__progress" aria-hidden>
-                      <span />
-                    </div>
-                  </div>
-                  <div className="agent-scan-card__rows" aria-hidden>
-                    <span><i /><b /><em /></span>
-                    <span><i /><b /><em /></span>
-                    <span><i /><b /><em /></span>
-                  </div>
-                </div>
-              ) : agents.length === 0 ? (
-                <div className="empty-card">
-                  {t('settings.noAgentsDetected')}
-                </div>
-              ) : (
-                <>
-                  <div className="agent-group">
-                    <div className="agent-group-head">
-                      <h4>
-                        {t('settings.agentInstalledGroup', {
-                          count: installedAgents.length,
-                        })}
-                      </h4>
-                      <div className="agent-group-head-actions">
-                        {agentRescanNotice ? (
-                          <span
-                            className={
-                              'settings-rescan-status settings-rescan-status-inline ' +
-                              agentRescanNotice.kind
-                            }
-                            role={
-                              agentRescanNotice.kind === 'error'
-                                ? 'alert'
-                                : 'status'
-                            }
-                          >
-                            {agentRescanNotice.kind === 'success'
-                              ? t('settings.rescanSuccess', {
-                                  count: agentRescanNotice.count,
-                                })
-                              : t('settings.rescanFailed')}
-                          </span>
-                        ) : null}
-                        <button
-                          type="button"
-                          className={
-                            'ghost icon-btn settings-rescan-btn agent-group-rescan-btn' +
-                            (agentRescanRunning ? ' loading' : '')
-                          }
-                          onClick={() => void handleRefreshAgents()}
-                          disabled={agentRescanRunning}
-                          title={t('settings.rescanTitle')}
-                        >
-                          {agentRescanRunning ? (
-                            <>
-                              <Icon
-                                name="spinner"
-                                size={13}
-                                className="icon-spin"
-                              />
-                              <span>{t('settings.rescanRunning')}</span>
-                            </>
-                          ) : (
-                            t('settings.rescan')
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    {installedAgents.length > 0 ? (
-                      <div className="agent-grid agent-grid-installed">
-                        {installedAgents.map((a) => {
-                          const active = cfg.agentId === a.id;
-                          const running =
-                            active && agentTestState.status === 'running';
-                          const isAmrAgent = a.id === 'amr';
-                          const description = AGENT_SHORT_DESCRIPTIONS[a.id];
-                          const agentName = displayAgentName(a);
-                          const diagnosticHandlers = diagnosticHandlersForAgent(a);
-                          const modelSummary = agentModelSummary(a);
-                          const amrBenefits = [
-                            t('settings.amrBenefitOfficial'),
-                            t('settings.amrBenefitLowerPrice'),
-                            t('settings.amrBenefitManyModels'),
-                          ];
-                          const versionLabel =
-                            isAmrAgent
-                              ? ''
-                              : cleanAgentVersionLabel(a.name, a.version);
-                          const metaLabel =
-                            a.authStatus === 'missing'
-                              ? t('settings.agentAuthRequired')
-                              : a.authStatus === 'unknown'
-                                ? t('settings.agentAuthUnknown')
-                                : versionLabel
-                                  ? versionLabel
-                                  : a.id === 'amr'
-                                    ? ''
-                                    : t('common.installed');
-                          const metaTitle =
-                            a.authStatus === 'missing' ||
-                            a.authStatus === 'unknown'
-                              ? (a.authMessage ?? a.path ?? '')
-                              : (a.path ?? '');
-                          const amrHighlighted = isAmrAgent && amrHighlightActive;
-                          const amrCardEmail =
-                            isAmrAgent && active && amrCardStatus?.loggedIn
-                              ? amrCardStatus.user?.email || t('settings.amrSignedIn')
-                              : '';
-                          const amrRevealPendingCancelAction =
-                            isAmrAgent &&
-                            active &&
-                            hoveredAgentCardId === a.id &&
-                            amrCardStatus?.loggedIn !== true &&
-                            amrCardStatus?.loginInFlight === true;
-                          const cardEl = (
-                            <div
-                              key={a.id}
-                              ref={isAmrAgent ? amrCardRef : undefined}
-                              className={
-                                'agent-card agent-card-installed' +
-                                (active ? ' active' : '') +
-                                (amrHighlighted ? ' agent-card--amr-highlight' : '')
-                              }
-                              onMouseEnter={() => {
-                                if (!isAmrAgent || !active) return;
-                                setHoveredAgentCardId(a.id);
-                              }}
-                              onMouseLeave={() => {
-                                if (hoveredAgentCardId !== a.id) return;
-                                setHoveredAgentCardId(null);
+                {cfg.mode === 'api' ? (
+                  <div
+                    className="protocol-chips"
+                    role="tablist"
+                    aria-label={t('settings.protocolAria')}
+                  >
+                    {apiProtocolTabGroups.map((group) => (
+                      <div className="protocol-chip-group" key={group.id}>
+                        <span className="protocol-chip-group-label">
+                          {group.label}
+                        </span>
+                        <div className="protocol-chip-group-options">
+                          {group.tabs.map((tab) => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              role="tab"
+                              aria-selected={apiProtocol === tab.id}
+                              className={'protocol-chip' + (apiProtocol === tab.id ? ' active' : '')}
+                              onClick={() => {
+                                const byokProviderId = byokProtocolToTracking(tab.id);
+                                if (byokProviderId) {
+                                  trackSettingsByokProviderOptionClick(analytics.track, {
+                                    page_name: 'settings',
+                                    area: 'configure_execution_mode_byok',
+                                    element: 'byok_provider_option',
+                                    action: 'select_byok_provider',
+                                    provider_id: byokProviderId,
+                                    is_selected: apiProtocol === tab.id,
+                                  });
+                                }
+                                setApiProtocol(tab.id);
                               }}
                             >
-                              <div className="agent-card-main">
-                                <button
-                                  type="button"
-                                  className="agent-card-select"
-                                  onClick={() => {
-                                    trackSettingsLocalCliClick(analytics.track, {
-                                      page_name: 'settings',
-                                      area: 'configure_execution_mode_local_cli',
-                                      element: 'cli_provider',
-                                      cli_provider_id: agentIdToTracking(a.id),
-                                      install_status: 'installed',
-                                    });
-                                    if (isAmrAgent) {
-                                      recordAmrEntry(analytics.track, 'settings_amr_agent_card');
-                                    }
-                                    setCfg((c) => ({ ...c, agentId: a.id }));
-                                  }}
-                                  aria-pressed={active}
-                                  >
-                                    <AgentIcon id={a.id} size={32} />
-                                    <div className="agent-card-body">
-                                      <div
-                                        className={
-                                          'agent-card-name' +
-                                          (isAmrAgent
-                                            ? ' agent-card-name--amr'
-                                            : '')
-                                        }
-                                      >
-                                        <span className="agent-card-title">
-                                          {agentName}
-                                        </span>
-                                        {isAmrAgent ? (
-                                          <span
-                                            className="agent-card-benefits"
-                                            aria-hidden="true"
-                                          >
-                                            {amrBenefits.map((benefit) => (
-                                              <span
-                                                key={benefit}
-                                                className="agent-card-benefit"
-                                              >
-                                                {benefit}
-                                              </span>
-                                            ))}
-                                          </span>
-                                        ) : description ? (
-                                          <>
-                                            <span
-                                              className="agent-card-name-divider"
-                                              aria-hidden="true"
-                                            >
-                                              ·
-                                            </span>
-                                            <span className="agent-card-tagline">
-                                              {description}
-                                            </span>
-                                          </>
-                                        ) : null}
-                                      </div>
-                                      {metaLabel ? (
-                                        <div className="agent-card-meta">
-                                          <span title={metaTitle}>
-                                            {metaLabel}
-                                          </span>
-                                        </div>
-                                      ) : null}
-                                      {amrCardEmail ? (
-                                        <div className="agent-card-amr-email">
-                                          <span title={amrCardEmail}>
-                                            {amrCardEmail}
-                                          </span>
-                                        </div>
-                                      ) : null}
-                                      {!active && modelSummary ? (
-                                        <div className="agent-card-model-summary">
-                                          <span>{t('settings.modelPicker')}</span>
-                                          <strong>{modelSummary}</strong>
-                                        </div>
-                                      ) : null}
-                                  </div>
-                                </button>
-                                {isAmrAgent ? (
-                                  active && amrCardStatusReady ? (
-                                    <span
-                                      className="amr-auth-anchor"
-                                      onMouseEnter={() => setAmrCoachmarkDismissed(true)}
-                                    >
-                                      {amrCoachmarkArmed &&
-                                      amrCardStatus?.loggedIn === false &&
-                                      !amrCoachmarkDismissed ? (
-                                        <span className="amr-coachmark" aria-hidden="true">
-                                          <span className="amr-coachmark__ring" />
-                                          <svg
-                                            className="amr-coachmark__cursor"
-                                            width="22"
-                                            height="22"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                          >
-                                            <path
-                                              d="M9.4 13V8a1.8 1.8 0 0 1 3.6 0v4.6c.35-.55 1-.95 1.75-.95.65 0 1.25.32 1.6.85.32-.5.9-.8 1.55-.8.8 0 1.5.5 1.78 1.2.35-.3.8-.5 1.3-.5 1.1 0 2 .9 2 2v3.05a5.6 5.6 0 0 1-5.6 5.6h-2.5a5 5 0 0 1-3.75-1.7l-4.2-4.75a1.85 1.85 0 0 1 2.65-2.6L9.4 16Z"
-                                              fill="#fff"
-                                              stroke="#1a1a1a"
-                                              strokeWidth="1.1"
-                                              strokeLinejoin="round"
-                                            />
-                                          </svg>
-                                        </span>
-                                      ) : null}
-                                      <AmrLoginPill
-                                        className="agent-card-amr-auth"
-                                        hideSignedOutStatus
-                                        hideSignedInStatus
-                                        initialStatus={amrCardStatus}
-                                        skipInitialRefresh
-                                        signInLabel={t('settings.amrAuthorize')}
-                                        showConsoleAction={amrCardStatus?.loggedIn === true}
-                                        amrEntrySourceDetail="settings_amr_authorize"
-                                        revealPendingCancelAction={amrRevealPendingCancelAction}
-                                        onStatusChange={setAmrCardStatus}
-                                      />
-                                    </span>
-                                  ) : (
-                                    <div
-                                      className="agent-card-amr-auth agent-card-amr-auth--placeholder"
-                                      aria-hidden="true"
-                                    />
-                                  )
-                                ) : null}
-                                {active && !isAmrAgent ? (
-                                  <button
-                                    type="button"
-                                    className={
-                                      'ghost icon-btn settings-test-btn agent-card-test-btn' +
-                                      (running ? ' loading' : '')
-                                    }
-                                    onClick={() => void handleTestAgent()}
-                                    disabled={running}
-                                    title={t('settings.testTitle')}
-                                  >
-                                    {running ? (
-                                      <>
-                                        <Icon
-                                          name="spinner"
-                                          size={13}
-                                          className="icon-spin"
-                                        />
-                                        <span>{t('settings.test')}</span>
-                                      </>
-                                    ) : (
-                                      t('settings.test')
-                                    )}
-                                  </button>
-                                ) : null}
-                              </div>
-                              {(a.diagnostics ?? []).map((diagnostic, i) => (
-                                <AgentDiagnosticRow
-                                  key={`${diagnostic.reason}-${i}`}
-                                  diagnostic={diagnostic}
-                                  handlers={diagnosticHandlers}
-                                />
-                              ))}
-                              {active ? renderAgentModelConfig(a) : null}
-                            </div>
-                          );
-                          if (active && agentTestState.status !== 'idle') {
-                            const resultRow = (
-                              <div
-                                key={`${a.id}__test-result`}
-                                className="agent-test-result-row"
-                              >
-                                {agentTestState.status === 'running' ? (
-                                  <p
-                                    className="settings-test-status running"
-                                    role="status"
-                                    aria-live="polite"
-                                  >
-                                    {t('settings.testRunning')}
-                                  </p>
-                                ) : (
-                                  <>
-                                    <p
-                                      className={
-                                        'settings-test-status ' +
-                                        testStatusVariant(agentTestState.result)
-                                      }
-                                      role={
-                                        agentTestState.result.ok
-                                          ? 'status'
-                                          : 'alert'
-                                      }
-                                    >
-                                      {renderTestMessage(
-                                        agentTestState.result,
-                                        'cli',
-                                      )}
-                                    </p>
-                                    {!agentTestState.result.ok ? (
-                                      <div className="settings-test-actions">
-                                        <div className="settings-test-actions-row">
-                                          <button
-                                            type="button"
-                                            className="ghost icon-btn settings-test-btn"
-                                            onClick={() => void handleTestAgent()}
-                                          >
-                                            <Icon name="reload" size={13} />
-                                            <span>{t('settings.testRetry')}</span>
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                    {cfg.agentId === 'codex' && (() => {
-                                      const repair = codexPathRepairState(
-                                        agentTestState.result,
-                                      );
-                                      if (!repair) return null;
-                                      const codexStrings = codexPathStrings(locale);
-                                      return (
-                                        <div className="settings-test-actions">
-                                          <span className="settings-test-actions-hint">
-                                            {codexStrings.repairHint}
-                                          </span>
-                                          <div className="settings-test-actions-row">
-                                            {repair.canUseDetected ? (
-                                              <button
-                                                type="button"
-                                                className="settings-test-btn"
-                                                onClick={() =>
-                                                  applyCodexDetectedPath(
-                                                    repair.detectedPath,
-                                                  )
-                                                }
-                                              >
-                                                {codexStrings.useDetected}
-                                              </button>
-                                            ) : null}
-                                            <button
-                                              type="button"
-                                              className="ghost icon-btn settings-rescan-btn"
-                                              onClick={clearCodexCustomPath}
-                                            >
-                                              {codexStrings.clearCustom}
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-                                  </>
-                                )}
-                              </div>
-                            );
-                            return [cardEl, resultRow];
-                          }
-                          return [cardEl];
-                        })}
+                              {tab.title}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    ) : (
+                    ))}
+                  </div>
+                ) : null}
+                {cfg.mode === 'daemon' ? (
+                  <section className="settings-section">
+                    <div className="section-head">
+                      <div>
+                        <p className="hint">{t('settings.codeAgentHint')}</p>
+                      </div>
+                    </div>
+                    {initialAgentScanRunning ? (
+                      <div className="agent-scan-card" role="status" aria-live="polite">
+                        <div className="agent-scan-card__stage">
+                          <span className="agent-scan-card__ring" aria-hidden />
+                          <strong>{t('settings.rescanRunning')}</strong>
+                          <span>{t('settings.codeAgentHint')}</span>
+                          <div className="agent-scan-card__progress" aria-hidden>
+                            <span />
+                          </div>
+                        </div>
+                        <div className="agent-scan-card__rows" aria-hidden>
+                          <span><i /><b /><em /></span>
+                          <span><i /><b /><em /></span>
+                          <span><i /><b /><em /></span>
+                        </div>
+                      </div>
+                    ) : agents.length === 0 ? (
                       <div className="empty-card">
                         {t('settings.noAgentsDetected')}
                       </div>
-                    )}
-                  </div>
-                  {unavailableAgents.length > 0 ? (
-                    <details
-                      className="agent-install-collapse"
-                      open={installedAgents.length > 0 ? undefined : true}
-                    >
-                      <summary className="agent-install-collapse-summary">
-                        <span>
-                          {t('settings.agentInstallGroup', {
-                            count: unavailableAgents.length,
-                          })}
-                        </span>
-                      </summary>
-                      <div className="agent-grid agent-grid-unavailable">
-                        {unavailableAgents.map((a) => {
-                          const installUrl = sanitizeHttpsUrl(a.installUrl);
-                          const docsUrl = sanitizeHttpsUrl(a.docsUrl);
-                          const hasLinks = Boolean(installUrl || docsUrl);
-                          const description = AGENT_SHORT_DESCRIPTIONS[a.id];
-                          const agentName = displayAgentName(a);
-                          const diagnosticHandlers = diagnosticHandlersForAgent(a);
-                          const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
-                          return (
-                            <div
-                              key={a.id}
-                              className="agent-card disabled agent-card-unavailable"
-                              role="group"
-                              aria-label={cardLabel}
-                            >
-                              <div className="agent-card-unavailable-row">
-                                <AgentIcon id={a.id} size={30} />
-                                <div className="agent-card-body">
-                                  <div className="agent-card-name">
-                                    {agentName}
-                                  </div>
-                                  {description ? (
-                                    <div className="agent-card-description">
-                                      {description}
+                    ) : (
+                      <>
+                        <div className="agent-group">
+                          <div className="agent-group-head">
+                            <h4>
+                              {t('settings.agentInstalledGroup', {
+                                count: installedAgents.length,
+                              })}
+                            </h4>
+                            <div className="agent-group-head-actions">
+                              {agentRescanNotice ? (
+                                <span
+                                  className={
+                                    'settings-rescan-status settings-rescan-status-inline ' +
+                                    agentRescanNotice.kind
+                                  }
+                                  role={
+                                    agentRescanNotice.kind === 'error'
+                                      ? 'alert'
+                                      : 'status'
+                                  }
+                                >
+                                  {agentRescanNotice.kind === 'success'
+                                    ? t('settings.rescanSuccess', {
+                                      count: agentRescanNotice.count,
+                                    })
+                                    : t('settings.rescanFailed')}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                className={
+                                  'ghost icon-btn settings-rescan-btn agent-group-rescan-btn' +
+                                  (agentRescanRunning ? ' loading' : '')
+                                }
+                                onClick={() => void handleRefreshAgents()}
+                                disabled={agentRescanRunning}
+                                title={t('settings.rescanTitle')}
+                              >
+                                {agentRescanRunning ? (
+                                  <>
+                                    <Icon
+                                      name="spinner"
+                                      size={13}
+                                      className="icon-spin"
+                                    />
+                                    <span>{t('settings.rescanRunning')}</span>
+                                  </>
+                                ) : (
+                                  t('settings.rescan')
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                          {installedAgents.length > 0 ? (
+                            <div className="agent-grid agent-grid-installed">
+                              {installedAgents.map((a) => {
+                                const active = cfg.agentId === a.id;
+                                const running =
+                                  active && agentTestState.status === 'running';
+                                const isAmrAgent = a.id === 'amr';
+                                const description = AGENT_SHORT_DESCRIPTIONS[a.id];
+                                const agentName = displayAgentName(a);
+                                const diagnosticHandlers = diagnosticHandlersForAgent(a);
+                                const modelSummary = agentModelSummary(a);
+                                const amrBenefits = [
+                                  t('settings.amrBenefitOfficial'),
+                                  t('settings.amrBenefitLowerPrice'),
+                                  t('settings.amrBenefitManyModels'),
+                                ];
+                                const versionLabel =
+                                  isAmrAgent
+                                    ? ''
+                                    : cleanAgentVersionLabel(a.name, a.version);
+                                const metaLabel =
+                                  a.authStatus === 'missing'
+                                    ? t('settings.agentAuthRequired')
+                                    : a.authStatus === 'unknown'
+                                      ? t('settings.agentAuthUnknown')
+                                      : versionLabel
+                                        ? versionLabel
+                                        : a.id === 'amr'
+                                          ? ''
+                                          : t('common.installed');
+                                const metaTitle =
+                                  a.authStatus === 'missing' ||
+                                    a.authStatus === 'unknown'
+                                    ? (a.authMessage ?? a.path ?? '')
+                                    : (a.path ?? '');
+                                const amrHighlighted = isAmrAgent && amrHighlightActive;
+                                const amrCardEmail =
+                                  isAmrAgent && active && amrCardStatus?.loggedIn
+                                    ? amrCardStatus.user?.email || t('settings.amrSignedIn')
+                                    : '';
+                                const amrRevealPendingCancelAction =
+                                  isAmrAgent &&
+                                  active &&
+                                  hoveredAgentCardId === a.id &&
+                                  amrCardStatus?.loggedIn !== true &&
+                                  amrCardStatus?.loginInFlight === true;
+                                const cardEl = (
+                                  <div
+                                    key={a.id}
+                                    ref={isAmrAgent ? amrCardRef : undefined}
+                                    className={
+                                      'agent-card agent-card-installed' +
+                                      (active ? ' active' : '') +
+                                      (amrHighlighted ? ' agent-card--amr-highlight' : '')
+                                    }
+                                    onMouseEnter={() => {
+                                      if (!isAmrAgent || !active) return;
+                                      setHoveredAgentCardId(a.id);
+                                    }}
+                                    onMouseLeave={() => {
+                                      if (hoveredAgentCardId !== a.id) return;
+                                      setHoveredAgentCardId(null);
+                                    }}
+                                  >
+                                    <div className="agent-card-main">
+                                      <button
+                                        type="button"
+                                        className="agent-card-select"
+                                        onClick={() => {
+                                          trackSettingsLocalCliClick(analytics.track, {
+                                            page_name: 'settings',
+                                            area: 'configure_execution_mode_local_cli',
+                                            element: 'cli_provider',
+                                            cli_provider_id: agentIdToTracking(a.id),
+                                            install_status: 'installed',
+                                          });
+                                          if (isAmrAgent) {
+                                            recordAmrEntry(analytics.track, 'settings_amr_agent_card');
+                                          }
+                                          setCfg((c) => ({ ...c, agentId: a.id }));
+                                        }}
+                                        aria-pressed={active}
+                                      >
+                                        <AgentIcon id={a.id} size={32} />
+                                        <div className="agent-card-body">
+                                          <div
+                                            className={
+                                              'agent-card-name' +
+                                              (isAmrAgent
+                                                ? ' agent-card-name--amr'
+                                                : '')
+                                            }
+                                          >
+                                            <span className="agent-card-title">
+                                              {agentName}
+                                            </span>
+                                            {isAmrAgent ? (
+                                              <span
+                                                className="agent-card-benefits"
+                                                aria-hidden="true"
+                                              >
+                                                {amrBenefits.map((benefit) => (
+                                                  <span
+                                                    key={benefit}
+                                                    className="agent-card-benefit"
+                                                  >
+                                                    {benefit}
+                                                  </span>
+                                                ))}
+                                              </span>
+                                            ) : description ? (
+                                              <>
+                                                <span
+                                                  className="agent-card-name-divider"
+                                                  aria-hidden="true"
+                                                >
+                                                  ·
+                                                </span>
+                                                <span className="agent-card-tagline">
+                                                  {description}
+                                                </span>
+                                              </>
+                                            ) : null}
+                                          </div>
+                                          {metaLabel ? (
+                                            <div className="agent-card-meta">
+                                              <span title={metaTitle}>
+                                                {metaLabel}
+                                              </span>
+                                            </div>
+                                          ) : null}
+                                          {amrCardEmail ? (
+                                            <div className="agent-card-amr-email">
+                                              <span title={amrCardEmail}>
+                                                {amrCardEmail}
+                                              </span>
+                                            </div>
+                                          ) : null}
+                                          {!active && modelSummary ? (
+                                            <div className="agent-card-model-summary">
+                                              <span>{t('settings.modelPicker')}</span>
+                                              <strong>{modelSummary}</strong>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      </button>
+                                      {isAmrAgent ? (
+                                        active && amrCardStatusReady ? (
+                                          <span
+                                            className="amr-auth-anchor"
+                                            onMouseEnter={() => setAmrCoachmarkDismissed(true)}
+                                          >
+                                            {amrCoachmarkArmed &&
+                                              amrCardStatus?.loggedIn === false &&
+                                              !amrCoachmarkDismissed ? (
+                                              <span className="amr-coachmark" aria-hidden="true">
+                                                <span className="amr-coachmark__ring" />
+                                                <svg
+                                                  className="amr-coachmark__cursor"
+                                                  width="22"
+                                                  height="22"
+                                                  viewBox="0 0 24 24"
+                                                  fill="none"
+                                                >
+                                                  <path
+                                                    d="M9.4 13V8a1.8 1.8 0 0 1 3.6 0v4.6c.35-.55 1-.95 1.75-.95.65 0 1.25.32 1.6.85.32-.5.9-.8 1.55-.8.8 0 1.5.5 1.78 1.2.35-.3.8-.5 1.3-.5 1.1 0 2 .9 2 2v3.05a5.6 5.6 0 0 1-5.6 5.6h-2.5a5 5 0 0 1-3.75-1.7l-4.2-4.75a1.85 1.85 0 0 1 2.65-2.6L9.4 16Z"
+                                                    fill="#fff"
+                                                    stroke="#1a1a1a"
+                                                    strokeWidth="1.1"
+                                                    strokeLinejoin="round"
+                                                  />
+                                                </svg>
+                                              </span>
+                                            ) : null}
+                                            <AmrLoginPill
+                                              className="agent-card-amr-auth"
+                                              hideSignedOutStatus
+                                              hideSignedInStatus
+                                              initialStatus={amrCardStatus}
+                                              skipInitialRefresh
+                                              signInLabel={t('settings.amrAuthorize')}
+                                              showConsoleAction={amrCardStatus?.loggedIn === true}
+                                              amrEntrySourceDetail="settings_amr_authorize"
+                                              revealPendingCancelAction={amrRevealPendingCancelAction}
+                                              onStatusChange={setAmrCardStatus}
+                                            />
+                                          </span>
+                                        ) : (
+                                          <div
+                                            className="agent-card-amr-auth agent-card-amr-auth--placeholder"
+                                            aria-hidden="true"
+                                          />
+                                        )
+                                      ) : null}
+                                      {active && !isAmrAgent ? (
+                                        <button
+                                          type="button"
+                                          className={
+                                            'ghost icon-btn settings-test-btn agent-card-test-btn' +
+                                            (running ? ' loading' : '')
+                                          }
+                                          onClick={() => void handleTestAgent()}
+                                          disabled={running}
+                                          title={t('settings.testTitle')}
+                                        >
+                                          {running ? (
+                                            <>
+                                              <Icon
+                                                name="spinner"
+                                                size={13}
+                                                className="icon-spin"
+                                              />
+                                              <span>{t('settings.test')}</span>
+                                            </>
+                                          ) : (
+                                            t('settings.test')
+                                          )}
+                                        </button>
+                                      ) : null}
                                     </div>
-                                  ) : null}
-                                </div>
-                                {hasLinks ? (
-                                  <div className="agent-card-actions agent-card-actions--inline">
-                                    {docsUrl ? (
-                                      <a
-                                        href={docsUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="agent-card-link agent-card-link--muted agent-card-link--icon"
-                                        onClick={markAgentInstallIntent}
-                                        title={t('settings.agentInstall.docs')}
-                                        aria-label={t('settings.agentInstall.docs')}
-                                      >
-                                        <Icon name="file" size={15} />
-                                      </a>
-                                    ) : null}
-                                    {installUrl ? (
-                                      <a
-                                        href={installUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="agent-card-link agent-card-link--ghost"
-                                        onClick={markAgentInstallIntent}
-                                      >
-                                        {t('settings.agentInstall.install')}
-                                      </a>
-                                    ) : null}
+                                    {(a.diagnostics ?? []).map((diagnostic, i) => (
+                                      <AgentDiagnosticRow
+                                        key={`${diagnostic.reason}-${i}`}
+                                        diagnostic={diagnostic}
+                                        handlers={diagnosticHandlers}
+                                      />
+                                    ))}
+                                    {active ? renderAgentModelConfig(a) : null}
                                   </div>
-                                ) : null}
-                              </div>
-                              {/* Why is it unavailable? not-on-path vs a broken
+                                );
+                                if (active && agentTestState.status !== 'idle') {
+                                  const resultRow = (
+                                    <div
+                                      key={`${a.id}__test-result`}
+                                      className="agent-test-result-row"
+                                    >
+                                      {agentTestState.status === 'running' ? (
+                                        <p
+                                          className="settings-test-status running"
+                                          role="status"
+                                          aria-live="polite"
+                                        >
+                                          {t('settings.testRunning')}
+                                        </p>
+                                      ) : (
+                                        <>
+                                          <p
+                                            className={
+                                              'settings-test-status ' +
+                                              testStatusVariant(agentTestState.result)
+                                            }
+                                            role={
+                                              agentTestState.result.ok
+                                                ? 'status'
+                                                : 'alert'
+                                            }
+                                          >
+                                            {renderTestMessage(
+                                              agentTestState.result,
+                                              'cli',
+                                            )}
+                                          </p>
+                                          {!agentTestState.result.ok ? (
+                                            <div className="settings-test-actions">
+                                              <div className="settings-test-actions-row">
+                                                <button
+                                                  type="button"
+                                                  className="ghost icon-btn settings-test-btn"
+                                                  onClick={() => void handleTestAgent()}
+                                                >
+                                                  <Icon name="reload" size={13} />
+                                                  <span>{t('settings.testRetry')}</span>
+                                                </button>
+                                              </div>
+                                            </div>
+                                          ) : null}
+                                          {cfg.agentId === 'codex' && (() => {
+                                            const repair = codexPathRepairState(
+                                              agentTestState.result,
+                                            );
+                                            if (!repair) return null;
+                                            const codexStrings = codexPathStrings(locale);
+                                            return (
+                                              <div className="settings-test-actions">
+                                                <span className="settings-test-actions-hint">
+                                                  {codexStrings.repairHint}
+                                                </span>
+                                                <div className="settings-test-actions-row">
+                                                  {repair.canUseDetected ? (
+                                                    <button
+                                                      type="button"
+                                                      className="settings-test-btn"
+                                                      onClick={() =>
+                                                        applyCodexDetectedPath(
+                                                          repair.detectedPath,
+                                                        )
+                                                      }
+                                                    >
+                                                      {codexStrings.useDetected}
+                                                    </button>
+                                                  ) : null}
+                                                  <button
+                                                    type="button"
+                                                    className="ghost icon-btn settings-rescan-btn"
+                                                    onClick={clearCodexCustomPath}
+                                                  >
+                                                    {codexStrings.clearCustom}
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                  return [cardEl, resultRow];
+                                }
+                                return [cardEl];
+                              })}
+                            </div>
+                          ) : (
+                            <div className="empty-card">
+                              {t('settings.noAgentsDetected')}
+                            </div>
+                          )}
+                        </div>
+                        {unavailableAgents.length > 0 ? (
+                          <details
+                            className="agent-install-collapse"
+                            open={installedAgents.length > 0 ? undefined : true}
+                          >
+                            <summary className="agent-install-collapse-summary">
+                              <span>
+                                {t('settings.agentInstallGroup', {
+                                  count: unavailableAgents.length,
+                                })}
+                              </span>
+                            </summary>
+                            <div className="agent-grid agent-grid-unavailable">
+                              {unavailableAgents.map((a) => {
+                                const installUrl = sanitizeHttpsUrl(a.installUrl);
+                                const docsUrl = sanitizeHttpsUrl(a.docsUrl);
+                                const hasLinks = Boolean(installUrl || docsUrl);
+                                const description = AGENT_SHORT_DESCRIPTIONS[a.id];
+                                const agentName = displayAgentName(a);
+                                const diagnosticHandlers = diagnosticHandlersForAgent(a);
+                                const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className="agent-card disabled agent-card-unavailable"
+                                    role="group"
+                                    aria-label={cardLabel}
+                                  >
+                                    <div className="agent-card-unavailable-row">
+                                      <AgentIcon id={a.id} size={30} />
+                                      <div className="agent-card-body">
+                                        <div className="agent-card-name">
+                                          {agentName}
+                                        </div>
+                                        {description ? (
+                                          <div className="agent-card-description">
+                                            {description}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                      {hasLinks ? (
+                                        <div className="agent-card-actions agent-card-actions--inline">
+                                          {docsUrl ? (
+                                            <a
+                                              href={docsUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="agent-card-link agent-card-link--muted agent-card-link--icon"
+                                              onClick={markAgentInstallIntent}
+                                              title={t('settings.agentInstall.docs')}
+                                              aria-label={t('settings.agentInstall.docs')}
+                                            >
+                                              <Icon name="file" size={15} />
+                                            </a>
+                                          ) : null}
+                                          {installUrl ? (
+                                            <a
+                                              href={installUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="agent-card-link agent-card-link--ghost"
+                                              onClick={markAgentInstallIntent}
+                                            >
+                                              {t('settings.agentInstall.install')}
+                                            </a>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    {/* Why is it unavailable? not-on-path vs a broken
                                   shim vs a bad *_BIN override each get a
                                   distinct, actionable line. It spans the full
                                   card width on its own row below the
                                   logo/name/links so it never crowds the inline
                                   Docs/Install actions. */}
-                              {(a.diagnostics ?? []).map((diagnostic, i) => (
-                                <AgentDiagnosticRow
-                                  key={`${diagnostic.reason}-${i}`}
-                                  diagnostic={diagnostic}
-                                  handlers={diagnosticHandlers}
-                                />
-                              ))}
+                                    {(a.diagnostics ?? []).map((diagnostic, i) => (
+                                      <AgentDiagnosticRow
+                                        key={`${diagnostic.reason}-${i}`}
+                                        diagnostic={diagnostic}
+                                        handlers={diagnosticHandlers}
+                                      />
+                                    ))}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  ) : null}
-                  {/*
+                          </details>
+                        ) : null}
+                        {/*
                     Show the install guide only when the user has *no*
                     working agent picked yet. Older logic surfaced it
                     whenever any agent on the support list was missing,
@@ -3813,789 +3813,789 @@ export function SettingsDialog({
                     selected, the guide has done its job and only adds
                     noise.
                   */}
-                  {!agents.find(
-                    (a) => a.id === cfg.agentId && a.available,
-                  ) ? (
-                    <div className="agent-install-guide">
-                      <p className="hint agent-install-path-hint">
-                        {t('settings.agentInstall.pathHint')}
-                      </p>
-                      <ol className="agent-install-steps">
-                        <li>{t('settings.agentInstall.stepOpenLinks')}</li>
-                        <li>{t('settings.agentInstall.stepAuth')}</li>
-                        <li>{t('settings.agentInstall.stepRescan')}</li>
-                        <li>{t('settings.agentInstall.stepSelect')}</li>
-                      </ol>
-                    </div>
-                  ) : null}
-                </>
-              )}
-              {(() => {
-                const selected = agents.find(
-                  (a) => a.id === cfg.agentId && a.available,
-                );
-                if (!selected) return null;
-                const hasModels =
-                  Array.isArray(selected.models) && selected.models.length > 0;
-                const choice = cfg.agentModels?.[selected.id] ?? {};
-                const knownModelIds = selected.models?.map((m) => m.id) ?? [];
-                const configuredModel =
-                  typeof choice.model === 'string' && choice.model
-                    ? choice.model
-                    : null;
-                const modelValue =
-                  selected.id === 'amr' &&
-                  configuredModel &&
-                  !knownModelIds.includes(configuredModel)
-                    ? selected.models?.[0]?.id ?? ''
-                    : configuredModel ?? selected.models?.[0]?.id ?? '';
-                return (
-                  <details className="agent-cli-env settings-memory-advanced">
-                    <summary className="agent-cli-env-summary">
-                      <span className="agent-cli-env-summary-title">
-                        {t('settings.memoryModelInlineLabel')}
-                      </span>
-                    </summary>
-                    <div className="agent-cli-env-body">
-                      <MemoryModelInline
-                        mode="daemon"
-                        apiProtocol={apiProtocol}
-                        chatApiKey={cfg.apiKey}
-                        chatBaseUrl={cfg.baseUrl}
-                        chatApiVersion={cfg.apiVersion ?? ''}
-                        chatModel={modelValue}
-                        cliAgentId={selected.id}
-                        cliModelOptions={
-                          hasModels ? selected.models!.map((m) => m.id) : []
-                        }
-                      />
-                    </div>
-                  </details>
-                );
-              })()}
-              {(() => {
-                /*
-                  Per-agent CLI environment overrides — proxy URLs, custom
-                  config dirs, and a binary path override. The previous
-                  layout listed every supported agent's variables in one
-                  long always-expanded block; for users on Claude Code
-                  the Codex fields were just visual filler (and vice
-                  versa), and the section hijacked Settings real estate
-                  on every open even though nine in ten users never
-                  touch it. Now: filtered to the *currently selected*
-                  agent only, and folded into a collapsed disclosure
-                  that opens to "Advanced: proxy & custom paths" — power
-                  users who route through LiteLLM or installed the
-                  binary out-of-PATH still have one click access; new
-                  users no longer wonder "are these fields I forgot to
-                  fill in?".
-                */
-                const cliEnvFields = AGENT_CLI_ENV_FIELDS.filter(
-                  (field) => field.agentId === cfg.agentId,
-                );
-                if (cliEnvFields.length === 0) return null;
-                return (
-                  <details
-                    className="agent-cli-env"
-                    data-testid="settings-cli-env"
-                  >
-                    <summary className="agent-cli-env-summary">
-                      <span className="agent-cli-env-summary-title">
-                        {t('settings.cliEnvTitle')}
-                      </span>
-                    </summary>
-                    <div className="agent-cli-env-body">
-                      <p className="hint">{t('settings.cliEnvHint')}</p>
-                      <div className="agent-cli-env-grid">
-                        {cliEnvFields.map((field) => (
-                          <label
-                            className="field"
-                            key={`${field.agentId}:${field.envKey}`}
-                          >
-                            <span className="field-label">
-                              {t(field.labelKey)}
-                              {'labelSuffix' in field
-                                ? ` (${field.labelSuffix})`
-                                : ''}
+                        {!agents.find(
+                          (a) => a.id === cfg.agentId && a.available,
+                        ) ? (
+                          <div className="agent-install-guide">
+                            <p className="hint agent-install-path-hint">
+                              {t('settings.agentInstall.pathHint')}
+                            </p>
+                            <ol className="agent-install-steps">
+                              <li>{t('settings.agentInstall.stepOpenLinks')}</li>
+                              <li>{t('settings.agentInstall.stepAuth')}</li>
+                              <li>{t('settings.agentInstall.stepRescan')}</li>
+                              <li>{t('settings.agentInstall.stepSelect')}</li>
+                            </ol>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                    {(() => {
+                      const selected = agents.find(
+                        (a) => a.id === cfg.agentId && a.available,
+                      );
+                      if (!selected) return null;
+                      const hasModels =
+                        Array.isArray(selected.models) && selected.models.length > 0;
+                      const choice = cfg.agentModels?.[selected.id] ?? {};
+                      const knownModelIds = selected.models?.map((m) => m.id) ?? [];
+                      const configuredModel =
+                        typeof choice.model === 'string' && choice.model
+                          ? choice.model
+                          : null;
+                      const modelValue =
+                        selected.id === 'amr' &&
+                          configuredModel &&
+                          !knownModelIds.includes(configuredModel)
+                          ? selected.models?.[0]?.id ?? ''
+                          : configuredModel ?? selected.models?.[0]?.id ?? '';
+                      return (
+                        <details className="agent-cli-env settings-memory-advanced">
+                          <summary className="agent-cli-env-summary">
+                            <span className="agent-cli-env-summary-title">
+                              {t('settings.memoryModelInlineLabel')}
                             </span>
-                            <input
-                              type={
-                                'secret' in field && field.secret
-                                  ? 'password'
-                                  : 'text'
-                              }
-                              value={
-                                cfg.agentCliEnv?.[field.agentId]?.[
-                                  field.envKey
-                                ] ?? ''
-                              }
-                              placeholder={field.placeholder}
-                              spellCheck={false}
-                              autoComplete="off"
-                              onChange={(e) =>
-                                setCfg((c) =>
-                                  updateAgentCliEnvValue(
-                                    c,
-                                    field.agentId,
-                                    field.envKey,
-                                    e.target.value,
-                                  ),
-                                )
+                          </summary>
+                          <div className="agent-cli-env-body">
+                            <MemoryModelInline
+                              mode="daemon"
+                              apiProtocol={apiProtocol}
+                              chatApiKey={cfg.apiKey}
+                              chatBaseUrl={cfg.baseUrl}
+                              chatApiVersion={cfg.apiVersion ?? ''}
+                              chatModel={modelValue}
+                              cliAgentId={selected.id}
+                              cliModelOptions={
+                                hasModels ? selected.models!.map((m) => m.id) : []
                               }
                             />
-                          </label>
-                        ))}
+                          </div>
+                        </details>
+                      );
+                    })()}
+                    {(() => {
+                      /*
+                        Per-agent CLI environment overrides — proxy URLs, custom
+                        config dirs, and a binary path override. The previous
+                        layout listed every supported agent's variables in one
+                        long always-expanded block; for users on Claude Code
+                        the Codex fields were just visual filler (and vice
+                        versa), and the section hijacked Settings real estate
+                        on every open even though nine in ten users never
+                        touch it. Now: filtered to the *currently selected*
+                        agent only, and folded into a collapsed disclosure
+                        that opens to "Advanced: proxy & custom paths" — power
+                        users who route through LiteLLM or installed the
+                        binary out-of-PATH still have one click access; new
+                        users no longer wonder "are these fields I forgot to
+                        fill in?".
+                      */
+                      const cliEnvFields = AGENT_CLI_ENV_FIELDS.filter(
+                        (field) => field.agentId === cfg.agentId,
+                      );
+                      if (cliEnvFields.length === 0) return null;
+                      return (
+                        <details
+                          className="agent-cli-env"
+                          data-testid="settings-cli-env"
+                        >
+                          <summary className="agent-cli-env-summary">
+                            <span className="agent-cli-env-summary-title">
+                              {t('settings.cliEnvTitle')}
+                            </span>
+                          </summary>
+                          <div className="agent-cli-env-body">
+                            <p className="hint">{t('settings.cliEnvHint')}</p>
+                            <div className="agent-cli-env-grid">
+                              {cliEnvFields.map((field) => (
+                                <label
+                                  className="field"
+                                  key={`${field.agentId}:${field.envKey}`}
+                                >
+                                  <span className="field-label">
+                                    {t(field.labelKey)}
+                                    {'labelSuffix' in field
+                                      ? ` (${field.labelSuffix})`
+                                      : ''}
+                                  </span>
+                                  <input
+                                    type={
+                                      'secret' in field && field.secret
+                                        ? 'password'
+                                        : 'text'
+                                    }
+                                    value={
+                                      cfg.agentCliEnv?.[field.agentId]?.[
+                                      field.envKey
+                                      ] ?? ''
+                                    }
+                                    placeholder={field.placeholder}
+                                    spellCheck={false}
+                                    autoComplete="off"
+                                    onChange={(e) =>
+                                      setCfg((c) =>
+                                        updateAgentCliEnvValue(
+                                          c,
+                                          field.agentId,
+                                          field.envKey,
+                                          e.target.value,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        </details>
+                      );
+                    })()}
+                  </section>
+                ) : (
+                  /*
+                    BYOK panel — wrap the per-protocol form in a bordered card so
+                    the chips above (Anthropic / OpenAI / Azure / Gemini / Ollama)
+                    visually own the content below. Without the card, the chip
+                    row and the form looked like two unrelated stripes; users
+                    had no anchor for "this is what I configured for the active
+                    tab", and switching tabs felt like the whole right column
+                    just reshuffled. The card lives on the same white-with-soft-
+                    border pattern as `.agent-model-row` so the two BYOK / CLI
+                    panels feel like the same family.
+                  */
+                  <section className="settings-section settings-section-card settings-section-byok">
+                    <div className="section-head">
+                      <div>
+                        <div className="settings-byok-title">
+                          <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
+                          <span className="settings-byok-info-wrap">
+                            <button
+                              type="button"
+                              className="settings-byok-info-button"
+                              aria-label={t('settings.byokNoFileToolsNotice')}
+                              aria-describedby="settings-byok-no-file-tools-tooltip"
+                              data-testid="settings-byok-no-file-tools-trigger"
+                            >
+                              <Icon name="info" size={13} />
+                            </button>
+                            <span
+                              id="settings-byok-no-file-tools-tooltip"
+                              className="settings-byok-info-tooltip"
+                              role="tooltip"
+                              data-testid="settings-byok-no-file-tools-notice"
+                            >
+                              {t('settings.byokNoFileToolsNotice')}
+                            </span>
+                          </span>
+                        </div>
                       </div>
+                      <ByokConnectionTestControl
+                        baseUrlValid={baseUrlValid}
+                        canRunConnectionTest={
+                          !byokFirstPartyBaseUrl?.hostTypo &&
+                          canRunProviderConnectionTest(cfg, {
+                            requiresApiKey: byokRequiresApiKey,
+                          })
+                        }
+                        labels={{
+                          readyToTest: t('settings.byokReadyToTest'),
+                          test: t('settings.test'),
+                          testRetry: t('settings.testRetry'),
+                          testRunning: t('settings.testRunning'),
+                          testTitle: t('settings.testTitle'),
+                        }}
+                        providerTestState={providerTestState}
+                        renderTestMessage={(result) => renderTestMessage(result, 'api')}
+                        suppressResultStatus={
+                          providerTestBaseUrlInvalid || providerTestApiKeyAuthFailed
+                        }
+                        suppressReadyState={Boolean(
+                          byokPreconditionNotice ||
+                          apiKeyFieldAuthFailed ||
+                          providerTestBaseUrlInvalid ||
+                          byokBlockingDraftIssues.length > 0,
+                        )}
+                        onTestProvider={() => handleTestProvider()}
+                      />
                     </div>
-                  </details>
-                );
-              })()}
-            </section>
-          ) : (
-            /*
-              BYOK panel — wrap the per-protocol form in a bordered card so
-              the chips above (Anthropic / OpenAI / Azure / Gemini / Ollama)
-              visually own the content below. Without the card, the chip
-              row and the form looked like two unrelated stripes; users
-              had no anchor for "this is what I configured for the active
-              tab", and switching tabs felt like the whole right column
-              just reshuffled. The card lives on the same white-with-soft-
-              border pattern as `.agent-model-row` so the two BYOK / CLI
-              panels feel like the same family.
-            */
-            <section className="settings-section settings-section-card settings-section-byok">
-              <div className="section-head">
-                <div>
-                  <div className="settings-byok-title">
-                    <h3>{API_PROTOCOL_LABELS[apiProtocol]}</h3>
-                    <span className="settings-byok-info-wrap">
-                      <button
-                        type="button"
-                        className="settings-byok-info-button"
-                        aria-label={t('settings.byokNoFileToolsNotice')}
-                        aria-describedby="settings-byok-no-file-tools-tooltip"
-                        data-testid="settings-byok-no-file-tools-trigger"
+                    {byokPreconditionNotice && !byokPreconditionNotice.field ? (
+                      <p
+                        className="settings-test-status error"
+                        role="alert"
+                        aria-live="polite"
+                        data-action={byokPreconditionNotice.action}
                       >
-                        <Icon name="info" size={13} />
-                      </button>
-                      <span
-                        id="settings-byok-no-file-tools-tooltip"
-                        className="settings-byok-info-tooltip"
-                        role="tooltip"
-                        data-testid="settings-byok-no-file-tools-notice"
-                      >
-                        {t('settings.byokNoFileToolsNotice')}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-                <ByokConnectionTestControl
-                  baseUrlValid={baseUrlValid}
-                  canRunConnectionTest={
-                    !byokFirstPartyBaseUrl?.hostTypo &&
-                    canRunProviderConnectionTest(cfg, {
-                      requiresApiKey: byokRequiresApiKey,
-                    })
-                  }
-                  labels={{
-                    readyToTest: t('settings.byokReadyToTest'),
-                    test: t('settings.test'),
-                    testRetry: t('settings.testRetry'),
-                    testRunning: t('settings.testRunning'),
-                    testTitle: t('settings.testTitle'),
-                  }}
-                  providerTestState={providerTestState}
-                  renderTestMessage={(result) => renderTestMessage(result, 'api')}
-                  suppressResultStatus={
-                    providerTestBaseUrlInvalid || providerTestApiKeyAuthFailed
-                  }
-                  suppressReadyState={Boolean(
-                    byokPreconditionNotice ||
-                      apiKeyFieldAuthFailed ||
-                      providerTestBaseUrlInvalid ||
-                      byokBlockingDraftIssues.length > 0,
-                  )}
-                  onTestProvider={() => handleTestProvider()}
-                />
-              </div>
-              {byokPreconditionNotice && !byokPreconditionNotice.field ? (
-                <p
-                  className="settings-test-status error"
-                  role="alert"
-                  aria-live="polite"
-                  data-action={byokPreconditionNotice.action}
-                >
-                  {byokPreconditionNotice.message}
-                </p>
-              ) : null}
-              {showProviderPreset ? (
-                <ByokProviderPicker
-                  label={t('settings.providerPreset')}
-                  customProviderLabel={t('settings.customProvider')}
-                  providers={protocolProviders}
-                  selectedProviderIndex={selectedProviderIndex}
-                  onCustomProviderSelect={() => {
-                    setApiModelCustomEditing(false);
-                    updateApiConfig({
-                      baseUrl: '',
-                      model: '',
-                      apiProviderBaseUrl: null,
-                    });
-                  }}
-                  onProviderSelect={(p) => {
-                    setApiModelCustomEditing(false);
-                    updateApiConfig({
-                      baseUrl: p.baseUrl,
-                      model: p.model,
-                      apiProviderBaseUrl: p.baseUrl,
-                    });
-                  }}
-                />
-              ) : null}
-              <ByokKeyField
-                apiKey={cfg.apiKey}
-                apiKeyConsoleLink={apiKeyConsoleLink}
-                apiProtocol={apiProtocol}
-                inputRef={apiKeyInputRef}
-                labels={{
-                  apiHint: t('settings.apiHint'),
-                  apiKey: t('settings.apiKey'),
-                  apiKeyCleaned: t('settings.apiKeyCleaned'),
-                  apiKeyGetLink: t('settings.apiKeyGetLink', {
-                    host: apiKeyConsoleLink.host,
-                  }),
-                  apiKeyInvalid: t('settings.apiKeyInvalid'),
-                  hide: t('settings.hide'),
-                  hideKey: t('settings.hideKey'),
-                  required: t('settings.required'),
-                  show: t('settings.show'),
-                  showKey: t('settings.showKey'),
-                }}
-                requiresApiKey={byokRequiresApiKey}
-                showApiKeyInvalid={Boolean(
-                  apiKeyFieldAuthFailed ||
-                    byokPreconditionNotice?.field === 'api_key' ||
-                    apiKeyDraftInvalid,
-                )}
-                showApiKey={showApiKey}
-                onBlur={onByokKeyCommit}
-                onChange={(value) => updateApiConfig({ apiKey: value })}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'api_key',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.apiKey?.trim()),
-                    });
-                  }
-                }}
-                onToggleShowApiKey={() => setShowApiKey((v) => !v)}
-              />
-              {showBaseUrlField ? (
-                <ByokProviderBaseUrl
-                  apiProtocol={apiProtocol}
-                  inputRef={baseUrlInputRef}
-                  baseUrl={cfg.baseUrl}
-                  baseUrlError={baseUrlErrorMessage}
-                  baseUrlInvalid={Boolean(baseUrlErrorMessage)}
-                  baseUrlPlaceholder={baseUrlPlaceholder}
-                  baseUrlReadOnly={baseUrlReadOnly}
-                  labels={{
-                    baseUrl: t('settings.baseUrl'),
-                    required: t('settings.required'),
-                    customize: t('settings.baseUrlCustomize'),
-                    invalid: t('settings.baseUrlInvalid'),
-                    defaultHint: t('settings.baseUrlDefaultHint'),
-                    azureHint: t('settings.azureBaseUrlHint'),
-                  }}
-                  onBlur={commitProviderModelsInputs}
-                  onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
-                  onCustomize={() => {
-                    updateApiConfig({ apiProviderBaseUrl: null });
-                    window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
-                  }}
-                  onFocus={() => {
-                    const byokProviderId = byokProtocolToTracking(apiProtocol);
-                    if (byokProviderId) {
-                      trackSettingsByokFieldClick(analytics.track, {
-                        page_name: 'settings',
-                        area: 'configure_execution_mode_byok',
-                        element: 'base_url',
-                        provider_id: byokProviderId,
-                        has_value: Boolean(cfg.baseUrl?.trim()),
-                      });
-                    }
-                  }}
-                />
-              ) : null}
-              <label className="field">
-                <span className="field-label">{t('settings.maxTokens')}</span>
-                <input
-                  type="number"
-                  min={MIN_MAX_TOKENS}
-                  max={MAX_MAX_TOKENS}
-                  step={1}
-                  placeholder={String(modelMaxTokensDefault(cfg.model))}
-                  value={maxTokensInput}
-                  onChange={(e) => updateMaxTokensInput(e.target.value)}
-                  onBlur={() => setMaxTokensInput(cfg.maxTokens == null ? '' : String(cfg.maxTokens))}
-                />
-                <p className="hint">{t('settings.maxTokensHint')}</p>
-              </label>
-              <ByokModelField
-                customActive={apiModelCustomActive}
-                customInputRef={customModelInputRef}
-                labels={{
-                  customModel: t('settings.modelCustom'),
-                  customModelLabel: apiProtocol === 'azure'
-                    ? t('settings.azureCustomDeploymentName')
-                    : t('settings.modelCustomLabel'),
-                  customModelPlaceholder: apiProtocol === 'azure'
-                    ? 'e.g. gpt-4o-production'
-                    : t('settings.modelCustomPlaceholder'),
-                  fetchModelsUnsupported: t('settings.fetchModelsUnsupported'),
-                  model: apiProtocol === 'azure'
-                    ? t('settings.azureDeploymentModel')
-                    : t('settings.model'),
-                  required: t('settings.required'),
-                  searchPlaceholder: t('designs.searchPlaceholder'),
-                  suggestedModelsHint: t('settings.suggestedModelsHint'),
-                }}
-                model={cfg.model}
-                modelSelectRef={modelSelectRef}
-                models={apiModelOptions.map((m) => ({
-                  id: m.id,
-                  label: apiModelOptionLabel(
-                    m,
-                    !hidesAccountModelSourceLabel(apiProtocol) &&
-                    loadedAccountModelCount > 0
-                      ? fetchedApiModelIds.has(m.id)
-                        ? t('settings.modelSourceAccount')
-                        : t('settings.modelSourceSuggested')
-                      : undefined,
-                  ),
-                }))}
-                modelsLoadedFromAccountMessage={
-                  loadedAccountModelCount > 0
-                    ? t(
-                        hidesAccountModelSourceLabel(apiProtocol)
-                          ? 'settings.modelsLoadedCount'
-                          : 'settings.modelsLoadedFromAccount',
-                        { count: loadedAccountModelCount },
-                      )
-                    : null
-                }
-                providerModelsFailureMessage={providerModelsFailureMessage}
-                showAzureModelFetchHint={apiProtocol === 'azure'}
-                showFetchModelsUnsupportedHint={apiProtocol === 'ollama'}
-                showSuggestedModelsHint={apiProtocol !== 'azure' && !selectedProvider}
-                azureModelFetchHint={t('settings.azureModelFetchHint')}
-                onCustomModelChange={(value) => updateApiConfig({ model: value })}
-                onCustomModelSelect={() => {
-                  apiModelUserSelectedRef.current = true;
-                  setApiModelCustomEditing(true);
-                  updateApiConfig({ model: '' });
-                }}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'model',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.model?.trim()),
-                    });
-                  }
-                }}
-                onModelSelect={(nextValue) => {
-                  apiModelUserSelectedRef.current = true;
-                  setApiModelCustomEditing(false);
-                  updateApiConfig({ model: nextValue });
-                }}
-              />
-              <details className="agent-cli-env settings-memory-advanced">
-                <summary className="agent-cli-env-summary">
-                  <span className="agent-cli-env-summary-title">
-                    {t('settings.memoryModelInlineLabel')}
-                  </span>
-                  <span className="settings-memory-summary-value">
-                    {cfg.model.trim()
-                      ? t('settings.memoryModelInlineSameAsChatWithModel', {
-                          model: cfg.model.trim(),
-                        })
-                      : t('settings.memoryModelInlineSameAsChat')}
-                  </span>
-                </summary>
-                <div className="agent-cli-env-body">
-                  <MemoryModelInline
-                    mode="api"
-                    apiProtocol={apiProtocol}
-                    chatApiKey={cfg.apiKey}
-                    chatBaseUrl={cfg.baseUrl}
-                    chatApiVersion={cfg.apiVersion ?? ''}
-                    chatModel={cfg.model}
-                    apiModelOptions={apiModelOptions}
-                  />
-                </div>
-              </details>
-              {apiProtocol === 'azure' ? (
-                <label className="field">
-                  <span className="field-label">{t('settings.apiVersion')}</span>
-                  <input
-                    type="text"
-                    value={cfg.apiVersion ?? ''}
-                    placeholder="2024-10-21"
-                    onBlur={commitProviderModelsInputs}
-                    onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
-                  />
-                </label>
-              ) : null}
-              {apiProtocol === 'senseaudio' || apiProtocol === 'aihubmix' ? (
-                <label className="field">
-                  <span className="field-label">{t('settings.byokImageModel')}</span>
-                  <SearchableModelSelect
-                    className="inline-switcher__select settings-model-select settings-model-select--byok"
-                    aria-label={t('settings.byokImageModel')}
-                    searchPlaceholder={t('designs.searchPlaceholder')}
-                    popoverClassName="settings-byok-select-popover"
-                    minSearchableOptions={Number.POSITIVE_INFINITY}
-                    // Live catalogue from the shared hook: AIHubMix's image
-                    // models for aihubmix, the static SenseAudio registry
-                    // otherwise. The default-empty option (first entry) resolves
-                    // to the registry default on the daemon side.
-                    models={[
-                      {
-                        id: '',
-                        label: byokImageModelOptions[0]?.label
-                          ? `${byokImageModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
-                          : t('settings.byokModelDefaultOption'),
-                      },
-                      ...byokImageModelOptions.map((m) => ({ id: m.id, label: m.label })),
-                    ]}
-                    value={cfg.byokImageModel ?? ''}
-                    onChange={(value) =>
-                      updateApiConfig({ byokImageModel: value })
-                    }
-                  />
-                </label>
-              ) : null}
-              {apiProtocol === 'aihubmix' ? (
-                <label className="field">
-                  <span className="field-label">{t('settings.byokVideoModel')}</span>
-                  <select
-                    value={cfg.byokVideoModel ?? ''}
-                    onChange={(e) =>
-                      updateApiConfig({ byokVideoModel: e.target.value })
-                    }
-                  >
-                    {/* Empty resolves to the default video model on the daemon
+                        {byokPreconditionNotice.message}
+                      </p>
+                    ) : null}
+                    {showProviderPreset ? (
+                      <ByokProviderPicker
+                        label={t('settings.providerPreset')}
+                        customProviderLabel={t('settings.customProvider')}
+                        providers={protocolProviders}
+                        selectedProviderIndex={selectedProviderIndex}
+                        onCustomProviderSelect={() => {
+                          setApiModelCustomEditing(false);
+                          updateApiConfig({
+                            baseUrl: '',
+                            model: '',
+                            apiProviderBaseUrl: null,
+                          });
+                        }}
+                        onProviderSelect={(p) => {
+                          setApiModelCustomEditing(false);
+                          updateApiConfig({
+                            baseUrl: p.baseUrl,
+                            model: p.model,
+                            apiProviderBaseUrl: p.baseUrl,
+                          });
+                        }}
+                      />
+                    ) : null}
+                    <ByokKeyField
+                      apiKey={cfg.apiKey}
+                      apiKeyConsoleLink={apiKeyConsoleLink}
+                      apiProtocol={apiProtocol}
+                      inputRef={apiKeyInputRef}
+                      labels={{
+                        apiHint: t('settings.apiHint'),
+                        apiKey: t('settings.apiKey'),
+                        apiKeyCleaned: t('settings.apiKeyCleaned'),
+                        apiKeyGetLink: t('settings.apiKeyGetLink', {
+                          host: apiKeyConsoleLink.host,
+                        }),
+                        apiKeyInvalid: t('settings.apiKeyInvalid'),
+                        hide: t('settings.hide'),
+                        hideKey: t('settings.hideKey'),
+                        required: t('settings.required'),
+                        show: t('settings.show'),
+                        showKey: t('settings.showKey'),
+                      }}
+                      requiresApiKey={byokRequiresApiKey}
+                      showApiKeyInvalid={Boolean(
+                        apiKeyFieldAuthFailed ||
+                        byokPreconditionNotice?.field === 'api_key' ||
+                        apiKeyDraftInvalid,
+                      )}
+                      showApiKey={showApiKey}
+                      onBlur={onByokKeyCommit}
+                      onChange={(value) => updateApiConfig({ apiKey: value })}
+                      onFocus={() => {
+                        const byokProviderId = byokProtocolToTracking(apiProtocol);
+                        if (byokProviderId) {
+                          trackSettingsByokFieldClick(analytics.track, {
+                            page_name: 'settings',
+                            area: 'configure_execution_mode_byok',
+                            element: 'api_key',
+                            provider_id: byokProviderId,
+                            has_value: Boolean(cfg.apiKey?.trim()),
+                          });
+                        }
+                      }}
+                      onToggleShowApiKey={() => setShowApiKey((v) => !v)}
+                    />
+                    {showBaseUrlField ? (
+                      <ByokProviderBaseUrl
+                        apiProtocol={apiProtocol}
+                        inputRef={baseUrlInputRef}
+                        baseUrl={cfg.baseUrl}
+                        baseUrlError={baseUrlErrorMessage}
+                        baseUrlInvalid={Boolean(baseUrlErrorMessage)}
+                        baseUrlPlaceholder={baseUrlPlaceholder}
+                        baseUrlReadOnly={baseUrlReadOnly}
+                        labels={{
+                          baseUrl: t('settings.baseUrl'),
+                          required: t('settings.required'),
+                          customize: t('settings.baseUrlCustomize'),
+                          invalid: t('settings.baseUrlInvalid'),
+                          defaultHint: t('settings.baseUrlDefaultHint'),
+                          azureHint: t('settings.azureBaseUrlHint'),
+                        }}
+                        onBlur={commitProviderModelsInputs}
+                        onChange={(value) => updateApiConfig({ baseUrl: value, apiProviderBaseUrl: null })}
+                        onCustomize={() => {
+                          updateApiConfig({ apiProviderBaseUrl: null });
+                          window.setTimeout(() => baseUrlInputRef.current?.focus(), 0);
+                        }}
+                        onFocus={() => {
+                          const byokProviderId = byokProtocolToTracking(apiProtocol);
+                          if (byokProviderId) {
+                            trackSettingsByokFieldClick(analytics.track, {
+                              page_name: 'settings',
+                              area: 'configure_execution_mode_byok',
+                              element: 'base_url',
+                              provider_id: byokProviderId,
+                              has_value: Boolean(cfg.baseUrl?.trim()),
+                            });
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <label className="field">
+                      <span className="field-label">{t('settings.maxTokens')}</span>
+                      <input
+                        type="number"
+                        min={MIN_MAX_TOKENS}
+                        max={MAX_MAX_TOKENS}
+                        step={1}
+                        placeholder={String(modelMaxTokensDefault(cfg.model))}
+                        value={maxTokensInput}
+                        onChange={(e) => updateMaxTokensInput(e.target.value)}
+                        onBlur={() => setMaxTokensInput(cfg.maxTokens == null ? '' : String(cfg.maxTokens))}
+                      />
+                      <p className="hint">{t('settings.maxTokensHint')}</p>
+                    </label>
+                    <ByokModelField
+                      customActive={apiModelCustomActive}
+                      customInputRef={customModelInputRef}
+                      labels={{
+                        customModel: t('settings.modelCustom'),
+                        customModelLabel: apiProtocol === 'azure'
+                          ? t('settings.azureCustomDeploymentName')
+                          : t('settings.modelCustomLabel'),
+                        customModelPlaceholder: apiProtocol === 'azure'
+                          ? 'e.g. gpt-4o-production'
+                          : t('settings.modelCustomPlaceholder'),
+                        fetchModelsUnsupported: t('settings.fetchModelsUnsupported'),
+                        model: apiProtocol === 'azure'
+                          ? t('settings.azureDeploymentModel')
+                          : t('settings.model'),
+                        required: t('settings.required'),
+                        searchPlaceholder: t('designs.searchPlaceholder'),
+                        suggestedModelsHint: t('settings.suggestedModelsHint'),
+                      }}
+                      model={cfg.model}
+                      modelSelectRef={modelSelectRef}
+                      models={apiModelOptions.map((m) => ({
+                        id: m.id,
+                        label: apiModelOptionLabel(
+                          m,
+                          !hidesAccountModelSourceLabel(apiProtocol) &&
+                            loadedAccountModelCount > 0
+                            ? fetchedApiModelIds.has(m.id)
+                              ? t('settings.modelSourceAccount')
+                              : t('settings.modelSourceSuggested')
+                            : undefined,
+                        ),
+                      }))}
+                      modelsLoadedFromAccountMessage={
+                        loadedAccountModelCount > 0
+                          ? t(
+                            hidesAccountModelSourceLabel(apiProtocol)
+                              ? 'settings.modelsLoadedCount'
+                              : 'settings.modelsLoadedFromAccount',
+                            { count: loadedAccountModelCount },
+                          )
+                          : null
+                      }
+                      providerModelsFailureMessage={providerModelsFailureMessage}
+                      showAzureModelFetchHint={apiProtocol === 'azure'}
+                      showFetchModelsUnsupportedHint={apiProtocol === 'ollama'}
+                      showSuggestedModelsHint={apiProtocol !== 'azure' && !selectedProvider}
+                      azureModelFetchHint={t('settings.azureModelFetchHint')}
+                      onCustomModelChange={(value) => updateApiConfig({ model: value })}
+                      onCustomModelSelect={() => {
+                        apiModelUserSelectedRef.current = true;
+                        setApiModelCustomEditing(true);
+                        updateApiConfig({ model: '' });
+                      }}
+                      onFocus={() => {
+                        const byokProviderId = byokProtocolToTracking(apiProtocol);
+                        if (byokProviderId) {
+                          trackSettingsByokFieldClick(analytics.track, {
+                            page_name: 'settings',
+                            area: 'configure_execution_mode_byok',
+                            element: 'model',
+                            provider_id: byokProviderId,
+                            has_value: Boolean(cfg.model?.trim()),
+                          });
+                        }
+                      }}
+                      onModelSelect={(nextValue) => {
+                        apiModelUserSelectedRef.current = true;
+                        setApiModelCustomEditing(false);
+                        updateApiConfig({ model: nextValue });
+                      }}
+                    />
+                    <details className="agent-cli-env settings-memory-advanced">
+                      <summary className="agent-cli-env-summary">
+                        <span className="agent-cli-env-summary-title">
+                          {t('settings.memoryModelInlineLabel')}
+                        </span>
+                        <span className="settings-memory-summary-value">
+                          {cfg.model.trim()
+                            ? t('settings.memoryModelInlineSameAsChatWithModel', {
+                              model: cfg.model.trim(),
+                            })
+                            : t('settings.memoryModelInlineSameAsChat')}
+                        </span>
+                      </summary>
+                      <div className="agent-cli-env-body">
+                        <MemoryModelInline
+                          mode="api"
+                          apiProtocol={apiProtocol}
+                          chatApiKey={cfg.apiKey}
+                          chatBaseUrl={cfg.baseUrl}
+                          chatApiVersion={cfg.apiVersion ?? ''}
+                          chatModel={cfg.model}
+                          apiModelOptions={apiModelOptions}
+                        />
+                      </div>
+                    </details>
+                    {apiProtocol === 'azure' ? (
+                      <label className="field">
+                        <span className="field-label">{t('settings.apiVersion')}</span>
+                        <input
+                          type="text"
+                          value={cfg.apiVersion ?? ''}
+                          placeholder="2024-10-21"
+                          onBlur={commitProviderModelsInputs}
+                          onChange={(e) => updateApiConfig({ apiVersion: e.target.value.trim() })}
+                        />
+                      </label>
+                    ) : null}
+                    {apiProtocol === 'senseaudio' || apiProtocol === 'aihubmix' ? (
+                      <label className="field">
+                        <span className="field-label">{t('settings.byokImageModel')}</span>
+                        <SearchableModelSelect
+                          className="inline-switcher__select settings-model-select settings-model-select--byok"
+                          aria-label={t('settings.byokImageModel')}
+                          searchPlaceholder={t('designs.searchPlaceholder')}
+                          popoverClassName="settings-byok-select-popover"
+                          minSearchableOptions={Number.POSITIVE_INFINITY}
+                          // Live catalogue from the shared hook: AIHubMix's image
+                          // models for aihubmix, the static SenseAudio registry
+                          // otherwise. The default-empty option (first entry) resolves
+                          // to the registry default on the daemon side.
+                          models={[
+                            {
+                              id: '',
+                              label: byokImageModelOptions[0]?.label
+                                ? `${byokImageModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
+                                : t('settings.byokModelDefaultOption'),
+                            },
+                            ...byokImageModelOptions.map((m) => ({ id: m.id, label: m.label })),
+                          ]}
+                          value={cfg.byokImageModel ?? ''}
+                          onChange={(value) =>
+                            updateApiConfig({ byokImageModel: value })
+                          }
+                        />
+                      </label>
+                    ) : null}
+                    {apiProtocol === 'aihubmix' ? (
+                      <label className="field">
+                        <span className="field-label">{t('settings.byokVideoModel')}</span>
+                        <select
+                          value={cfg.byokVideoModel ?? ''}
+                          onChange={(e) =>
+                            updateApiConfig({ byokVideoModel: e.target.value })
+                          }
+                        >
+                          {/* Empty resolves to the default video model on the daemon
                         side. The LLM can still override per-call via the tool's
                         `model` arg. */}
-                    <option value="">
-                      {byokVideoModelOptions[0]?.label
-                        ? `${byokVideoModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
-                        : t('settings.byokModelDefaultOption')}
-                    </option>
-                    {byokVideoModelOptions.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {apiProtocol === 'aihubmix' ? (
-                <label className="field">
-                  <span className="field-label">{t('settings.byokSpeechModel')}</span>
-                  <select
-                    value={cfg.byokSpeechModel ?? ''}
-                    onChange={(e) => updateApiConfig({ byokSpeechModel: e.target.value })}
-                  >
-                    <option value="">
-                      {byokSpeechModelOptions[0]?.label
-                        ? `${byokSpeechModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
-                        : t('settings.byokModelDefaultOption')}
-                    </option>
-                    {byokSpeechModelOptions.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {apiProtocol === 'aihubmix' ? (
-                <label className="field">
-                  <span className="field-label">{t('settings.byokSpeechVoice')}</span>
-                  <select
-                    value={cfg.byokSpeechVoice ?? ''}
-                    onChange={(e) => updateApiConfig({ byokSpeechVoice: e.target.value })}
-                  >
-                    <option value="">alloy (default)</option>
-                    {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map((v) => (
-                      <option key={v} value={v}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-            </section>
-          )}
-            </>
-          ) : null}
+                          <option value="">
+                            {byokVideoModelOptions[0]?.label
+                              ? `${byokVideoModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
+                              : t('settings.byokModelDefaultOption')}
+                          </option>
+                          {byokVideoModelOptions.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {apiProtocol === 'aihubmix' ? (
+                      <label className="field">
+                        <span className="field-label">{t('settings.byokSpeechModel')}</span>
+                        <select
+                          value={cfg.byokSpeechModel ?? ''}
+                          onChange={(e) => updateApiConfig({ byokSpeechModel: e.target.value })}
+                        >
+                          <option value="">
+                            {byokSpeechModelOptions[0]?.label
+                              ? `${byokSpeechModelOptions[0].label} (${t('settings.byokModelDefaultOption')})`
+                              : t('settings.byokModelDefaultOption')}
+                          </option>
+                          {byokSpeechModelOptions.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                    {apiProtocol === 'aihubmix' ? (
+                      <label className="field">
+                        <span className="field-label">{t('settings.byokSpeechVoice')}</span>
+                        <select
+                          value={cfg.byokSpeechVoice ?? ''}
+                          onChange={(e) => updateApiConfig({ byokSpeechVoice: e.target.value })}
+                        >
+                          <option value="">alloy (default)</option>
+                          {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map((v) => (
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </section>
+                )}
+              </>
+            ) : null}
 
-          {activeSection === 'media' ? (
-            <MediaProvidersSection
-              cfg={cfg}
-              setCfg={setCfg}
-              mediaProvidersNotice={mediaProvidersNotice}
-              onReloadMediaProviders={onReloadMediaProviders}
-              pendingLocalProviderIds={pendingMediaProviderEditIds}
-              onChange={(providerId) => {
-                mediaProvidersChangeVersionRef.current += 1;
-                setPendingMediaProviderEditIds((current) => {
-                  if (current.has(providerId)) return current;
-                  const next = new Set(current);
-                  next.add(providerId);
-                  return next;
-                });
-              }}
-            />
-          ) : null}
-          {activeSection === 'integrations' ? <IntegrationsSection /> : null}
+            {activeSection === 'media' ? (
+              <MediaProvidersSection
+                cfg={cfg}
+                setCfg={setCfg}
+                mediaProvidersNotice={mediaProvidersNotice}
+                onReloadMediaProviders={onReloadMediaProviders}
+                pendingLocalProviderIds={pendingMediaProviderEditIds}
+                onChange={(providerId) => {
+                  mediaProvidersChangeVersionRef.current += 1;
+                  setPendingMediaProviderEditIds((current) => {
+                    if (current.has(providerId)) return current;
+                    const next = new Set(current);
+                    next.add(providerId);
+                    return next;
+                  });
+                }}
+              />
+            ) : null}
+            {activeSection === 'integrations' ? <IntegrationsSection /> : null}
 
-          {activeSection === 'mcpClient' ? <McpClientSection /> : null}
+            {activeSection === 'mcpClient' ? <McpClientSection /> : null}
 
-          {activeSection === 'composio' ? (
-            <ConnectorSection
-              cfg={cfg}
-              setCfg={setCfg}
-              composioConfigLoading={composioConfigLoading}
-              onPersistComposioKey={onPersistComposioKey}
-              onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
-                trackSettingsConnectorAuthResult(analytics.track, {
-                  page_name: 'settings',
-                  area: 'connectors',
-                  connector_id: connectorId,
-                  action,
-                  result,
-                  ...(errorCode ? { error_code: errorCode } : {}),
-                })
-              }
-            />
-          ) : null}
+            {activeSection === 'composio' ? (
+              <ConnectorSection
+                cfg={cfg}
+                setCfg={setCfg}
+                composioConfigLoading={composioConfigLoading}
+                onPersistComposioKey={onPersistComposioKey}
+                onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
+                  trackSettingsConnectorAuthResult(analytics.track, {
+                    page_name: 'settings',
+                    area: 'connectors',
+                    connector_id: connectorId,
+                    action,
+                    result,
+                    ...(errorCode ? { error_code: errorCode } : {}),
+                  })
+                }
+              />
+            ) : null}
 
-          {activeSection === 'routines' ? <RoutinesSection onClose={onClose} /> : null}
+            {activeSection === 'routines' ? <RoutinesSection onClose={onClose} /> : null}
 
-          {activeSection === 'orbit' ? (
-            <OrbitSection
-              cfg={cfg}
-              setCfg={setCfg}
-              composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
-              daemonMediaProviders={daemonMediaProviders}
-              daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
-              onOpenComposioSection={() => setActiveSection('composio')}
-              onLeaveForOrbitProject={(runConfig) => {
-                // Persist any in-flight Orbit edits (toggle / time) before
-                // navigating away so they aren't silently lost. The autosave
-                // loop is best-effort; this synchronous flush guarantees the
-                // run-config landed on the daemon before we tear the dialog
-                // down. Closing the dialog drops the user on the
-                // /projects/orbit view where the agent run streams in.
-                void onPersist(runConfig);
-                onClose();
-              }}
-            />
-          ) : null}
+            {activeSection === 'orbit' ? (
+              <OrbitSection
+                cfg={cfg}
+                setCfg={setCfg}
+                composioApiKeyConfigured={Boolean(cfg.composio?.apiKeyConfigured)}
+                daemonMediaProviders={daemonMediaProviders}
+                daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+                onOpenComposioSection={() => setActiveSection('composio')}
+                onLeaveForOrbitProject={(runConfig) => {
+                  // Persist any in-flight Orbit edits (toggle / time) before
+                  // navigating away so they aren't silently lost. The autosave
+                  // loop is best-effort; this synchronous flush guarantees the
+                  // run-config landed on the daemon before we tear the dialog
+                  // down. Closing the dialog drops the user on the
+                  // /projects/orbit view where the agent run streams in.
+                  void onPersist(runConfig);
+                  onClose();
+                }}
+              />
+            ) : null}
 
-          {activeSection === 'language' ? (
-          <section className="settings-section">
-            <div className="settings-language-grid" role="radiogroup" aria-label={t('settings.language')}>
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    className={`settings-language-tile${active ? ' active' : ''}`}
-                    onClick={() => {
-                      // P1 ui_click area=language — record the locale id
-                      // that was picked, regardless of whether it differs
-                      // from the current one (user clicked = signal).
-                      trackSettingsLanguageClick(analytics.track, {
-                        page_name: 'settings',
-                        area: 'language',
-                        element: code,
-                      });
-                      setLocale(code as Locale);
-                    }}
-                  >
-                    <span className="settings-language-tile-text">
-                      <span className="settings-language-tile-title">
-                        {LOCALE_LABEL[code]}
-                      </span>
-                      <span className="settings-language-tile-code">
-                        {code}
-                      </span>
-                    </span>
-                    {active ? <Icon name="check" size={16} /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-          ) : null}
-
-          {activeSection === 'appearance' ? (
-            <AppearanceSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
-
-          {activeSection === 'critiqueTheater' ? (
-            <CritiqueTheaterSection />
-          ) : null}
-
-          {activeSection === 'notifications' ? (
-            <NotificationsSection cfg={cfg} setCfg={setCfg} />
-          ) : null}
-
-          {activeSection === 'pet' ? (
-            <PetSettings cfg={cfg} setCfg={setCfg} />
-          ) : null}
-
-          {activeSection === 'skills' ? (
-            <SkillsSection
-              cfg={cfg}
-              setCfg={setCfg}
-              onSkillsRefresh={onSkillsRefresh}
-              onSkillsChanged={onSkillsChanged}
-            />
-          ) : null}
-
-          {activeSection === 'designSystems' ? (
-            <DesignSystemsSection
-              cfg={cfg}
-              setCfg={setCfg}
-              onDesignSystemsChanged={onDesignSystemsChanged}
-              onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
-            />
-          ) : null}
-
-          {activeSection === 'projectLocations' ? (
-            <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
-          ) : null}
-
-          {activeSection === 'instructions' ? (
-            <section className="settings-section settings-section-card instructions-rules-section">
-              <div className="memory-field-block instructions-rules-card">
-                <div className="memory-block-head">
-                  <div>
-                    <h4>{t('settings.customInstructionsTitle')}</h4>
-                    <p className="hint">
-                      {t('settings.customInstructionsDesc')}
-                    </p>
-                  </div>
+            {activeSection === 'language' ? (
+              <section className="settings-section">
+                <div className="settings-language-grid" role="radiogroup" aria-label={t('settings.language')}>
+                  {LOCALES.map((code) => {
+                    const active = locale === code;
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        className={`settings-language-tile${active ? ' active' : ''}`}
+                        onClick={() => {
+                          // P1 ui_click area=language — record the locale id
+                          // that was picked, regardless of whether it differs
+                          // from the current one (user clicked = signal).
+                          trackSettingsLanguageClick(analytics.track, {
+                            page_name: 'settings',
+                            area: 'language',
+                            element: code,
+                          });
+                          setLocale(code as Locale);
+                        }}
+                      >
+                        <span className="settings-language-tile-text">
+                          <span className="settings-language-tile-title">
+                            {LOCALE_LABEL[code]}
+                          </span>
+                          <span className="settings-language-tile-code">
+                            {code}
+                          </span>
+                        </span>
+                        {active ? <Icon name="check" size={16} /> : null}
+                      </button>
+                    );
+                  })}
                 </div>
-                <textarea
-                  className="custom-instructions-input memory-global-rules-input instructions-rules-input"
-                  rows={5}
-                  maxLength={5000}
-                  placeholder={t('settings.customInstructionsPlaceholder')}
-                  value={cfg.customInstructions ?? ''}
-                  onChange={(event) =>
-                    setCfg({
-                      ...cfg,
-                      customInstructions: event.target.value || undefined,
-                    })
-                  }
-                />
-              </div>
-            </section>
-          ) : null}
+              </section>
+            ) : null}
 
-          {activeSection === 'memory' ? (
-            <MemorySection
-              onOpenConnectors={() => setActiveSection('composio')}
-              chatAgentId={cfg.mode === 'daemon' ? cfg.agentId ?? null : null}
-              chatModel={selectedMemoryChatModel}
-            />
-          ) : null}
+            {activeSection === 'appearance' ? (
+              <AppearanceSection cfg={cfg} setCfg={setCfg} />
+            ) : null}
 
-          {activeSection === 'privacy' ? (
-            <PrivacySection cfg={cfg} setCfg={setCfg} />
-          ) : null}
+            {activeSection === 'critiqueTheater' ? (
+              <CritiqueTheaterSection />
+            ) : null}
 
-          {activeSection === 'github' ? (
-            <GitHubSettingsSection
-              githubAuth={githubAuth}
-              githubAuthLoading={githubAuthLoading}
-              onRefreshGitHubAuth={onRefreshGitHubAuth}
-            />
-          ) : null}
+            {activeSection === 'notifications' ? (
+              <NotificationsSection cfg={cfg} setCfg={setCfg} />
+            ) : null}
 
-          {activeSection === 'about' ? (
-            <section className="settings-section">
-              {appVersionInfo ? (
-                <dl className="settings-about-list">
-                  <div className="settings-about-version-row">
-                    <div className="settings-about-version-left">
-                      <dt>{t('settings.appVersion')}</dt>
-                      <span className="settings-about-version-num">{appVersionInfo.version}</span>
+            {activeSection === 'pet' ? (
+              <PetSettings cfg={cfg} setCfg={setCfg} />
+            ) : null}
+
+            {activeSection === 'skills' ? (
+              <SkillsSection
+                cfg={cfg}
+                setCfg={setCfg}
+                onSkillsRefresh={onSkillsRefresh}
+                onSkillsChanged={onSkillsChanged}
+              />
+            ) : null}
+
+            {activeSection === 'designSystems' ? (
+              <DesignSystemsSection
+                cfg={cfg}
+                setCfg={setCfg}
+                onDesignSystemsChanged={onDesignSystemsChanged}
+                onDesignSystemImportRebuildJob={onDesignSystemImportRebuildJob}
+              />
+            ) : null}
+
+            {activeSection === 'projectLocations' ? (
+              <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
+            ) : null}
+
+            {activeSection === 'instructions' ? (
+              <section className="settings-section settings-section-card instructions-rules-section">
+                <div className="memory-field-block instructions-rules-card">
+                  <div className="memory-block-head">
+                    <div>
+                      <h4>{t('settings.customInstructionsTitle')}</h4>
+                      <p className="hint">
+                        {t('settings.customInstructionsDesc')}
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      className="settings-about-download-link"
-                      disabled={versionChecking}
-                      onClick={handleInstallLatest}
-                    >
-                      {versionChecking ? t('common.loading') : t('settings.installLatest')}
-                    </button>
                   </div>
-                  <div>
-                    <dt>{t('settings.appChannel')}</dt>
-                    <dd>{appVersionInfo.channel}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appRuntime')}</dt>
-                    <dd>
-                      {appVersionInfo.packaged
-                        ? t('settings.runtimePackaged')
-                        : t('settings.runtimeDevelopment')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appPlatform')}</dt>
-                    <dd>{appVersionInfo.platform}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.appArchitecture')}</dt>
-                    <dd>{appVersionInfo.arch}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <div className="empty-card">{t('settings.versionUnavailable')}</div>
-              )}
-              <div className="settings-about-diagnostics">
-                <div className="settings-about-diagnostics-text">
-                  <h4>{t('diagnostics.exportTitle')}</h4>
-                  <p className="hint">{t('diagnostics.exportHint')}</p>
+                  <textarea
+                    className="custom-instructions-input memory-global-rules-input instructions-rules-input"
+                    rows={5}
+                    maxLength={5000}
+                    placeholder={t('settings.customInstructionsPlaceholder')}
+                    value={cfg.customInstructions ?? ''}
+                    onChange={(event) =>
+                      setCfg({
+                        ...cfg,
+                        customInstructions: event.target.value || undefined,
+                      })
+                    }
+                  />
                 </div>
-                <ExportDiagnosticsRow />
-              </div>
-            </section>
-          ) : null}
-          {aboutToast ? (
-            <Toast
-              message={aboutToast}
-              onDismiss={() => setAboutToast(null)}
-            />
-          ) : null}
+              </section>
+            ) : null}
+
+            {activeSection === 'memory' ? (
+              <MemorySection
+                onOpenConnectors={() => setActiveSection('composio')}
+                chatAgentId={cfg.mode === 'daemon' ? cfg.agentId ?? null : null}
+                chatModel={selectedMemoryChatModel}
+              />
+            ) : null}
+
+            {activeSection === 'privacy' ? (
+              <PrivacySection cfg={cfg} setCfg={setCfg} />
+            ) : null}
+
+            {activeSection === 'github' ? (
+              <GitHubSettingsSection
+                githubAuth={githubAuth}
+                githubAuthLoading={githubAuthLoading}
+                onRefreshGitHubAuth={onRefreshGitHubAuth}
+              />
+            ) : null}
+
+            {activeSection === 'about' ? (
+              <section className="settings-section">
+                {appVersionInfo ? (
+                  <dl className="settings-about-list">
+                    <div className="settings-about-version-row">
+                      <div className="settings-about-version-left">
+                        <dt>{t('settings.appVersion')}</dt>
+                        <span className="settings-about-version-num">{appVersionInfo.version}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="settings-about-download-link"
+                        disabled={versionChecking}
+                        onClick={handleInstallLatest}
+                      >
+                        {versionChecking ? t('common.loading') : t('settings.installLatest')}
+                      </button>
+                    </div>
+                    <div>
+                      <dt>{t('settings.appChannel')}</dt>
+                      <dd>{appVersionInfo.channel}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('settings.appRuntime')}</dt>
+                      <dd>
+                        {appVersionInfo.packaged
+                          ? t('settings.runtimePackaged')
+                          : t('settings.runtimeDevelopment')}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('settings.appPlatform')}</dt>
+                      <dd>{appVersionInfo.platform}</dd>
+                    </div>
+                    <div>
+                      <dt>{t('settings.appArchitecture')}</dt>
+                      <dd>{appVersionInfo.arch}</dd>
+                    </div>
+                  </dl>
+                ) : (
+                  <div className="empty-card">{t('settings.versionUnavailable')}</div>
+                )}
+                <div className="settings-about-diagnostics">
+                  <div className="settings-about-diagnostics-text">
+                    <h4>{t('diagnostics.exportTitle')}</h4>
+                    <p className="hint">{t('diagnostics.exportHint')}</p>
+                  </div>
+                  <ExportDiagnosticsRow />
+                </div>
+              </section>
+            ) : null}
+            {aboutToast ? (
+              <Toast
+                message={aboutToast}
+                onDismiss={() => setAboutToast(null)}
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -5390,9 +5390,9 @@ function OrbitSection({
   // than exact proportion at low counts.
   const total = lastRun
     ? Math.max(
-        lastRun.connectorsSucceeded + lastRun.connectorsSkipped + lastRun.connectorsFailed,
-        1,
-      )
+      lastRun.connectorsSucceeded + lastRun.connectorsSkipped + lastRun.connectorsFailed,
+      1,
+    )
     : 1;
   const segPct = (n: number) => {
     if (!lastRun || n <= 0) return 0;
@@ -5659,8 +5659,8 @@ function OrbitSection({
                 "Run time") — a single short label. */}
             <span className="orbit-automation-title">{t('settings.orbit.templateTitle')}</span>
             {orbitTemplates &&
-            effectiveTemplateSkillId &&
-            !orbitTemplates.some((s) => s.id === effectiveTemplateSkillId) ? (
+              effectiveTemplateSkillId &&
+              !orbitTemplates.some((s) => s.id === effectiveTemplateSkillId) ? (
               // The saved skill id is no longer installed — surface a
               // soft warning right under the title, with an inline Reset
               // action that pushes back to DEFAULT_ORBIT (currently
@@ -5679,7 +5679,7 @@ function OrbitSection({
                     : t('settings.orbit.templateMissingPickAnother')}
                 </span>
                 {DEFAULT_ORBIT.templateSkillId &&
-                effectiveTemplateSkillId !== DEFAULT_ORBIT.templateSkillId ? (
+                  effectiveTemplateSkillId !== DEFAULT_ORBIT.templateSkillId ? (
                   <button
                     type="button"
                     className="orbit-automation-sub-action"
@@ -5692,8 +5692,8 @@ function OrbitSection({
                       controlsLocked
                         ? t('settings.orbit.controlsLockedHint')
                         : t('settings.orbit.templateResetTitle', {
-                            id: DEFAULT_ORBIT.templateSkillId,
-                          })
+                          id: DEFAULT_ORBIT.templateSkillId,
+                        })
                     }
                   >
                     {t('settings.orbit.templateReset')}
@@ -5741,8 +5741,8 @@ function OrbitSection({
                       inline warning above offers the explicit Reset
                       action. */}
                   {orbitTemplates &&
-                  effectiveTemplateSkillId &&
-                  !orbitTemplates.some((s) => s.id === effectiveTemplateSkillId) ? (
+                    effectiveTemplateSkillId &&
+                    !orbitTemplates.some((s) => s.id === effectiveTemplateSkillId) ? (
                     <option value={effectiveTemplateSkillId} hidden>
                       {t('settings.orbit.templateMissingOption', {
                         id: effectiveTemplateSkillId,
@@ -6098,9 +6098,8 @@ function MediaProvidersSection({
         <div className="media-provider-reload-row">
           <button
             type="button"
-            className={`ghost media-provider-reload-btn${
-              reloadNotice?.kind === 'success' ? ' is-success-flash' : ''
-            }`}
+            className={`ghost media-provider-reload-btn${reloadNotice?.kind === 'success' ? ' is-success-flash' : ''
+              }`}
             onClick={() => {
               trackSettingsMediaProvidersClick(analytics.track, {
                 page_name: 'settings',
@@ -6212,9 +6211,9 @@ function MediaProvidersSection({
                     aria-pressed={apiKeyVisible}
                     onClick={() => toggleApiKeyVisibility(provider.id)}
                   >
-                      <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
-                    </button>
-                  </div>
+                    <Icon name={apiKeyVisible ? 'eye' : 'eye-off'} size={15} />
+                  </button>
+                </div>
                 <input
                   value={entry.baseUrl}
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
@@ -6791,193 +6790,193 @@ function IntegrationsSection() {
             className="ds-picker"
             ref={pickerRef}
           >
-          <button
-            type="button"
-            className={`ds-picker-trigger${pickerOpen ? ' open' : ''}`}
-            onClick={() => setPickerOpen((v) => !v)}
-            aria-haspopup="listbox"
-            aria-expanded={pickerOpen}
-          >
-            <span className="ds-picker-meta">
-              <span className="ds-picker-title">{client.label}</span>
-              <span className="ds-picker-sub">
-                {info ? client.buildMethod(info) : ''}
-              </span>
-            </span>
-            <Icon
-              name="chevron-down"
-              size={14}
-              className="ds-picker-chevron"
-              style={{ transform: pickerOpen ? 'rotate(180deg)' : undefined }}
-            />
-          </button>
-          {pickerOpen ? (
-            <div className="ds-picker-popover" role="listbox">
-              <div className="ds-picker-list">
-                {MCP_CLIENTS.map((c) => {
-                  const active = c.id === clientId;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      role="option"
-                      aria-selected={active}
-                      className={`ds-picker-item${active ? ' active' : ''}`}
-                      onClick={() => {
-                        setClientId(c.id);
-                        setPickerOpen(false);
-                      }}
-                    >
-                      <span className="ds-picker-item-text">
-                        <span className="ds-picker-item-title">{c.label}</span>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: 'var(--text-muted)',
-                          }}
-                        >
-                          {info ? c.buildMethod(info) : ''}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {info ? (
-          <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
-        ) : null}
-
-        {client.id === 'codex' ? <CodexInstallToggle /> : null}
-
-        {client.buildDeeplink && info ? (
-          <div style={{ marginBottom: 12 }}>
             <button
               type="button"
-              className="primary"
-              onClick={() => {
-                // Use a hidden anchor so the cursor:// scheme is
-                // handled the same way as a normal link click; some
-                // browsers block window.location assignments to
-                // unknown schemes from button handlers.
-                const url = client.buildDeeplink!(info);
-                const a = document.createElement('a');
-                a.href = url;
-                a.rel = 'noopener noreferrer';
-                a.click();
-              }}
-              disabled={!info.cliExists || !info.nodeExists}
-              style={{ padding: '6px 14px', fontSize: 13 }}
+              className={`ds-picker-trigger${pickerOpen ? ' open' : ''}`}
+              onClick={() => setPickerOpen((v) => !v)}
+              aria-haspopup="listbox"
+              aria-expanded={pickerOpen}
             >
-              <Icon name="link" size={14} />
-              <span style={{ marginLeft: 6 }}>{client.deeplinkLabel ? client.deeplinkLabel() : ''}</span>
+              <span className="ds-picker-meta">
+                <span className="ds-picker-title">{client.label}</span>
+                <span className="ds-picker-sub">
+                  {info ? client.buildMethod(info) : ''}
+                </span>
+              </span>
+              <Icon
+                name="chevron-down"
+                size={14}
+                className="ds-picker-chevron"
+                style={{ transform: pickerOpen ? 'rotate(180deg)' : undefined }}
+              />
             </button>
-            <span
-              style={{
-                marginLeft: 10,
-                fontSize: 12,
-                color: 'var(--fg-2, #9aa0a6)',
-              }}
-            >
-              {t('settings.mcpCursorApproval')}
-            </span>
+            {pickerOpen ? (
+              <div className="ds-picker-popover" role="listbox">
+                <div className="ds-picker-list">
+                  {MCP_CLIENTS.map((c) => {
+                    const active = c.id === clientId;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="option"
+                        aria-selected={active}
+                        className={`ds-picker-item${active ? ' active' : ''}`}
+                        onClick={() => {
+                          setClientId(c.id);
+                          setPickerOpen(false);
+                        }}
+                      >
+                        <span className="ds-picker-item-text">
+                          <span className="ds-picker-item-title">{c.label}</span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            {info ? c.buildMethod(info) : ''}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
 
-        <div style={{ position: 'relative' }}>
-          <pre
-            style={{
-              background: 'var(--surface-2, #11141a)',
-              color: 'var(--fg-1, #e6e6e6)',
-              // Reserve top clearance for the absolutely-positioned
-              // Copy button so the first line of the snippet does not
-              // sit underneath it, and reserve right clearance so a
-              // wrapped bash one-liner stops short of the button rather
-              // than scrolling behind it. The right padding is sized
-              // for the wider "Copied" post-click state (icon + text +
-              // button padding + the 8px right offset) with a few px
-              // of buffer for elevated font sizes / zoom. Issue #632.
-              padding: '40px 104px 12px 14px',
-              borderRadius: 8,
-              overflowX: 'auto',
-              fontFamily:
-                'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-              fontSize: 12,
-              lineHeight: 1.55,
-              margin: 0,
-              userSelect: 'text',
-              whiteSpace: snippetLang === 'bash' ? 'pre-wrap' : 'pre',
-              wordBreak: snippetLang === 'bash' ? 'break-all' : 'normal',
-              minHeight: 60,
-            }}
-            data-lang={snippetLang}
-          >
-            <code>
-              {snippet ||
-                (infoError
-                  ? t('settings.mcpResolvingFailed')
-                  : t('settings.mcpLoadingPaths'))}
-            </code>
-          </pre>
-          <button
-            type="button"
-            className="ghost mcp-copy-btn"
-            onClick={onCopy}
-            disabled={!snippet}
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              padding: '4px 10px',
-              fontSize: 12,
-            }}
-            aria-label={t('settings.mcpCopyAria')}
-          >
-            <Icon name={copied ? 'check' : 'copy'} size={14} />
-            <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
-          </button>
-        </div>
+          {info ? (
+            <p style={{ margin: 0 }}>{client.buildInstruction(info)}</p>
+          ) : null}
 
-        {/* "Build the daemon first" lives here — next to the code
+          {client.id === 'codex' ? <CodexInstallToggle /> : null}
+
+          {client.buildDeeplink && info ? (
+            <div style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  // Use a hidden anchor so the cursor:// scheme is
+                  // handled the same way as a normal link click; some
+                  // browsers block window.location assignments to
+                  // unknown schemes from button handlers.
+                  const url = client.buildDeeplink!(info);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.rel = 'noopener noreferrer';
+                  a.click();
+                }}
+                disabled={!info.cliExists || !info.nodeExists}
+                style={{ padding: '6px 14px', fontSize: 13 }}
+              >
+                <Icon name="link" size={14} />
+                <span style={{ marginLeft: 6 }}>{client.deeplinkLabel ? client.deeplinkLabel() : ''}</span>
+              </button>
+              <span
+                style={{
+                  marginLeft: 10,
+                  fontSize: 12,
+                  color: 'var(--fg-2, #9aa0a6)',
+                }}
+              >
+                {t('settings.mcpCursorApproval')}
+              </span>
+            </div>
+          ) : null}
+
+          <div style={{ position: 'relative' }}>
+            <pre
+              style={{
+                background: 'var(--surface-2, #11141a)',
+                color: 'var(--fg-1, #e6e6e6)',
+                // Reserve top clearance for the absolutely-positioned
+                // Copy button so the first line of the snippet does not
+                // sit underneath it, and reserve right clearance so a
+                // wrapped bash one-liner stops short of the button rather
+                // than scrolling behind it. The right padding is sized
+                // for the wider "Copied" post-click state (icon + text +
+                // button padding + the 8px right offset) with a few px
+                // of buffer for elevated font sizes / zoom. Issue #632.
+                padding: '40px 104px 12px 14px',
+                borderRadius: 8,
+                overflowX: 'auto',
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                fontSize: 12,
+                lineHeight: 1.55,
+                margin: 0,
+                userSelect: 'text',
+                whiteSpace: snippetLang === 'bash' ? 'pre-wrap' : 'pre',
+                wordBreak: snippetLang === 'bash' ? 'break-all' : 'normal',
+                minHeight: 60,
+              }}
+              data-lang={snippetLang}
+            >
+              <code>
+                {snippet ||
+                  (infoError
+                    ? t('settings.mcpResolvingFailed')
+                    : t('settings.mcpLoadingPaths'))}
+              </code>
+            </pre>
+            <button
+              type="button"
+              className="ghost mcp-copy-btn"
+              onClick={onCopy}
+              disabled={!snippet}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                padding: '4px 10px',
+                fontSize: 12,
+              }}
+              aria-label={t('settings.mcpCopyAria')}
+            >
+              <Icon name={copied ? 'check' : 'copy'} size={14} />
+              <span style={{ marginLeft: 6 }}>{copied ? t('settings.mcpCopied') : t('settings.mcpCopy')}</span>
+            </button>
+          </div>
+
+          {/* "Build the daemon first" lives here — next to the code
             block it explains — rather than at the top of the section
             before the user has seen anything. A dev-mode pre-condition
             warning at the very top reads as "something is broken"
             before the user has even picked their client. */}
-        {info && (!info.cliExists || !info.nodeExists) ? (
-          <div
-            className="empty-card"
-            style={{ borderLeft: '3px solid var(--warning-fg, #fbbf24)' }}
-          >
-            <strong>
-              {!info.cliExists
-                ? t('settings.mcpBuildDaemon')
-                : t('settings.mcpNodeMissing')}
-            </strong>{' '}
-            {info.buildHint ?? t('settings.mcpBuildHint')}
-          </div>
-        ) : null}
+          {info && (!info.cliExists || !info.nodeExists) ? (
+            <div
+              className="empty-card"
+              style={{ borderLeft: '3px solid var(--warning-fg, #fbbf24)' }}
+            >
+              <strong>
+                {!info.cliExists
+                  ? t('settings.mcpBuildDaemon')
+                  : t('settings.mcpNodeMissing')}
+              </strong>{' '}
+              {info.buildHint ?? t('settings.mcpBuildHint')}
+            </div>
+          ) : null}
 
-        {/* Restart note is a "next step" after running the command,
+          {/* Restart note is a "next step" after running the command,
             not an error — keep it right after the code block. */}
-        <div
-          style={{
-            padding: '10px 12px',
-            background: 'var(--bg-subtle)',
-            border: '1px solid var(--border)',
-            borderLeft: '3px solid var(--border-strong)',
-            borderRadius: 6,
-            fontSize: 13,
-            lineHeight: 1.5,
-          }}
-        >
-          <strong>{t('settings.mcpRestartNote')}</strong>{' '}
-          <span style={{ color: 'var(--text-muted)' }}>
-            {t('settings.mcpRestartDetail')}
-          </span>
-        </div>
+          <div
+            style={{
+              padding: '10px 12px',
+              background: 'var(--bg-subtle)',
+              border: '1px solid var(--border)',
+              borderLeft: '3px solid var(--border-strong)',
+              borderRadius: 6,
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            <strong>{t('settings.mcpRestartNote')}</strong>{' '}
+            <span style={{ color: 'var(--text-muted)' }}>
+              {t('settings.mcpRestartDetail')}
+            </span>
+          </div>
 
           <p className="mcp-running-note">
             {t('settings.mcpRunningNote')}
@@ -7431,6 +7430,7 @@ export function GitHubSettingsSection({
   githubAuthLoading?: boolean;
   onRefreshGitHubAuth?: () => void;
 }) {
+  const { t } = useI18n();
   const [deviceFlowState, setDeviceFlowState] = useState<'idle' | 'starting' | 'pending' | 'error'>('idle');
   const [deviceCodeData, setDeviceCodeData] = useState<{ user_code: string; verification_uri: string; device_code: string; expires_in: number; interval: number } | null>(null);
   const [deviceFlowError, setDeviceFlowError] = useState<string | null>(null);
@@ -7441,6 +7441,17 @@ export function GitHubSettingsSection({
 
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
+  const [codeCopied, setCodeCopied] = useState(false);
+  const codeCopyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (codeCopyTimerRef.current !== null) {
+        window.clearTimeout(codeCopyTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleStartDeviceFlow = async () => {
     setDeviceFlowState('starting');
     setDeviceFlowError(null);
@@ -7449,7 +7460,7 @@ export function GitHubSettingsSection({
       setDeviceCodeData(data);
       setDeviceFlowState('pending');
     } catch (err) {
-      setDeviceFlowError('Failed to start GitHub login. Please check your network connection.');
+      setDeviceFlowError(t('settings.githubNetworkError'));
       setDeviceFlowState('error');
     }
   };
@@ -7473,7 +7484,7 @@ export function GitHubSettingsSection({
       try {
         const resp = await pollGitHubDeviceFlow(deviceCodeData.device_code);
         if (cancelled) return;
-        
+
         if ('connected' in resp && resp.connected) {
           setDeviceFlowState('idle');
           setDeviceCodeData(null);
@@ -7482,19 +7493,19 @@ export function GitHubSettingsSection({
         } else if ('pending' in resp && resp.pending) {
           if (resp.error) {
             if (resp.error === 'expired_token') {
-              setDeviceFlowError('The login code has expired. Please try again.');
+              setDeviceFlowError(t('settings.githubExpired'));
               setDeviceFlowState('error');
               setDeviceCodeData(null);
               return;
             } else if (resp.error === 'slow_down') {
               currentIntervalSeconds += 5;
             } else if (resp.error === 'access_denied') {
-              setDeviceFlowError('Authorization was cancelled or denied.');
+              setDeviceFlowError(t('settings.githubDenied'));
               setDeviceFlowState('error');
               setDeviceCodeData(null);
               return;
             } else {
-              setDeviceFlowError(`Login error: ${resp.error}`);
+              setDeviceFlowError(t('settings.githubLoginError').replace('{error}', resp.error));
               setDeviceFlowState('error');
               setDeviceCodeData(null);
               return;
@@ -7505,7 +7516,7 @@ export function GitHubSettingsSection({
         }
       } catch (err) {
         if (cancelled) return;
-        setDeviceFlowError('Error verifying login status.');
+        setDeviceFlowError(t('settings.githubVerifyError'));
         setDeviceFlowState('error');
         setDeviceCodeData(null);
       }
@@ -7517,7 +7528,7 @@ export function GitHubSettingsSection({
     const expiresInMs = deviceCodeData.expires_in * 1000;
     expirationTimeoutId = window.setTimeout(() => {
       if (cancelled) return;
-      setDeviceFlowError('The login code has expired. Please try again.');
+      setDeviceFlowError(t('settings.githubExpired'));
       setDeviceFlowState('error');
       setDeviceCodeData(null);
       if (pollTimeoutId) window.clearTimeout(pollTimeoutId);
@@ -7540,10 +7551,10 @@ export function GitHubSettingsSection({
         setGithubPatInput('');
         onRefreshGitHubAuth?.();
       } else {
-        setGithubPatError('Failed to connect. Please check your Personal Access Token.');
+        setGithubPatError(t('settings.githubPatError'));
       }
     } catch (err) {
-      setGithubPatError('Failed to connect to GitHub. Please check your network connection.');
+      setGithubPatError(t('settings.githubNetworkError'));
     } finally {
       setGithubPatLoading(false);
     }
@@ -7563,118 +7574,125 @@ export function GitHubSettingsSection({
 
   return (
     <section className="settings-section">
-      <header className="settings-header">
-        <h2>GitHub Integration</h2>
-        <p>Connect your GitHub account to enable importing private repositories and syncing design systems.</p>
-      </header>
-      <div className="settings-group">
-        <div className="settings-field">
-          {githubAuthLoading ? (
-            <div style={{ padding: '16px 0' }}>Loading GitHub status...</div>
-          ) : githubAuth?.connected ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {githubAuth.avatarUrl ? (
-                  <img src={githubAuth.avatarUrl} alt={githubAuth.username} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="github" size={24} />
-                  </div>
-                )}
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <strong style={{ fontSize: 16 }}>@{githubAuth.username}</strong>
-                  <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Connected</span>
+      <div className="section-head">
+        <div>
+          <h3>{t('settings.githubIntegrationTitle')}</h3>
+          <p className="hint">{t('settings.githubIntegrationHint')}</p>
+        </div>
+      </div>
+      <div className="field">
+        {githubAuthLoading ? (
+          <div className="empty-card" style={{ padding: '16px 0' }}>{t('settings.githubLoading')}</div>
+        ) : githubAuth?.connected ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {githubAuth.avatarUrl ? (
+                <img src={githubAuth.avatarUrl} alt={githubAuth.username} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="github" size={24} />
                 </div>
-              </div>
-              <div>
-                <Button variant="ghost" disabled={isDisconnecting} onClick={handleDisconnectGitHub}>
-                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect Account'}
-                </Button>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <strong style={{ fontSize: 16 }}>@{githubAuth.username}</strong>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{t('settings.githubConnected')}</span>
               </div>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 500 }}>
-              {deviceFlowState === 'pending' && deviceCodeData ? (
-                <div style={{ padding: '16px', background: 'var(--bg-3)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <h4 style={{ margin: 0 }}>Authorize Open Design</h4>
-                  <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
-                    Please enter the code below on GitHub to complete the connection.
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ padding: '8px 16px', background: 'var(--bg-2)', borderRadius: '4px', fontFamily: 'monospace', fontSize: 20, fontWeight: 'bold', letterSpacing: '2px' }}>
-                      {deviceCodeData.user_code}
-                    </div>
-                    <Button
-                      variant="default"
-                      onClick={() => {
-                        navigator.clipboard.writeText(deviceCodeData.user_code);
-                      }}
-                    >
-                      Copy Code
-                    </Button>
+            <div>
+              <Button variant="ghost" disabled={isDisconnecting} onClick={handleDisconnectGitHub}>
+                {isDisconnecting ? t('settings.githubDisconnecting') : t('settings.githubDisconnect')}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 500 }}>
+            {deviceFlowState === 'pending' && deviceCodeData ? (
+              <div style={{ padding: '16px', background: 'var(--bg-3)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <h4 style={{ margin: 0 }}>{t('settings.githubAuthorizeTitle')}</h4>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
+                  {t('settings.githubAuthorizeHint')}
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ padding: '8px 16px', background: 'var(--bg-2)', borderRadius: '4px', fontFamily: 'monospace', fontSize: 20, fontWeight: 'bold', letterSpacing: '2px' }}>
+                    {deviceCodeData.user_code}
                   </div>
-                  <div style={{ marginTop: 8 }}>
-                    <Button
-                      variant="primary"
-                      onClick={() => {
-                        window.open(deviceCodeData.verification_uri, '_blank');
-                      }}
-                    >
-                      Open GitHub to Authorize
-                    </Button>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                    Waiting for authorization...
-                  </div>
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      navigator.clipboard.writeText(deviceCodeData.user_code).then(() => {
+                        setCodeCopied(true);
+                        if (codeCopyTimerRef.current !== null) window.clearTimeout(codeCopyTimerRef.current);
+                        codeCopyTimerRef.current = window.setTimeout(() => setCodeCopied(false), 2000);
+                      }).catch(() => { });
+                    }}
+                  >
+                    <Icon name={codeCopied ? 'check' : 'copy'} size={14} style={{ marginRight: 6 }} />
+                    {codeCopied ? t('settings.mcpCopied') : t('settings.githubCopyCode')}
+                  </Button>
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ marginTop: 8 }}>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      window.open(deviceCodeData.verification_uri, '_blank');
+                    }}
+                  >
+                    {t('settings.githubOpenAuthorize')}
+                  </Button>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  {t('settings.githubWaitingAuth')}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
                   <Button
                     variant="primary"
                     onClick={handleStartDeviceFlow}
                     disabled={deviceFlowState === 'starting'}
                   >
-                    {deviceFlowState === 'starting' ? 'Starting...' : 'Connect with GitHub'}
+                    {deviceFlowState === 'starting' ? t('settings.githubStarting') : t('settings.githubMenuLabel')}
                   </Button>
-                  {deviceFlowError && (
-                    <div style={{ color: 'var(--error)', fontSize: 13 }}>{deviceFlowError}</div>
-                  )}
                 </div>
-              )}
+                {deviceFlowError && (
+                  <div style={{ color: 'var(--error)', fontSize: 13 }}>{deviceFlowError}</div>
+                )}
+              </div>
+            )}
 
-              <details style={{ background: 'var(--bg-3)', borderRadius: '8px', padding: '12px' }}>
-                <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
-                  Alternative: Use Personal Access Token
-                </summary>
-                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
-                    If you prefer, you can use a classic Personal Access Token with <code>repo</code> scope.
-                  </p>
-                  <input
-                    type="password"
-                    placeholder="ghp_xxxxxxxxxxxx"
-                    value={githubPatInput}
-                    onChange={(e) => setGithubPatInput(e.target.value)}
-                    className="settings-input"
-                    disabled={githubPatLoading}
-                  />
-                  {githubPatError && (
-                    <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 4 }}>{githubPatError}</div>
-                  )}
-                  <div>
-                    <Button 
-                      variant="subtle" 
-                      onClick={handleConnectGitHubPat} 
-                      disabled={!githubPatInput.trim() || githubPatLoading}
-                    >
-                      {githubPatLoading ? 'Connecting...' : 'Connect PAT'}
-                    </Button>
-                  </div>
+            <details style={{ background: 'var(--bg-3)', borderRadius: '8px', padding: '12px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+                {t('settings.githubAltPatTitle')}
+              </summary>
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
+                  {t('settings.githubAltPatHint')}
+                </p>
+                <input
+                  type="password"
+                  placeholder={t('settings.githubPatPlaceholder')}
+                  value={githubPatInput}
+                  onChange={(e) => setGithubPatInput(e.target.value)}
+                  className="settings-input"
+                  disabled={githubPatLoading}
+                />
+                {githubPatError && (
+                  <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 4 }}>{githubPatError}</div>
+                )}
+                <div>
+                  <Button
+                    variant="subtle"
+                    onClick={handleConnectGitHubPat}
+                    disabled={!githubPatInput.trim() || githubPatLoading}
+                  >
+                    {githubPatLoading ? t('settings.githubConnecting') : t('settings.githubConnect')}
+                  </Button>
                 </div>
-              </details>
-            </div>
-          )}
-        </div>
+              </div>
+            </details>
+          </div>
+        )}
       </div>
     </section>
   );

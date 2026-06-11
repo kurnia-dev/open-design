@@ -577,10 +577,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>
               placeholder="Commit message (Cmd+Enter to commit)..."
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
-              disabled={committing || files.length === 0}
+              disabled={committing || files.length === 0 || !githubAuth?.connected}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
+                  if (!githubAuth?.connected) return;
                   void handleCommit();
                 }
               }}
@@ -590,7 +591,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                 type="button"
                 className={`${styles.generateBtn} od-tooltip`}
                 onClick={handleGenerateCommitMsg}
-                disabled={committing || generating || stagedFiles.length === 0}
+                disabled={committing || generating || stagedFiles.length === 0 || !githubAuth?.connected}
                 data-tooltip="Generate commit message using AI"
                 data-tooltip-placement="bottom"
               >
@@ -602,7 +603,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             type="button"
             className={styles.commitBtn}
             onClick={handleCommit}
-            disabled={committing || !commitMsg.trim() || files.length === 0}
+            disabled={committing || !commitMsg.trim() || files.length === 0 || !githubAuth?.connected}
           >
             {committing ? <Spinner size={13} /> : 'Commit'}
           </button>

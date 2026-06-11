@@ -3379,8 +3379,25 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return sendApiError(res, 400, 'BAD_REQUEST', 'commit message is required');
       }
 
+      const githubAuth = await getGitHubToken(ctx.paths.RUNTIME_DATA_DIR);
+      if (!githubAuth) {
+        return sendApiError(res, 401, 'UNAUTHORIZED', 'GitHub connection required to commit');
+      }
+      const authorName = githubAuth.username || 'Open Design User';
+      const authorEmail = githubAuth.username ? `${githubAuth.username}@users.noreply.github.com` : 'user@example.com';
+
       const runGit = (args: string[]) => new Promise((resolve, reject) => {
-        const child = spawn('git', args, { cwd: dir, stdio: 'ignore' });
+        const child = spawn('git', args, { 
+          cwd: dir, 
+          stdio: 'ignore',
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: authorName,
+            GIT_AUTHOR_EMAIL: authorEmail,
+            GIT_COMMITTER_NAME: authorName,
+            GIT_COMMITTER_EMAIL: authorEmail
+          }
+        });
         child.on('close', (code) => code === 0 ? resolve(undefined) : reject(new Error(`git ${args.join(' ')} failed with code ${code}`)));
         child.on('error', reject);
       });

@@ -194,7 +194,35 @@
   color: var(--red);
   font-size: 12px;
   border-radius: var(--radius-sm);
-  word-break: break-all;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.errorContent {
+  flex: 1;
+  word-break: break-word;
+  margin-top: 1px;
+}
+
+.errorCloseBtn {
+  background: none;
+  border: none;
+  padding: 2px;
+  margin: -2px;
+  color: color-mix(in srgb, var(--red) 70%, transparent);
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.errorCloseBtn:hover {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 15%, transparent);
 }
 
 .listScroll {

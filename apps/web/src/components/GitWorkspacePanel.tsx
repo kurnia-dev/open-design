@@ -531,7 +531,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           </button>
         </div>
 
-        {error ? <div className={styles.errorBox}>{error}</div> : null}
+        {error ? (
+          <div className={styles.errorBox}>
+            <div className={styles.errorContent}>{error}</div>
+            <button
+              type="button"
+              className={styles.errorCloseBtn}
+              onClick={() => setError(null)}
+              aria-label={t('common.close')}
+            >
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        ) : null}
 
         {/* File lists */}
         <div className={styles.listScroll}>

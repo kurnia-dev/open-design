@@ -1,23 +1,23 @@
-import { useEffect, useState, useRef } from 'react';
-import { Icon } from './Icon';
-import { Spinner } from './Loading';
+import type { GitHubAuthStatusResponse, GitStatusFile } from '@open-design/contracts';
+import { useEffect, useState } from 'react';
+import { useT } from '../i18n';
+import { streamMessage } from '../providers/anthropic';
 import {
-  fetchProjectGitStatus,
-  fetchProjectGitDiff,
-  stageProjectGitFiles,
-  unstageProjectGitFiles,
-  restoreProjectGitFiles,
   commitProjectGit,
+  fetchProjectGitDiff,
   fetchProjectGitRemote,
-  setProjectGitRemote,
+  fetchProjectGitStatus,
+  fetchProjectGitSyncStatus,
   pullProjectGit,
   pushProjectGit,
-  fetchProjectGitSyncStatus,
+  restoreProjectGitFiles,
+  stageProjectGitFiles,
+  unstageProjectGitFiles
 } from '../providers/registry';
-import { streamMessage } from '../providers/anthropic';
 import type { AppConfig, ChatMessage } from '../types';
-import type { GitStatusFile, GitHubAuthStatusResponse } from '@open-design/contracts';
 import styles from './GitWorkspacePanel.module.css';
+import { Icon } from './Icon';
+import { Spinner } from './Loading';
 
 interface Props {
   projectId: string;
@@ -38,6 +38,7 @@ export function GitWorkspacePanel({
   githubAuth,
   onOpenGitHubSettings,
 }: Props) {
+  const t = useT();
   const [loading, setLoading] = useState(true);
   const [branch, setBranch] = useState('main');
   const [files, setFiles] = useState<GitStatusFile[]>([]);
@@ -77,63 +78,6 @@ export function GitWorkspacePanel({
       console.error('Failed to load GitHub / Sync state', err);
     }
   };
-
-  const handleSetRemote = async () => {
-    if (!newRemoteUrl.trim()) return;
-    try {
-      setLoading(true);
-      await setProjectGitRemote(projectId, newRemoteUrl.trim());
-      setRemoteUrl(newRemoteUrl.trim());
-      setShowRemoteForm(false);
-      await loadGitHubAndSync();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to set remote URL');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePull = async () => {
-    try {
-      setPulling(true);
-      setError(null);
-      await pullProjectGit(projectId);
-      await loadStatus();
-      await loadGitHubAndSync();
-      onRefreshFiles?.();
-    } catch (err: any) {
-      setError(err?.message || 'Pull failed');
-    } finally {
-      setPulling(false);
-    }
-  };
-
-  const handlePush = async () => {
-    try {
-      setPushing(true);
-      setError(null);
-      await pushProjectGit(projectId);
-      await loadStatus();
-      await loadGitHubAndSync();
-    } catch (err: any) {
-      setError(err?.message || 'Push failed');
-    } finally {
-      setPushing(false);
-    }
-  };
-
-  const handleSync = async () => {
-    try {
-      setSyncing(true);
-      setError(null);
-      await loadGitHubAndSync();
-    } catch (err: any) {
-      setError(err?.message || 'Sync failed');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
 
   const handleFullSync = async () => {
     try {
@@ -534,7 +478,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                 className={`${styles.compactSyncBtn} od-tooltip`}
                 onClick={handleFullSync}
                 disabled={syncing || pulling || pushing}
-                data-tooltip="Sync changes (Pull & Push)"
+                data-tooltip={t('workspace.gitSync')}
                 data-tooltip-placement="bottom"
               >
                 {syncing || pulling || pushing ? (
@@ -553,7 +497,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             className={`${styles.refreshBtn} od-tooltip`}
             onClick={() => loadStatus()}
             disabled={loading}
-            data-tooltip="Refresh Git Status"
+            data-tooltip={t('workspace.gitRefresh')}
             data-tooltip-placement="bottom"
           >
             {loading ? <Spinner size={12} /> : <Icon name="refresh" size={13} />}
@@ -564,7 +508,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           <div className={styles.githubNotice}>
             <Icon name="info" size={14} />
             <span>
-              Connect your GitHub account using the GitHub icon in the top right to push and pull changes to a remote repository.
+              {t('workspace.gitGithubNotice')}
             </span>
           </div>
         )}
@@ -574,7 +518,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           <div className={styles.commitInputWrapper}>
             <textarea
               className={styles.commitInput}
-              placeholder="Commit message (Cmd+Enter to commit)..."
+              placeholder={t('workspace.gitCommitPlaceholder')}
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
               disabled={committing || files.length === 0 || !githubAuth?.connected}
@@ -592,7 +536,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                 className={`${styles.generateBtn} od-tooltip`}
                 onClick={handleGenerateCommitMsg}
                 disabled={committing || generating || stagedFiles.length === 0 || !githubAuth?.connected}
-                data-tooltip="Generate commit message using AI"
+                data-tooltip={t('workspace.gitCommitGenerate')}
                 data-tooltip-placement="bottom"
               >
                 {generating ? <Spinner size={14} /> : <Icon name="sparkles" size={14} />}
@@ -605,7 +549,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             onClick={handleCommit}
             disabled={committing || !commitMsg.trim() || files.length === 0 || !githubAuth?.connected}
           >
-            {committing ? <Spinner size={13} /> : 'Commit'}
+            {committing ? <Spinner size={13} /> : t('workspace.gitCommitBtn')}
           </button>
         </div>
 
@@ -727,12 +671,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           {untrackedFiles.length > 0 ? (
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
-                <div className={styles.sectionTitle}>Untracked Files ({untrackedFiles.length})</div>
+                <div className={styles.sectionTitle}>{t('workspace.gitChangesUntracked')} ({untrackedFiles.length})</div>
                 <button
                   type="button"
                   className={`${styles.stageAllBtn} od-tooltip`}
                   onClick={() => handleStageMultiple(untrackedFiles.map((f) => f.path))}
-                  data-tooltip="Stage all untracked files"
+                  data-tooltip={t('workspace.gitStageAll')}
                   data-tooltip-placement="bottom"
                 >
                   <Icon name="plus" size={12} />

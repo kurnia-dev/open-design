@@ -8,6 +8,7 @@ import {
   executionModeToTracking,
   settingsSectionToTracking,
 } from '@open-design/contracts/analytics';
+import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { recordAmrEntry } from '../analytics/amr-attribution';
 import {
@@ -98,6 +99,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { testAgent, testApiProvider } from '../providers/connection-test';
+import { connectGitHub, disconnectGitHub } from '../providers/registry';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
@@ -175,6 +177,7 @@ export type SettingsSection =
   | 'projectLocations'
   | 'memory'
   | 'privacy'
+  | 'github'
   // 'library' is consumed by the EntryShell library route — App opens it
   // via this same openSettings entry point, so SettingsSection must
   // accept the token even though SettingsDialog itself has no Library
@@ -247,6 +250,9 @@ interface Props {
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
   onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
+  githubAuth?: GitHubAuthStatusResponse;
+  githubAuthLoading?: boolean;
+  onRefreshGitHubAuth?: () => void;
 }
 
 export interface AgentRefreshOptions {
@@ -997,6 +1003,9 @@ export function SettingsDialog({
   onDesignSystemImportRebuildJob,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
+  githubAuth,
+  githubAuthLoading,
+  onRefreshGitHubAuth,
 }: Props) {
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
@@ -1070,6 +1079,40 @@ export function SettingsDialog({
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
   });
+  const [githubPatInput, setGithubPatInput] = useState('');
+  const [githubPatLoading, setGithubPatLoading] = useState(false);
+  const [githubPatError, setGithubPatError] = useState<string | null>(null);
+
+  const handleConnectGitHub = async () => {
+    if (!githubPatInput.trim()) return;
+    setGithubPatLoading(true);
+    setGithubPatError(null);
+    try {
+      const auth = await connectGitHub(githubPatInput.trim());
+      if (auth.connected) {
+        setGithubPatInput('');
+        onRefreshGitHubAuth?.();
+      } else {
+        setGithubPatError('Failed to connect. Please check your Personal Access Token.');
+      }
+    } catch (err) {
+      setGithubPatError('Failed to connect to GitHub. Please check your network connection.');
+    } finally {
+      setGithubPatLoading(false);
+    }
+  };
+
+  const handleDisconnectGitHub = async () => {
+    setGithubPatLoading(true);
+    try {
+      await disconnectGitHub();
+      onRefreshGitHubAuth?.();
+    } catch (err) {
+      // Ignore
+    } finally {
+      setGithubPatLoading(false);
+    }
+  };
 
   useEffect(() => {
     onAmrLoginStatusChange?.(amrCardStatus);
@@ -2633,6 +2676,7 @@ export function SettingsDialog({
     },
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
+    github: { title: t('settings.githubTitle'), subtitle: t('settings.githubHint') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
     routines: {
       title: t('routines.title'),
@@ -3148,6 +3192,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.privacy')}</strong>
                 <small>{t('settings.privacyHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'github' ? ' active' : ''}`}
+              onClick={() => setActiveSection('github')}
+            >
+              <Icon name="github" size={18} />
+              <span>
+                <strong>GitHub</strong>
+                <small>Connect to import private repositories.</small>
               </span>
             </button>
             <button
@@ -4474,6 +4529,69 @@ export function SettingsDialog({
 
           {activeSection === 'privacy' ? (
             <PrivacySection cfg={cfg} setCfg={setCfg} />
+          ) : null}
+
+          {activeSection === 'github' ? (
+            <section className="settings-section">
+              <header className="settings-header">
+                <h2>GitHub Integration</h2>
+                <p>Connect your GitHub account to enable importing private repositories and syncing design systems.</p>
+              </header>
+              <div className="settings-group">
+                <div className="settings-field">
+                  {githubAuthLoading ? (
+                    <div style={{ padding: '16px 0' }}>Loading GitHub status...</div>
+                  ) : githubAuth?.connected ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        {githubAuth.avatarUrl ? (
+                          <img src={githubAuth.avatarUrl} alt={githubAuth.username} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Icon name="github" size={24} />
+                          </div>
+                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <strong style={{ fontSize: 16 }}>@{githubAuth.username}</strong>
+                          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Connected via Personal Access Token</span>
+                        </div>
+                      </div>
+                      <div>
+                        <Button variant="ghost" disabled={githubPatLoading} onClick={handleDisconnectGitHub}>
+                          {githubPatLoading ? 'Disconnecting...' : 'Disconnect Account'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 500 }}>
+                      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
+                        To connect your account, generate a Personal Access Token (classic) on GitHub with <code>repo</code> scope.
+                      </p>
+                      <input
+                        type="password"
+                        placeholder="ghp_xxxxxxxxxxxx"
+                        value={githubPatInput}
+                        onChange={(e) => setGithubPatInput(e.target.value)}
+                        className="settings-input"
+                        disabled={githubPatLoading}
+                      />
+                      {githubPatError && (
+                        <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 4 }}>{githubPatError}</div>
+                      )}
+                      <div>
+                        <Button 
+                          variant="primary" 
+                          onClick={handleConnectGitHub} 
+                          disabled={!githubPatInput.trim() || githubPatLoading}
+                        >
+                          {githubPatLoading ? 'Connecting...' : 'Connect GitHub'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
           ) : null}
 
           {activeSection === 'about' ? (

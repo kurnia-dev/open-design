@@ -8,10 +8,15 @@ import {
   unstageProjectGitFiles,
   restoreProjectGitFiles,
   commitProjectGit,
+  fetchProjectGitRemote,
+  setProjectGitRemote,
+  pullProjectGit,
+  pushProjectGit,
+  fetchProjectGitSyncStatus,
 } from '../providers/registry';
 import { streamMessage } from '../providers/anthropic';
 import type { AppConfig, ChatMessage } from '../types';
-import type { GitStatusFile } from '@open-design/contracts';
+import type { GitStatusFile, GitHubAuthStatusResponse } from '@open-design/contracts';
 import styles from './GitWorkspacePanel.module.css';
 
 interface Props {
@@ -21,6 +26,8 @@ interface Props {
   /** AppConfig for simple AI text completions (commit message generation).
    *  streamMessage is called directly — no agent session, no file edits. */
   chatConfig?: AppConfig;
+  githubAuth?: GitHubAuthStatusResponse;
+  onOpenGitHubSettings?: () => void;
 }
 
 export function GitWorkspacePanel({
@@ -28,6 +35,8 @@ export function GitWorkspacePanel({
   filesRefreshKey = 0,
   onRefreshFiles,
   chatConfig,
+  githubAuth,
+  onOpenGitHubSettings,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const [branch, setBranch] = useState('main');
@@ -39,6 +48,92 @@ export function GitWorkspacePanel({
   const [committing, setCommitting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
+  const [newRemoteUrl, setNewRemoteUrl] = useState('');
+  const [showRemoteForm, setShowRemoteForm] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<{
+    ahead: number;
+    behind: number;
+    status: 'synced' | 'ahead' | 'behind' | 'diverged' | 'no-remote' | 'error';
+    error?: string;
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [pushing, setPushing] = useState(false);
+
+  const loadGitHubAndSync = async () => {
+    try {
+      const remote = await fetchProjectGitRemote(projectId);
+      setRemoteUrl(remote.remoteUrl);
+      if (remote.remoteUrl) {
+        setNewRemoteUrl(remote.remoteUrl);
+        const sync = await fetchProjectGitSyncStatus(projectId);
+        setSyncStatus(sync);
+      } else {
+        setSyncStatus({ ahead: 0, behind: 0, status: 'no-remote' });
+      }
+    } catch (err) {
+      console.error('Failed to load GitHub / Sync state', err);
+    }
+  };
+
+  const handleSetRemote = async () => {
+    if (!newRemoteUrl.trim()) return;
+    try {
+      setLoading(true);
+      await setProjectGitRemote(projectId, newRemoteUrl.trim());
+      setRemoteUrl(newRemoteUrl.trim());
+      setShowRemoteForm(false);
+      await loadGitHubAndSync();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to set remote URL');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePull = async () => {
+    try {
+      setPulling(true);
+      setError(null);
+      await pullProjectGit(projectId);
+      await loadStatus();
+      await loadGitHubAndSync();
+      onRefreshFiles?.();
+    } catch (err: any) {
+      setError(err?.message || 'Pull failed');
+    } finally {
+      setPulling(false);
+    }
+  };
+
+  const handlePush = async () => {
+    try {
+      setPushing(true);
+      setError(null);
+      await pushProjectGit(projectId);
+      await loadStatus();
+      await loadGitHubAndSync();
+    } catch (err: any) {
+      setError(err?.message || 'Push failed');
+    } finally {
+      setPushing(false);
+    }
+  };
+
+  const handleSync = async () => {
+    try {
+      setSyncing(true);
+      setError(null);
+      await loadGitHubAndSync();
+    } catch (err: any) {
+      setError(err?.message || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
 
   // Group files
   const stagedFiles = files.filter((f) => f.indexStatus !== ' ' && f.indexStatus !== '?');
@@ -273,6 +368,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
   useEffect(() => {
     void loadStatus(true);
+    void loadGitHubAndSync();
   }, [projectId, filesRefreshKey]);
 
   const handleSelectFile = async (file: GitStatusFile) => {
@@ -428,6 +524,103 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             {loading ? <Spinner size={12} /> : <Icon name="refresh" size={13} />}
           </button>
         </div>
+
+        {/* GitHub Integration Card */}
+        <div className={styles.githubCard}>
+          {githubAuth?.connected ? (
+            <>
+              <div className={styles.githubHeader}>
+                {githubAuth.avatarUrl ? (
+                  <img src={githubAuth.avatarUrl} alt={githubAuth.username} className={styles.githubAvatar} />
+                ) : (
+                  <Icon name="github" size={20} />
+                )}
+                <div className={styles.githubDetails}>
+                  <span className={styles.githubUser}>@{githubAuth.username}</span>
+                  <span className={styles.githubStatusText}>GitHub Connected</span>
+                </div>
+                {onOpenGitHubSettings && (
+                  <button type="button" onClick={onOpenGitHubSettings} className={styles.disconnectBtn}>
+                    Manage
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={styles.githubHeader}>
+                <Icon name="github" size={20} />
+                <div className={styles.githubDetails}>
+                  <span className={styles.githubUser}>GitHub Integration</span>
+                  <span className={styles.githubStatusText}>Not connected</span>
+                </div>
+                <button type="button" onClick={onOpenGitHubSettings} className={styles.connectBtn}>
+                  Connect
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Git Remote Management */}
+        <div className={styles.remoteBox}>
+          <div className={styles.remoteHeader}>
+            <span>Remote (origin)</span>
+            {!showRemoteForm && (
+              <button type="button" onClick={() => setShowRemoteForm(true)} className={styles.editRemoteBtn}>
+                {remoteUrl ? 'Edit' : 'Configure'}
+              </button>
+            )}
+          </div>
+          {showRemoteForm ? (
+            <div className={styles.connectForm}>
+              <input
+                type="text"
+                placeholder="https://github.com/owner/repo.git"
+                value={newRemoteUrl}
+                onChange={(e) => setNewRemoteUrl(e.target.value)}
+                className={styles.connectInput}
+              />
+              <div className={styles.connectActionGroup}>
+                <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>
+                  Cancel
+                </button>
+                <button type="button" onClick={handleSetRemote} className={styles.connectBtn} disabled={!newRemoteUrl.trim()}>
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <span className={styles.remoteUrl}>{remoteUrl || 'No remote configured'}</span>
+          )}
+        </div>
+
+        {/* Pull / Push Actions */}
+        {remoteUrl && (
+          <div className={styles.syncActions}>
+            <button type="button" onClick={handlePull} className={styles.syncBtn} disabled={pulling || pushing}>
+              {pulling ? <Spinner size={10} /> : <Icon name="download" size={12} />}
+              Pull
+            </button>
+            <button type="button" onClick={handlePush} className={styles.syncBtn} disabled={pulling || pushing}>
+              {pushing ? <Spinner size={10} /> : <Icon name="upload" size={12} />}
+              Push
+            </button>
+            <button type="button" onClick={handleSync} className={styles.syncBtn} disabled={syncing || pulling || pushing}>
+              {syncing ? <Spinner size={10} /> : <Icon name="refresh" size={12} />}
+              Fetch
+            </button>
+            {syncStatus && syncStatus.status !== 'no-remote' && (
+              <span className={styles.syncInfo} title={syncStatus.status === 'error' ? syncStatus.error : undefined}>
+                {syncStatus.status === 'synced' && 'Synced'}
+                {syncStatus.status === 'ahead' && `↑${syncStatus.ahead}`}
+                {syncStatus.status === 'behind' && `↓${syncStatus.behind}`}
+                {syncStatus.status === 'diverged' && `↑${syncStatus.ahead} ↓${syncStatus.behind}`}
+                {syncStatus.status === 'error' && 'Error'}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Commit message area */}
         <div className={styles.commitBox}>

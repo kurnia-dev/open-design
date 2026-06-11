@@ -33,6 +33,8 @@ import {
 } from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 import { callLlmOnce } from './memory-llm.js';
+import { getGitHubToken, setGitHubToken, clearGitHubToken } from './github-tokens.js';
+
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> { }
 
@@ -3412,7 +3414,359 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
     }
   });
+
+  // --- GitHub Connection & Auth Status ---
+
+  app.get('/api/github/auth-status', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const tokenObj = await getGitHubToken(dataDir);
+      if (!tokenObj) {
+        return res.json({ connected: false });
+      }
+      const profileResp = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${tokenObj.accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'Open-Design-Daemon'
+        }
+      });
+      if (!profileResp.ok) {
+        if (profileResp.status === 401) {
+          await clearGitHubToken(dataDir);
+          return res.json({ connected: false });
+        }
+        return res.json({
+          connected: true,
+          username: tokenObj.username,
+          avatarUrl: tokenObj.avatarUrl,
+          scopes: tokenObj.scopes,
+          savedAt: tokenObj.savedAt
+        });
+      }
+      const profile = await profileResp.json() as any;
+      const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
+      const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
+      
+      const updatedToken = {
+        accessToken: tokenObj.accessToken,
+        username: profile.login,
+        avatarUrl: profile.avatar_url,
+        scopes,
+        savedAt: Date.now()
+      };
+      await setGitHubToken(dataDir, updatedToken);
+      
+      res.json({
+        connected: true,
+        username: profile.login,
+        avatarUrl: profile.avatar_url,
+        scopes,
+        savedAt: updatedToken.savedAt
+      });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/github/connect', async (req, res) => {
+    try {
+      const { token } = req.body || {};
+      if (typeof token !== 'string' || !token.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'token is required');
+      }
+      const accessToken = token.trim();
+      const profileResp = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'Open-Design-Daemon'
+        }
+      });
+      if (!profileResp.ok) {
+        return sendApiError(res, profileResp.status, 'BAD_REQUEST', `GitHub token validation failed: ${profileResp.statusText}`);
+      }
+      
+      const profile = await profileResp.json() as any;
+      const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
+      const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
+      
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const storedToken = {
+        accessToken,
+        username: profile.login,
+        avatarUrl: profile.avatar_url,
+        scopes,
+        savedAt: Date.now()
+      };
+      await setGitHubToken(dataDir, storedToken);
+      
+      res.json({
+        connected: true,
+        username: profile.login,
+        avatarUrl: profile.avatar_url,
+        scopes,
+        savedAt: storedToken.savedAt
+      });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/github/disconnect', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      await clearGitHubToken(dataDir);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  // --- Project Git Remote & Sync Endpoints ---
+
+  function getAuthenticatedGitUrl(remoteUrl: string, token: string): string {
+    const clean = remoteUrl.trim();
+    let owner = '';
+    let repo = '';
+    const httpsMatch = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/.exec(clean);
+    const sshMatch = /git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/.exec(clean);
+    if (httpsMatch) {
+      owner = httpsMatch[1]!;
+      repo = httpsMatch[2]!;
+    } else if (sshMatch) {
+      owner = sshMatch[1]!;
+      repo = sshMatch[2]!;
+    } else {
+      return clean;
+    }
+    return `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
+  }
+
+  app.get('/api/projects/:id/git/remote', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      try {
+        const remoteUrl = await execGit(['remote', 'get-url', 'origin']);
+        res.json({ remoteUrl: remoteUrl.trim() });
+      } catch (err) {
+        res.json({ remoteUrl: null });
+      }
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/remote', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+      const { remoteUrl } = req.body || {};
+
+      if (typeof remoteUrl !== 'string' || !remoteUrl.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'remoteUrl is required');
+      }
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      let hasOrigin = false;
+      try {
+        await execGit(['remote', 'get-url', 'origin']);
+        hasOrigin = true;
+      } catch {}
+
+      if (hasOrigin) {
+        await execGit(['remote', 'set-url', 'origin', remoteUrl.trim()]);
+      } else {
+        await execGit(['remote', 'add', 'origin', remoteUrl.trim()]);
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/push', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      const remoteUrlRaw = await execGit(['remote', 'get-url', 'origin']).catch(() => null);
+      if (!remoteUrlRaw) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'No remote origin configured');
+      }
+
+      const branchRaw = await execGit(['branch', '--show-current']);
+      const branch = branchRaw.trim() || 'main';
+
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const tokenObj = await getGitHubToken(dataDir);
+      
+      let pushUrl = remoteUrlRaw.trim();
+      if (tokenObj && pushUrl.includes('github.com')) {
+        pushUrl = getAuthenticatedGitUrl(pushUrl, tokenObj.accessToken);
+      }
+
+      await execGit(['push', pushUrl, branch]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/projects/:id/git/pull', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      const remoteUrlRaw = await execGit(['remote', 'get-url', 'origin']).catch(() => null);
+      if (!remoteUrlRaw) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'No remote origin configured');
+      }
+
+      const branchRaw = await execGit(['branch', '--show-current']);
+      const branch = branchRaw.trim() || 'main';
+
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const tokenObj = await getGitHubToken(dataDir);
+      
+      let pullUrl = remoteUrlRaw.trim();
+      if (tokenObj && pullUrl.includes('github.com')) {
+        pullUrl = getAuthenticatedGitUrl(pullUrl, tokenObj.accessToken);
+      }
+
+      await execGit(['pull', pullUrl, branch]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.get('/api/projects/:id/git/sync-status', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      const dir = projectDetailResolvedDir(PROJECTS_DIR, project, resolveProjectDir);
+
+      const execGit = (args: string[]): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          const child = spawn('git', args, { cwd: dir });
+          let stdout = '';
+          let stderr = '';
+          child.stdout?.on('data', (data) => { stdout += data.toString(); });
+          child.stderr?.on('data', (data) => { stderr += data.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve(stdout);
+            else reject(new Error(stderr.trim() || `git ${args.join(' ')} failed with code ${code}`));
+          });
+          child.on('error', reject);
+        });
+      };
+
+      const remoteUrlRaw = await execGit(['remote', 'get-url', 'origin']).catch(() => null);
+      if (!remoteUrlRaw) {
+        return res.json({ ahead: 0, behind: 0, status: 'no-remote' });
+      }
+
+      const branchRaw = await execGit(['branch', '--show-current']);
+      const branch = branchRaw.trim() || 'main';
+
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const tokenObj = await getGitHubToken(dataDir);
+      
+      let fetchUrl = remoteUrlRaw.trim();
+      if (tokenObj && fetchUrl.includes('github.com')) {
+        fetchUrl = getAuthenticatedGitUrl(fetchUrl, tokenObj.accessToken);
+      }
+
+      try {
+        await execGit(['fetch', fetchUrl, branch]);
+      } catch (fetchErr: any) {
+        return res.json({ ahead: 0, behind: 0, status: 'error', error: String(fetchErr?.message || fetchErr) });
+      }
+
+      const revListOutput = await execGit(['rev-list', '--left-right', '--count', `HEAD...FETCH_HEAD`]);
+      const parts = revListOutput.trim().split(/\s+/);
+      const ahead = Number(parts[0]) || 0;
+      const behind = Number(parts[1]) || 0;
+
+      let status: 'synced' | 'ahead' | 'behind' | 'diverged' = 'synced';
+      if (ahead > 0 && behind > 0) status = 'diverged';
+      else if (ahead > 0) status = 'ahead';
+      else if (behind > 0) status = 'behind';
+
+      res.json({ ahead, behind, status });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
 }
+
 
 export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> { }
 

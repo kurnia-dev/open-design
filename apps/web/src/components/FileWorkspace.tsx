@@ -1,6 +1,6 @@
 import { Button } from '@open-design/components';
 import Ansi from 'ansi-to-react';
-import type { ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type { ChatSessionMode, WorkspaceContextItem, GitHubAuthStatusResponse } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { AnimatePresence } from 'motion/react';
 import {
@@ -159,7 +159,8 @@ interface Props {
   ) => void;
   onUseDesignSystem?: (id: string, title: string) => void;
   onConnectRepo?: () => void;
-  githubConnected?: boolean;
+  onOpenGitHubSettings?: () => void;
+  githubAuth?: GitHubAuthStatusResponse;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
   // Side Chat (`chat:<conversationId>` tab) wiring. Threaded from ProjectView
@@ -397,7 +398,8 @@ export function FileWorkspace({
   onDesignSystemReviewDecision,
   onUseDesignSystem,
   onConnectRepo,
-  githubConnected,
+  onOpenGitHubSettings,
+  githubAuth,
   commentPortalId,
   onCommentModeChange,
   chatConfig,
@@ -435,6 +437,7 @@ export function FileWorkspace({
   devServerUrl,
 }: Props) {
   const t = useT();
+  const githubConnected = githubAuth?.connected;
   const devPreviewFile = useMemo<ProjectFile>(() => ({
     name: 'live-preview.html',
     path: 'live-preview.html',
@@ -2158,6 +2161,16 @@ export function FileWorkspace({
           >
             <Icon name="fork" size={15} />
           </button>
+          {githubAuth?.connected && githubAuth.avatarUrl ? (
+            <div className="ws-tabs-project-actions" style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}>
+              <img 
+                src={githubAuth.avatarUrl} 
+                alt={githubAuth.username} 
+                title={githubAuth.username}
+                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }}
+              />
+            </div>
+          ) : null}
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
@@ -2272,7 +2285,7 @@ export function FileWorkspace({
             onReviewDecision={onDesignSystemReviewDecision}
             onUseDesignSystem={onUseDesignSystem}
             onConnectRepo={onConnectRepo}
-            githubConnected={githubConnected}
+            githubConnected={githubAuth?.connected}
           />
         ) : activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl ? (
           <FileViewer
@@ -2300,6 +2313,8 @@ export function FileWorkspace({
               filesRefreshKey={filesRefreshKey}
               onRefreshFiles={onRefreshFiles}
               chatConfig={chatConfig}
+              onOpenGitHubSettings={onOpenGitHubSettings}
+              githubAuth={githubAuth}
             />
           ) : isBrowserTabId(activeTab) ? (
             null

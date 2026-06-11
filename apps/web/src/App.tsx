@@ -53,7 +53,9 @@ import {
   fetchSkills,
   uploadProjectFiles,
   replaceProjectWorkingDir,
+  fetchGitHubAuthStatus,
 } from './providers/registry';
+import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 import {
   RUNS_CHANGED_EVENT,
   fetchAmrModels,
@@ -396,6 +398,19 @@ function AppInner() {
   // mistake for "no key saved" — and to disable Save/Clear so a misclick
   // can't overwrite the saved state with `''` before hydration lands.
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
+  const [githubAuth, setGitHubAuth] = useState<GitHubAuthStatusResponse>({ connected: false });
+  const [githubAuthLoading, setGitHubAuthLoading] = useState(true);
+
+  const refreshGitHubAuth = useCallback(async () => {
+    try {
+      const auth = await fetchGitHubAuthStatus();
+      setGitHubAuth(auth);
+    } catch (err) {
+      console.error('Failed to load GitHub Auth status', err);
+    } finally {
+      setGitHubAuthLoading(false);
+    }
+  }, []);
   const route = useRoute();
   const analytics = useAnalytics();
 
@@ -779,12 +794,16 @@ function AppInner() {
         fetchDaemonConfig(),
         fetchComposioConfigFromDaemon(),
         fetchMediaProvidersFromDaemon(),
+        fetchGitHubAuthStatus().catch(() => ({ connected: false })),
       ]).then(([
         daemonConfig,
         daemonComposioConfig,
         daemonMediaProvidersResult,
+        initialGithubAuth,
       ]) => {
         if (cancelled) return;
+        setGitHubAuth(initialGithubAuth);
+        setGitHubAuthLoading(false);
         const daemonMediaProvidersLoaded =
           daemonMediaProvidersResult.status === 'ok'
             ? daemonMediaProvidersResult.providers
@@ -1907,6 +1926,7 @@ function AppInner() {
         routeConversationId={route.kind === 'project' ? route.conversationId : null}
         config={config}
         agents={agents}
+        githubAuth={githubAuth}
         skills={enabledFunctionalSkills}
         designTemplates={designTemplates}
         designSystems={designSystems}
@@ -1921,6 +1941,7 @@ function AppInner() {
         onOpenMcpSettings={openMcpSettings}
         onBrowsePlugins={openPluginRegistry}
         onOpenConnectors={openConnectorIntegrations}
+        onOpenGitHubSettings={() => openSettings('github')}
         onAdoptPetInline={handleAdoptPet}
         onTogglePet={handleTogglePet}
         onOpenPetSettings={openPetSettings}
@@ -2013,6 +2034,9 @@ function AppInner() {
           daemonLive={daemonLive}
           appVersionInfo={appVersionInfo}
           welcome={settingsWelcome}
+          githubAuth={githubAuth}
+          githubAuthLoading={githubAuthLoading}
+          onRefreshGitHubAuth={refreshGitHubAuth}
           initialSection={settingsInitialSection}
           initialHighlight={settingsHighlight}
           composioConfigLoading={composioConfigLoading}

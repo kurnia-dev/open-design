@@ -388,7 +388,7 @@ describe('FileWorkspace design-system project surface', () => {
           },
         })}
         onConnectRepo={onConnectRepo}
-        githubConnected={false}
+        githubAuth={{ connected: false }}
       />,
     );
 
@@ -427,7 +427,7 @@ describe('FileWorkspace design-system project surface', () => {
           },
         })}
         onConnectRepo={vi.fn()}
-        githubConnected={false}
+        githubAuth={{ connected: false }}
       />,
     );
 
@@ -460,7 +460,7 @@ describe('FileWorkspace design-system project surface', () => {
           },
         })}
         onConnectRepo={vi.fn()}
-        githubConnected
+        githubAuth={{ connected: true }}
       />,
     );
 

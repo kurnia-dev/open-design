@@ -42,3 +42,19 @@ export interface GitRestoreRequest {
 export interface GitCommitRequest {
   message: string;
 }
+
+export interface GitRemoteInfoResponse {
+  remoteUrl: string | null;
+}
+
+export interface GitSetRemoteRequest {
+  remoteUrl: string;
+}
+
+export interface GitSyncStatusResponse {
+  ahead: number;
+  behind: number;
+  status: 'synced' | 'ahead' | 'behind' | 'diverged' | 'no-remote' | 'error';
+  error?: string;
+}
+

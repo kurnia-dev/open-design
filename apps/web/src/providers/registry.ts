@@ -20,6 +20,9 @@ import type {
   GitStatusResponse,
   GitDiffResponse,
   ReplaceProjectWorkingDirResponse,
+  GitHubAuthStatusResponse,
+  GitRemoteInfoResponse,
+  GitSyncStatusResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -2321,4 +2324,83 @@ export async function commitProjectGit(projectId: string, message: string): Prom
   }
   return (await resp.json()) as { ok: boolean };
 }
+
+export async function fetchGitHubAuthStatus(): Promise<GitHubAuthStatusResponse> {
+  const resp = await fetch('/api/github/auth-status');
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch GitHub auth status (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubAuthStatusResponse;
+}
+
+export async function connectGitHub(token: string): Promise<GitHubAuthStatusResponse> {
+  const resp = await fetch('/api/github/connect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to connect to GitHub (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubAuthStatusResponse;
+}
+
+export async function disconnectGitHub(): Promise<{ ok: boolean }> {
+  const resp = await fetch('/api/github/disconnect', {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to disconnect from GitHub (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function fetchProjectGitRemote(projectId: string): Promise<GitRemoteInfoResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/remote`);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch git remote (${resp.status})`);
+  }
+  return (await resp.json()) as GitRemoteInfoResponse;
+}
+
+export async function setProjectGitRemote(projectId: string, remoteUrl: string): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/remote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ remoteUrl }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to set git remote (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function pullProjectGit(projectId: string): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/pull`, {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    throw new Error(`Git pull failed (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function pushProjectGit(projectId: string): Promise<{ ok: boolean }> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/push`, {
+    method: 'POST',
+  });
+  if (!resp.ok) {
+    throw new Error(`Git push failed (${resp.status})`);
+  }
+  return (await resp.json()) as { ok: boolean };
+}
+
+export async function fetchProjectGitSyncStatus(projectId: string): Promise<GitSyncStatusResponse> {
+  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/git/sync-status`);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch git sync status (${resp.status})`);
+  }
+  return (await resp.json()) as GitSyncStatusResponse;
+}
+
 

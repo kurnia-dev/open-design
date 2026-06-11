@@ -22,7 +22,7 @@ import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
-import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, ChatSessionMode, WorkspaceContextItem, GitHubAuthStatusResponse } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
@@ -533,7 +533,7 @@ interface Props {
   connectRepoNeeded?: boolean;
   // Live GitHub connector status, used only to pick the connect-repo CTA copy
   // (connect vs re-import). Undefined until the status fetch resolves.
-  githubConnected?: boolean;
+  githubAuth?: GitHubAuthStatusResponse;
   // Fires when the connect-repo CTA button is clicked. The parent decides what
   // it does based on connector status (open Connectors, or prefill the composer
   // with the import instruction).
@@ -697,7 +697,7 @@ export function ChatPane({
   onBrowsePlugins,
   onOpenConnectors,
   connectRepoNeeded,
-  githubConnected,
+  githubAuth,
   onConnectRepo,
   composerDraftSignal,
   petConfig,
@@ -1899,20 +1899,20 @@ export function ChatPane({
                           </span>
                           <span className="chat-connect-repo-body">
                             <span className="chat-connect-repo-title">
-                              {repoConnectCopy(githubConnected).cardTitle}
+                              {repoConnectCopy(githubAuth?.connected).cardTitle}
                             </span>
                             <span className="chat-connect-repo-text">
-                              {repoConnectCopy(githubConnected).cardBody}
+                              {repoConnectCopy(githubAuth?.connected).cardBody}
                             </span>
                           </span>
                           <button
                             type="button"
                             className="primary-ghost"
-                            disabled={githubConnected === undefined}
+                            disabled={githubAuth?.connected === undefined}
                             onClick={() => onConnectRepo?.()}
                           >
                             <Icon name="github" size={13} />
-                            {repoConnectCopy(githubConnected).buttonLabel}
+                            {repoConnectCopy(githubAuth?.connected).buttonLabel}
                           </button>
                         </div>
                       ) : null}

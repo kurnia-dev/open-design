@@ -12,3 +12,16 @@ export interface OpenDesignGithubLatestReleaseResponse {
   fetchedAt: number;
   stale: boolean;
 }
+
+export interface GitHubAuthStatusResponse {
+  connected: boolean;
+  username?: string;
+  avatarUrl?: string;
+  scopes?: string[];
+  savedAt?: number;
+}
+
+export interface GitHubConnectRequest {
+  token: string;
+}
+

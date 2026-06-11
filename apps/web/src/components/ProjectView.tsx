@@ -1,4 +1,4 @@
-import type { AppliedPluginSnapshot, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem } from '@open-design/contracts';
+import type { AppliedPluginSnapshot, ChatSessionMode, InstalledPluginRecord, WorkspaceContextItem, GitHubAuthStatusResponse } from '@open-design/contracts';
 import {
   composeSystemPrompt,
   type AudioVoiceOption,
@@ -258,6 +258,7 @@ interface Props {
   onOpenMcpSettings?: () => void;
   onBrowsePlugins?: () => void;
   onOpenConnectors?: () => void;
+  onOpenGitHubSettings?: () => void;
   // Pet wiring forwarded to the chat composer so users can adopt /
   // wake / tuck a pet without leaving the project view.
   onAdoptPetInline?: (petId: string) => void;
@@ -270,6 +271,7 @@ interface Props {
   onProjectsRefresh: () => void;
   onChangeDefaultDesignSystem?: (designSystemId: string | null) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
+  githubAuth?: GitHubAuthStatusResponse;
 }
 
 interface QueuedChatSend {
@@ -761,6 +763,7 @@ export function ProjectView({
   onOpenMcpSettings,
   onBrowsePlugins,
   onOpenConnectors,
+  onOpenGitHubSettings,
   onAdoptPetInline,
   onTogglePet,
   onOpenPetSettings,
@@ -771,6 +774,7 @@ export function ProjectView({
   onProjectsRefresh,
   onChangeDefaultDesignSystem,
   onDesignSystemsRefresh,
+  githubAuth,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -4806,37 +4810,7 @@ export function ProjectView({
     () => designSystemNeedsRepoConnect(designSystemProject, projectFiles.map((file) => file.name)),
     [designSystemProject, projectFiles],
   );
-  // Only the connect-repo CTA copy depends on this (connect vs re-import), so
-  // resolve it lazily and only while the CTA is actually showing. Tri-state:
-  // `undefined` means the status fetch has not resolved yet, which keeps the
-  // CTA neutral and disabled so a fast click can't fire the wrong action.
-  const [githubConnected, setGithubConnected] = useState<boolean | undefined>(undefined);
-  useEffect(() => {
-    if (!connectRepoNeeded) {
-      setGithubConnected(undefined);
-      return;
-    }
-    let aborted = false;
-    const controller = new AbortController();
-    const refresh = () => {
-      void fetchConnectorStatuses({ signal: controller.signal }).then((statuses) => {
-        if (!aborted) setGithubConnected(statuses.github?.status === 'connected');
-      });
-    };
-    refresh();
-    // Connecting GitHub happens in the Connectors dialog or an external OAuth
-    // window, neither of which changes connectRepoNeeded. Re-check on focus so
-    // the CTA flips from "Connect GitHub" to "Import repo" when the user returns.
-    const onFocus = () => refresh();
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onFocus);
-    return () => {
-      aborted = true;
-      controller.abort();
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onFocus);
-    };
-  }, [connectRepoNeeded]);
+  const githubConnected = githubAuth?.connected;
 
   // Signal that pushes a draft into the chat composer (the "Import repo" CTA).
   const [composerDraftSignal, setComposerDraftSignal] = useState<{ text: string; nonce: number }>();
@@ -5565,7 +5539,7 @@ export function ProjectView({
               onBrowsePlugins={onBrowsePlugins}
               onOpenConnectors={onOpenConnectors}
               connectRepoNeeded={connectRepoNeeded}
-              githubConnected={githubConnected}
+              githubAuth={githubAuth}
               onConnectRepo={handleConnectRepo}
               composerDraftSignal={composerDraftSignal}
               petConfig={config.pet}
@@ -5817,7 +5791,8 @@ export function ProjectView({
             designSystemReview={project.metadata?.designSystemReview}
             onDesignSystemReviewDecision={persistDesignSystemReviewDecision}
             onConnectRepo={handleConnectRepo}
-            githubConnected={githubConnected}
+            githubAuth={githubAuth}
+            onOpenGitHubSettings={onOpenGitHubSettings}
             commentPortalId={commentInspectorPortalId}
             onCommentModeChange={setCommentInspectorActive}
             chatConfig={config}

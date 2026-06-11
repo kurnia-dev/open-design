@@ -65,7 +65,7 @@ function renderPane(extra: Partial<React.ComponentProps<typeof ChatPane>>) {
 describe('ChatPane connect-repo CTA', () => {
   it('fires onConnectRepo with the Connect GitHub label when the repo evidence is incomplete', () => {
     const onConnectRepo = vi.fn();
-    const { container } = renderPane({ connectRepoNeeded: true, githubConnected: false, onConnectRepo });
+    const { container } = renderPane({ connectRepoNeeded: true, githubAuth: { connected: false }, onConnectRepo });
 
     expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
     const connectButton = screen.getByRole('button', { name: /Connect GitHub/ });
@@ -76,7 +76,7 @@ describe('ChatPane connect-repo CTA', () => {
 
   it('shows a disabled pending button until the connector status resolves', () => {
     const onConnectRepo = vi.fn();
-    // githubConnected omitted -> undefined -> status still loading.
+    // githubAuth: { connected: undefined } -> undefined -> status still loading.
     renderPane({ connectRepoNeeded: true, onConnectRepo });
 
     const pendingButton = screen.getByRole('button', { name: /Checking GitHub/ });
@@ -89,7 +89,7 @@ describe('ChatPane connect-repo CTA', () => {
 
   it('switches to an Import repo action when GitHub is already connected', () => {
     const onConnectRepo = vi.fn();
-    const { container } = renderPane({ connectRepoNeeded: true, githubConnected: true, onConnectRepo });
+    const { container } = renderPane({ connectRepoNeeded: true, githubAuth: { connected: true }, onConnectRepo });
 
     expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
     expect(screen.getByText('GitHub is connected')).toBeTruthy();
@@ -103,7 +103,7 @@ describe('ChatPane connect-repo CTA', () => {
   it('prefills the composer when the parent pushes a draft signal', () => {
     renderPane({
       connectRepoNeeded: true,
-      githubConnected: true,
+      githubAuth: { connected: true },
       onConnectRepo: vi.fn(),
       composerDraftSignal: { text: 'Pull the linked repo', nonce: 1 },
     });

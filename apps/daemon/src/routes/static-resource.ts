@@ -21,6 +21,8 @@ import {
 } from '../design-system-import.js';
 import { importGitHubDesignSystemProject, importGitDesignSystemProject } from '../design-system-github-import.js';
 import { importShadcnDesignSystemProject } from '../design-system-shadcn-import.js';
+import { getGitHubToken } from '../github-tokens.js';
+
 import { renderDesignSystemPreview } from '../design-system-preview.js';
 import { renderDesignSystemShowcase } from '../design-system-showcase.js';
 import { listPromptTemplates, readPromptTemplate } from '../prompt-templates.js';
@@ -737,6 +739,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const before = await listAllDesignSystems();
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
+      const tokenObj = await getGitHubToken(RUNTIME_DATA_DIR);
       const result = await importGitHubDesignSystemProject(
         githubUrl,
         path.join(PROJECT_ROOT, '.tmp'),
@@ -748,8 +751,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(craftApplies ? { craftApplies } : {}),
           reservedIds: designSystemDirIdsFromCatalog(before),
           projectsRoot: PROJECTS_DIR,
+          ...(tokenObj?.accessToken ? { githubToken: tokenObj.accessToken } : {}),
         },
       );
+
       const systems = await listAllDesignSystems();
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {

@@ -25,3 +25,20 @@ export interface GitHubConnectRequest {
   token: string;
 }
 
+
+export interface GitHubDeviceFlowStartResponse {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
+
+export interface GitHubDeviceFlowPollRequest {
+  deviceCode: string;
+}
+
+export type GitHubDeviceFlowPollResponse =
+  | { pending: true; error?: string }
+  | { connected: true; username: string; avatarUrl: string; scopes: string[]; savedAt: number };
+

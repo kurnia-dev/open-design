@@ -3466,6 +3466,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         });
       }
       const profile = await profileResp.json() as any;
+      console.log('GitHub Profile Response:', profile);
       const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
       const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
       
@@ -3522,6 +3523,105 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       };
       await setGitHubToken(dataDir, storedToken);
       
+      res.json({
+        connected: true,
+        username: profile.login,
+        avatarUrl: profile.avatar_url,
+        scopes,
+        savedAt: storedToken.savedAt
+      });
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  
+  app.post('/api/github/device/start', async (req, res) => {
+    try {
+      const resp = await fetch('https://github.com/login/device/code', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ client_id: 'Iv23lim64Zye3mXvzg5O' })
+      });
+      if (!resp.ok) {
+        return sendApiError(res, resp.status, 'BAD_REQUEST', `Failed to start device flow: ${resp.statusText}`);
+      }
+      const data = await resp.json();
+      res.json(data);
+    } catch (err: any) {
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/github/device/poll', async (req, res) => {
+    try {
+      const { deviceCode } = req.body || {};
+      if (typeof deviceCode !== 'string' || !deviceCode.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'deviceCode is required');
+      }
+
+      const resp = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          client_id: 'Iv23lim64Zye3mXvzg5O',
+          device_code: deviceCode,
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
+        })
+      });
+
+      if (!resp.ok) {
+        return sendApiError(res, resp.status, 'BAD_REQUEST', `Polling failed: ${resp.statusText}`);
+      }
+
+      const data = await resp.json() as any;
+      console.log('GitHub Token Response:', data);
+
+      if (data.error === 'authorization_pending') {
+        return res.json({ pending: true });
+      } else if (data.error === 'slow_down') {
+        return res.json({ pending: true, error: 'slow_down' });
+      } else if (data.error) {
+        return res.json({ pending: true, error: data.error, errorDescription: data.error_description });
+      }
+
+      const accessToken = data.access_token;
+      if (!accessToken) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'No access token received');
+      }
+
+      const profileResp = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'Open-Design-Daemon'
+        }
+      });
+
+      if (!profileResp.ok) {
+        return sendApiError(res, profileResp.status, 'BAD_REQUEST', `GitHub token validation failed: ${profileResp.statusText}`);
+      }
+
+      const profile = await profileResp.json() as any;
+      const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
+      const scopes = scopesHeader ? scopesHeader.split(',').map((s: string) => s.trim()) : [];
+
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const storedToken = {
+        accessToken,
+        username: profile.login,
+        avatarUrl: profile.avatar_url,
+        scopes,
+        savedAt: Date.now()
+      };
+      await setGitHubToken(dataDir, storedToken);
+
       res.json({
         connected: true,
         username: profile.login,

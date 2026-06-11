@@ -99,7 +99,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { testAgent, testApiProvider } from '../providers/connection-test';
-import { connectGitHub, disconnectGitHub } from '../providers/registry';
+import { connectGitHub, disconnectGitHub, startGitHubDeviceFlow, pollGitHubDeviceFlow } from '../providers/registry';
 import { fetchProviderModels } from '../providers/provider-models';
 import {
   fetchConnectors,
@@ -4532,66 +4532,11 @@ export function SettingsDialog({
           ) : null}
 
           {activeSection === 'github' ? (
-            <section className="settings-section">
-              <header className="settings-header">
-                <h2>GitHub Integration</h2>
-                <p>Connect your GitHub account to enable importing private repositories and syncing design systems.</p>
-              </header>
-              <div className="settings-group">
-                <div className="settings-field">
-                  {githubAuthLoading ? (
-                    <div style={{ padding: '16px 0' }}>Loading GitHub status...</div>
-                  ) : githubAuth?.connected ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        {githubAuth.avatarUrl ? (
-                          <img src={githubAuth.avatarUrl} alt={githubAuth.username} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Icon name="github" size={24} />
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <strong style={{ fontSize: 16 }}>@{githubAuth.username}</strong>
-                          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Connected via Personal Access Token</span>
-                        </div>
-                      </div>
-                      <div>
-                        <Button variant="ghost" disabled={githubPatLoading} onClick={handleDisconnectGitHub}>
-                          {githubPatLoading ? 'Disconnecting...' : 'Disconnect Account'}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 500 }}>
-                      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
-                        To connect your account, generate a Personal Access Token (classic) on GitHub with <code>repo</code> scope.
-                      </p>
-                      <input
-                        type="password"
-                        placeholder="ghp_xxxxxxxxxxxx"
-                        value={githubPatInput}
-                        onChange={(e) => setGithubPatInput(e.target.value)}
-                        className="settings-input"
-                        disabled={githubPatLoading}
-                      />
-                      {githubPatError && (
-                        <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 4 }}>{githubPatError}</div>
-                      )}
-                      <div>
-                        <Button 
-                          variant="primary" 
-                          onClick={handleConnectGitHub} 
-                          disabled={!githubPatInput.trim() || githubPatLoading}
-                        >
-                          {githubPatLoading ? 'Connecting...' : 'Connect GitHub'}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
+            <GitHubSettingsSection
+              githubAuth={githubAuth}
+              githubAuthLoading={githubAuthLoading}
+              onRefreshGitHubAuth={onRefreshGitHubAuth}
+            />
           ) : null}
 
           {activeSection === 'about' ? (
@@ -7474,4 +7419,263 @@ function testNotificationStatusText(
   if (result === 'permission-denied') return 'settings.notifyDesktopBlocked';
   if (result === 'unsupported') return 'settings.notifyDesktopUnsupported';
   return 'settings.notifyTestFailed';
+}
+
+
+export function GitHubSettingsSection({
+  githubAuth,
+  githubAuthLoading,
+  onRefreshGitHubAuth,
+}: {
+  githubAuth?: GitHubAuthStatusResponse;
+  githubAuthLoading?: boolean;
+  onRefreshGitHubAuth?: () => void;
+}) {
+  const [deviceFlowState, setDeviceFlowState] = useState<'idle' | 'starting' | 'pending' | 'error'>('idle');
+  const [deviceCodeData, setDeviceCodeData] = useState<{ user_code: string; verification_uri: string; device_code: string; expires_in: number; interval: number } | null>(null);
+  const [deviceFlowError, setDeviceFlowError] = useState<string | null>(null);
+
+  const [githubPatInput, setGithubPatInput] = useState('');
+  const [githubPatLoading, setGithubPatLoading] = useState(false);
+  const [githubPatError, setGithubPatError] = useState<string | null>(null);
+
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+
+  const handleStartDeviceFlow = async () => {
+    setDeviceFlowState('starting');
+    setDeviceFlowError(null);
+    try {
+      const data = await startGitHubDeviceFlow();
+      setDeviceCodeData(data);
+      setDeviceFlowState('pending');
+    } catch (err) {
+      setDeviceFlowError('Failed to start GitHub login. Please check your network connection.');
+      setDeviceFlowState('error');
+    }
+  };
+
+  useEffect(() => {
+    if (deviceFlowState !== 'pending' || !deviceCodeData) return;
+
+    let cancelled = false;
+    let pollTimeoutId: number | null = null;
+    let expirationTimeoutId: number | null = null;
+
+    let currentIntervalSeconds = deviceCodeData.interval || 5;
+
+    const schedulePoll = () => {
+      if (cancelled) return;
+      pollTimeoutId = window.setTimeout(poll, currentIntervalSeconds * 1000);
+    };
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const resp = await pollGitHubDeviceFlow(deviceCodeData.device_code);
+        if (cancelled) return;
+        
+        if ('connected' in resp && resp.connected) {
+          setDeviceFlowState('idle');
+          setDeviceCodeData(null);
+          onRefreshGitHubAuth?.();
+          return;
+        } else if ('pending' in resp && resp.pending) {
+          if (resp.error) {
+            if (resp.error === 'expired_token') {
+              setDeviceFlowError('The login code has expired. Please try again.');
+              setDeviceFlowState('error');
+              setDeviceCodeData(null);
+              return;
+            } else if (resp.error === 'slow_down') {
+              currentIntervalSeconds += 5;
+            } else if (resp.error === 'access_denied') {
+              setDeviceFlowError('Authorization was cancelled or denied.');
+              setDeviceFlowState('error');
+              setDeviceCodeData(null);
+              return;
+            } else {
+              setDeviceFlowError(`Login error: ${resp.error}`);
+              setDeviceFlowState('error');
+              setDeviceCodeData(null);
+              return;
+            }
+          }
+          // Continue polling
+          schedulePoll();
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setDeviceFlowError('Error verifying login status.');
+        setDeviceFlowState('error');
+        setDeviceCodeData(null);
+      }
+    };
+
+    // Start the first poll
+    schedulePoll();
+
+    const expiresInMs = deviceCodeData.expires_in * 1000;
+    expirationTimeoutId = window.setTimeout(() => {
+      if (cancelled) return;
+      setDeviceFlowError('The login code has expired. Please try again.');
+      setDeviceFlowState('error');
+      setDeviceCodeData(null);
+      if (pollTimeoutId) window.clearTimeout(pollTimeoutId);
+    }, expiresInMs);
+
+    return () => {
+      cancelled = true;
+      if (pollTimeoutId) window.clearTimeout(pollTimeoutId);
+      if (expirationTimeoutId) window.clearTimeout(expirationTimeoutId);
+    };
+  }, [deviceFlowState, deviceCodeData, onRefreshGitHubAuth]);
+
+  const handleConnectGitHubPat = async () => {
+    if (!githubPatInput.trim()) return;
+    setGithubPatLoading(true);
+    setGithubPatError(null);
+    try {
+      const auth = await connectGitHub(githubPatInput.trim());
+      if (auth.connected) {
+        setGithubPatInput('');
+        onRefreshGitHubAuth?.();
+      } else {
+        setGithubPatError('Failed to connect. Please check your Personal Access Token.');
+      }
+    } catch (err) {
+      setGithubPatError('Failed to connect to GitHub. Please check your network connection.');
+    } finally {
+      setGithubPatLoading(false);
+    }
+  };
+
+  const handleDisconnectGitHub = async () => {
+    setIsDisconnecting(true);
+    try {
+      await disconnectGitHub();
+      onRefreshGitHubAuth?.();
+    } catch (err) {
+      // Ignore
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  return (
+    <section className="settings-section">
+      <header className="settings-header">
+        <h2>GitHub Integration</h2>
+        <p>Connect your GitHub account to enable importing private repositories and syncing design systems.</p>
+      </header>
+      <div className="settings-group">
+        <div className="settings-field">
+          {githubAuthLoading ? (
+            <div style={{ padding: '16px 0' }}>Loading GitHub status...</div>
+          ) : githubAuth?.connected ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {githubAuth.avatarUrl ? (
+                  <img src={githubAuth.avatarUrl} alt={githubAuth.username} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="github" size={24} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <strong style={{ fontSize: 16 }}>@{githubAuth.username}</strong>
+                  <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Connected</span>
+                </div>
+              </div>
+              <div>
+                <Button variant="ghost" disabled={isDisconnecting} onClick={handleDisconnectGitHub}>
+                  {isDisconnecting ? 'Disconnecting...' : 'Disconnect Account'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: 500 }}>
+              {deviceFlowState === 'pending' && deviceCodeData ? (
+                <div style={{ padding: '16px', background: 'var(--bg-3)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <h4 style={{ margin: 0 }}>Authorize Open Design</h4>
+                  <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
+                    Please enter the code below on GitHub to complete the connection.
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ padding: '8px 16px', background: 'var(--bg-2)', borderRadius: '4px', fontFamily: 'monospace', fontSize: 20, fontWeight: 'bold', letterSpacing: '2px' }}>
+                      {deviceCodeData.user_code}
+                    </div>
+                    <Button
+                      variant="default"
+                      onClick={() => {
+                        navigator.clipboard.writeText(deviceCodeData.user_code);
+                      }}
+                    >
+                      Copy Code
+                    </Button>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        window.open(deviceCodeData.verification_uri, '_blank');
+                      }}
+                    >
+                      Open GitHub to Authorize
+                    </Button>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                    Waiting for authorization...
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <Button
+                    variant="primary"
+                    onClick={handleStartDeviceFlow}
+                    disabled={deviceFlowState === 'starting'}
+                  >
+                    {deviceFlowState === 'starting' ? 'Starting...' : 'Connect with GitHub'}
+                  </Button>
+                  {deviceFlowError && (
+                    <div style={{ color: 'var(--error)', fontSize: 13 }}>{deviceFlowError}</div>
+                  )}
+                </div>
+              )}
+
+              <details style={{ background: 'var(--bg-3)', borderRadius: '8px', padding: '12px' }}>
+                <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+                  Alternative: Use Personal Access Token
+                </summary>
+                <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
+                    If you prefer, you can use a classic Personal Access Token with <code>repo</code> scope.
+                  </p>
+                  <input
+                    type="password"
+                    placeholder="ghp_xxxxxxxxxxxx"
+                    value={githubPatInput}
+                    onChange={(e) => setGithubPatInput(e.target.value)}
+                    className="settings-input"
+                    disabled={githubPatLoading}
+                  />
+                  {githubPatError && (
+                    <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 4 }}>{githubPatError}</div>
+                  )}
+                  <div>
+                    <Button 
+                      variant="subtle" 
+                      onClick={handleConnectGitHubPat} 
+                      disabled={!githubPatInput.trim() || githubPatLoading}
+                    >
+                      {githubPatLoading ? 'Connecting...' : 'Connect PAT'}
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }

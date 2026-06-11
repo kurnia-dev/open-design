@@ -75,6 +75,12 @@ import {
   openHostExternalUrl,
 } from '@open-design/host';
 
+import type {
+  GitHubDeviceFlowStartResponse,
+  GitHubDeviceFlowPollRequest,
+  GitHubDeviceFlowPollResponse,
+} from '@open-design/contracts';
+
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
 export const DEPLOY_PROVIDER_IDS = [
@@ -2267,7 +2273,7 @@ export async function fetchProjectGitStatus(projectId: string): Promise<GitStatu
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as GitStatusResponse;
@@ -2293,7 +2299,7 @@ export async function stageProjectGitFiles(projectId: string, files: string[]): 
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2310,7 +2316,7 @@ export async function unstageProjectGitFiles(projectId: string, files: string[])
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2327,7 +2333,7 @@ export async function restoreProjectGitFiles(projectId: string, files: string[])
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2344,7 +2350,7 @@ export async function commitProjectGit(projectId: string, message: string): Prom
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2387,7 +2393,7 @@ export async function fetchProjectGitRemote(projectId: string): Promise<GitRemot
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as GitRemoteInfoResponse;
@@ -2404,7 +2410,7 @@ export async function setProjectGitRemote(projectId: string, remoteUrl: string):
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2419,7 +2425,7 @@ export async function pullProjectGit(projectId: string): Promise<{ ok: boolean }
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2434,7 +2440,7 @@ export async function pushProjectGit(projectId: string): Promise<{ ok: boolean }
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as { ok: boolean };
@@ -2447,10 +2453,30 @@ export async function fetchProjectGitSyncStatus(projectId: string): Promise<GitS
     try {
       const json = await resp.json();
       if (json?.error?.message) msg = json.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as GitSyncStatusResponse;
 }
 
+export async function startGitHubDeviceFlow(): Promise<GitHubDeviceFlowStartResponse> {
+  const resp = await fetch('/api/github/device/start', {
+    method: 'POST'
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to start GitHub device flow (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubDeviceFlowStartResponse;
+}
 
+export async function pollGitHubDeviceFlow(deviceCode: string): Promise<GitHubDeviceFlowPollResponse> {
+  const resp = await fetch('/api/github/device/poll', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deviceCode } as GitHubDeviceFlowPollRequest)
+  });
+  if (!resp.ok) {
+    throw new Error(`Failed to poll GitHub device flow (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubDeviceFlowPollResponse;
+}

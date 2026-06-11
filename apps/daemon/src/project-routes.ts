@@ -876,6 +876,7 @@ async function initializeReactViteProject(
   designSystemPackages: Array<{ name: string; path: string }>,
   isPublishedDesignSystem = false,
   publishedPackages: string[] = [],
+  skipGitCommit = false,
 ) {
   await mkdir(path.join(dir, 'src'), { recursive: true });
 
@@ -1084,7 +1085,9 @@ dist-ssr
     });
     await runGit(['init']);
     await runGit(['add', '.']);
-    await runGit(['commit', '-m', 'Initial commit']);
+    if (!skipGitCommit) {
+      await runGit(['commit', '-m', 'Initial commit']);
+    }
   } catch (err) {
     console.warn('[project-routes] Failed to initialize git repository:', err);
   }
@@ -1775,7 +1778,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               name.trim(),
               designSystemPackages,
               isPublishedDesignSystem,
-              publishedPackages
+              publishedPackages,
+              !(await getGitHubToken(ctx.paths.RUNTIME_DATA_DIR))
             );
           } catch (initErr) {
             console.error(`[project-routes] Failed to initialize React Vite project:`, initErr);

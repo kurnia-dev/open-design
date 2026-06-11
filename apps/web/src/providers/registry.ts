@@ -79,6 +79,8 @@ import type {
   GitHubDeviceFlowStartResponse,
   GitHubDeviceFlowPollRequest,
   GitHubDeviceFlowPollResponse,
+  GitHubRepoItem,
+  GitHubReposResponse,
 } from '@open-design/contracts';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
@@ -2362,6 +2364,14 @@ export async function fetchGitHubAuthStatus(): Promise<GitHubAuthStatusResponse>
     throw new Error(`Failed to fetch GitHub auth status (${resp.status})`);
   }
   return (await resp.json()) as GitHubAuthStatusResponse;
+}
+
+export async function fetchGitHubRepos(): Promise<GitHubReposResponse> {
+  const resp = await fetch('/api/github/repos');
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch GitHub repos (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubReposResponse;
 }
 
 export async function connectGitHub(token: string): Promise<GitHubAuthStatusResponse> {

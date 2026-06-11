@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../Icon';
 import { Spinner } from '../Loading';
-import { setProjectGitRemote } from '../../providers/registry';
+import { CustomSelect } from '../CustomSelect';
+import { setProjectGitRemote, fetchGitHubRepos } from '../../providers/registry';
 import { useProjectGit } from '../../providers/ProjectGitProvider';
-import type { GitHubAuthStatusResponse } from '@open-design/contracts';
+import type { GitHubAuthStatusResponse, GitHubRepoItem } from '@open-design/contracts';
 import styles from './GitHubIntegrationMenu.module.css';
 
 interface Props {
@@ -32,6 +33,29 @@ export function GitHubIntegrationMenu({
   const [newRemoteUrl, setNewRemoteUrl] = useState('');
   const [showRemoteForm, setShowRemoteForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [repos, setRepos] = useState<GitHubRepoItem[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
+
+  useEffect(() => {
+    if (showRemoteForm && githubAuth?.connected) {
+      setReposLoading(true);
+      fetchGitHubRepos()
+        .then((fetchedRepos) => {
+          setRepos(fetchedRepos);
+          // If the user already has a remote that isn't in the list, show manual input
+          if (remoteUrl && !fetchedRepos.some(r => r.cloneUrl === remoteUrl)) {
+            setShowManualInput(true);
+          }
+        })
+        .catch(() => {
+          // Fallback to manual input if fetch fails
+          setShowManualInput(true);
+        })
+        .finally(() => setReposLoading(false));
+    }
+  }, [showRemoteForm, githubAuth?.connected, remoteUrl]);
 
   useEffect(() => {
     if (remoteUrl) setNewRemoteUrl(remoteUrl);
@@ -75,9 +99,10 @@ export function GitHubIntegrationMenu({
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      const target = e.target as Node;
+      const target = e.target as HTMLElement;
       if (anchor?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
+      if (target.closest?.('.od-select-menu')) return;
       onClose();
     }
     function onKey(e: KeyboardEvent) {
@@ -166,14 +191,42 @@ export function GitHubIntegrationMenu({
               }
             }}
           >
-            <input
-              type="text"
-              placeholder="https://github.com/owner/repo.git"
-              value={newRemoteUrl}
-              onChange={(e) => setNewRemoteUrl(e.target.value)}
-              className={styles.connectInput}
-              autoFocus
-            />
+            {reposLoading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', fontSize: 13 }}>
+                <Spinner size={12} /> Loading repositories...
+              </div>
+            ) : (!showManualInput && githubAuth?.connected) ? (
+              <CustomSelect
+                value={newRemoteUrl}
+                options={[
+                  ...repos.map(r => ({
+                    value: r.cloneUrl,
+                    label: r.private ? `${r.fullName} (Private)` : r.fullName
+                  })),
+                  { value: 'manual', label: 'Other (Enter manually...)' }
+                ]}
+                onChange={(val) => {
+                  if (val === 'manual') {
+                    setShowManualInput(true);
+                  } else {
+                    setNewRemoteUrl(val);
+                  }
+                }}
+                triggerClassName={styles.connectInput}
+                menuClassName={styles.selectMenu}
+                ariaLabel="Select repository"
+                placeholder="Select a repository..."
+              />
+            ) : (
+              <input
+                type="text"
+                placeholder="https://github.com/owner/repo.git"
+                value={newRemoteUrl}
+                onChange={(e) => setNewRemoteUrl(e.target.value)}
+                className={styles.connectInput}
+                autoFocus
+              />
+            )}
             {error && <div style={{ color: 'var(--red)', fontSize: '11px' }}>{error}</div>}
             <div className={styles.connectActionGroup}>
               <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>

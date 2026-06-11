@@ -3491,6 +3491,40 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get('/api/github/repos', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const tokenObj = await getGitHubToken(dataDir);
+      if (!tokenObj || !tokenObj.accessToken) {
+        return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
+      }
+
+      const reposResp = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+        headers: {
+          'Authorization': `Bearer ${tokenObj.accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+
+      if (!reposResp.ok) {
+        return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
+      }
+
+      const rawRepos = await reposResp.json() as any[];
+      const repos = rawRepos.map((repo) => ({
+        fullName: repo.full_name,
+        cloneUrl: repo.clone_url,
+        private: repo.private,
+      }));
+
+      res.json(repos);
+    } catch (err: any) {
+      console.error('[project-routes] GET /api/github/repos error:', err);
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
   app.post('/api/github/connect', async (req, res) => {
     try {
       const { token } = req.body || {};

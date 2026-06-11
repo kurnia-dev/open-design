@@ -42,3 +42,10 @@ export type GitHubDeviceFlowPollResponse =
   | { pending: true; error?: string }
   | { connected: true; username: string; avatarUrl: string; scopes: string[]; savedAt: number };
 
+export interface GitHubRepoItem {
+  fullName: string;
+  cloneUrl: string;
+  private: boolean;
+}
+
+export type GitHubReposResponse = GitHubRepoItem[];

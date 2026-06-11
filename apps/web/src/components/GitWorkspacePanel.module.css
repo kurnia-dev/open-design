@@ -42,6 +42,39 @@
   color: var(--text-strong);
 }
 
+.compactSyncBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0px;
+  margin-left: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
+.compactSyncBtn:hover:not(:disabled) {
+  background: var(--bg-fill-tertiary);
+  color: var(--text);
+}
+
+.compactSyncBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.compactSyncNumbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .refreshBtn {
   display: flex;
   align-items: center;
@@ -385,7 +418,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-panel);
-  overflow: auto;
 }
 
 .diffBlockTitle {
@@ -566,192 +598,22 @@
   border-color: var(--border-strong);
 }
 
-.githubCard {
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-  padding: 12px 16px;
+.githubNotice {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-}
-
-.githubHeader {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.githubAvatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid var(--border-strong);
-}
-
-.githubDetails {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.githubUser {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-
-.githubStatusText {
-  font-size: 11px;
-  color: var(--text-soft);
-}
-
-.connectBtn {
-  font-size: 12px;
-  padding: 4px 8px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 34%, var(--border));
   border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s var(--ease);
-}
-
-.connectBtn:hover {
-  background: var(--accent-hover);
-}
-
-.disconnectBtn {
-  font-size: 11px;
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  align-self: flex-start;
-  transition: all 0.2s var(--ease);
-}
-
-.disconnectBtn:hover {
-  background: var(--bg-fill-tertiary);
   color: var(--text);
-  border-color: var(--border-strong);
+  font-size: 11.5px;
+  line-height: 1.45;
 }
 
-.connectForm {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.connectInput {
-  width: 100%;
-  font-size: 12px;
-  padding: 6px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-app);
-  color: var(--text);
-  outline: none;
-}
-
-.connectInput:focus {
-  border-color: var(--selected);
-}
-
-.connectActionGroup {
-  display: flex;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.cancelBtn {
-  font-size: 11px;
-  background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.syncActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
-}
-
-.syncBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 10px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s var(--ease);
-}
-
-.syncBtn:hover:not(:disabled) {
-  background: var(--bg-fill-tertiary);
-  border-color: var(--border-strong);
-}
-
-.syncBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.syncInfo {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-left: auto;
-  font-family: var(--mono);
-}
-
-.remoteBox {
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.remoteHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-soft);
-}
-
-.remoteUrl {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-muted);
-  word-break: break-all;
-}
-
-.editRemoteBtn {
-  background: transparent;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-  padding: 0;
-  font-size: 11px;
-}
-
-.editRemoteBtn:hover {
-  text-decoration: underline;
+.githubNotice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--warning, #f59e0b);
 }

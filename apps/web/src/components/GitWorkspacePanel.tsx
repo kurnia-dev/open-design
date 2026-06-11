@@ -135,6 +135,22 @@ export function GitWorkspacePanel({
   };
 
 
+  const handleFullSync = async () => {
+    try {
+      setSyncing(true);
+      setError(null);
+      await pullProjectGit(projectId);
+      await pushProjectGit(projectId);
+      await loadStatus();
+      await loadGitHubAndSync();
+      onRefreshFiles?.();
+    } catch (err: any) {
+      setError(err?.message || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Group files
   const stagedFiles = files.filter((f) => f.indexStatus !== ' ' && f.indexStatus !== '?');
   const unstagedFiles = files.filter((f) => f.workingDirStatus !== ' ' && f.workingDirStatus !== '?');
@@ -512,6 +528,25 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           <div className={styles.branchInfo}>
             <Icon name="fork" size={14} className={styles.branchIcon} />
             <span className={styles.branchName}>{branch}</span>
+            {remoteUrl && syncStatus && syncStatus.status !== 'no-remote' && (!remoteUrl.includes('github.com') || githubAuth?.connected) && (
+              <button
+                type="button"
+                className={`${styles.compactSyncBtn} od-tooltip`}
+                onClick={handleFullSync}
+                disabled={syncing || pulling || pushing}
+                data-tooltip="Sync changes (Pull & Push)"
+                data-tooltip-placement="bottom"
+              >
+                {syncing || pulling || pushing ? (
+                  <Spinner size={10} />
+                ) : (
+                  <Icon name="refresh" size={12} />
+                )}
+                <span className={styles.compactSyncNumbers}>
+                  {syncStatus.behind}↓ {syncStatus.ahead}↑
+                </span>
+              </button>
+            )}
           </div>
           <button
             type="button"
@@ -525,100 +560,12 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           </button>
         </div>
 
-        {/* GitHub Integration Card */}
-        <div className={styles.githubCard}>
-          {githubAuth?.connected ? (
-            <>
-              <div className={styles.githubHeader}>
-                {githubAuth.avatarUrl ? (
-                  <img src={githubAuth.avatarUrl} alt={githubAuth.username} className={styles.githubAvatar} />
-                ) : (
-                  <Icon name="github" size={20} />
-                )}
-                <div className={styles.githubDetails}>
-                  <span className={styles.githubUser}>@{githubAuth.username}</span>
-                  <span className={styles.githubStatusText}>GitHub Connected</span>
-                </div>
-                {onOpenGitHubSettings && (
-                  <button type="button" onClick={onOpenGitHubSettings} className={styles.disconnectBtn}>
-                    Manage
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className={styles.githubHeader}>
-                <Icon name="github" size={20} />
-                <div className={styles.githubDetails}>
-                  <span className={styles.githubUser}>GitHub Integration</span>
-                  <span className={styles.githubStatusText}>Not connected</span>
-                </div>
-                <button type="button" onClick={onOpenGitHubSettings} className={styles.connectBtn}>
-                  Connect
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Git Remote Management */}
-        <div className={styles.remoteBox}>
-          <div className={styles.remoteHeader}>
-            <span>Remote (origin)</span>
-            {!showRemoteForm && (
-              <button type="button" onClick={() => setShowRemoteForm(true)} className={styles.editRemoteBtn}>
-                {remoteUrl ? 'Edit' : 'Configure'}
-              </button>
-            )}
-          </div>
-          {showRemoteForm ? (
-            <div className={styles.connectForm}>
-              <input
-                type="text"
-                placeholder="https://github.com/owner/repo.git"
-                value={newRemoteUrl}
-                onChange={(e) => setNewRemoteUrl(e.target.value)}
-                className={styles.connectInput}
-              />
-              <div className={styles.connectActionGroup}>
-                <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>
-                  Cancel
-                </button>
-                <button type="button" onClick={handleSetRemote} className={styles.connectBtn} disabled={!newRemoteUrl.trim()}>
-                  Save
-                </button>
-              </div>
-            </div>
-          ) : (
-            <span className={styles.remoteUrl}>{remoteUrl || 'No remote configured'}</span>
-          )}
-        </div>
-
-        {/* Pull / Push Actions */}
-        {remoteUrl && (
-          <div className={styles.syncActions}>
-            <button type="button" onClick={handlePull} className={styles.syncBtn} disabled={pulling || pushing}>
-              {pulling ? <Spinner size={10} /> : <Icon name="download" size={12} />}
-              Pull
-            </button>
-            <button type="button" onClick={handlePush} className={styles.syncBtn} disabled={pulling || pushing}>
-              {pushing ? <Spinner size={10} /> : <Icon name="upload" size={12} />}
-              Push
-            </button>
-            <button type="button" onClick={handleSync} className={styles.syncBtn} disabled={syncing || pulling || pushing}>
-              {syncing ? <Spinner size={10} /> : <Icon name="refresh" size={12} />}
-              Fetch
-            </button>
-            {syncStatus && syncStatus.status !== 'no-remote' && (
-              <span className={styles.syncInfo} title={syncStatus.status === 'error' ? syncStatus.error : undefined}>
-                {syncStatus.status === 'synced' && 'Synced'}
-                {syncStatus.status === 'ahead' && `↑${syncStatus.ahead}`}
-                {syncStatus.status === 'behind' && `↓${syncStatus.behind}`}
-                {syncStatus.status === 'diverged' && `↑${syncStatus.ahead} ↓${syncStatus.behind}`}
-                {syncStatus.status === 'error' && 'Error'}
-              </span>
-            )}
+        {!githubAuth?.connected && (
+          <div className={styles.githubNotice}>
+            <Icon name="info" size={14} />
+            <span>
+              Connect your GitHub account using the GitHub icon in the top right to push and pull changes to a remote repository.
+            </span>
           </div>
         )}
 

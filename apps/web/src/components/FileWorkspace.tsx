@@ -90,6 +90,7 @@ import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
 import { GitWorkspacePanel } from './GitWorkspacePanel';
+import { GitHubIntegrationMenu } from './workspace/GitHubIntegrationMenu';
 
 interface Props {
   projectId: string;
@@ -565,6 +566,7 @@ export function FileWorkspace({
   // "+" launcher (file search + registry-driven create-new actions:
   // Side Chat, Terminal, Browser).
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [githubMenuOpen, setGithubMenuOpen] = useState(false);
   // Transient feedback when a launcher "create" action (e.g. New Terminal)
   // fails on the daemon side, so the click is never a silent no-op.
   const [launcherToast, setLauncherToast] = useState<string | null>(null);
@@ -576,6 +578,7 @@ export function FileWorkspace({
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
+  const avatarBtnRef = useRef<HTMLButtonElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
@@ -2161,16 +2164,26 @@ export function FileWorkspace({
           >
             <Icon name="fork" size={15} />
           </button>
-          {githubAuth?.connected && githubAuth.avatarUrl ? (
-            <div className="ws-tabs-project-actions" style={{ display: 'flex', alignItems: 'center', padding: '0 8px' }}>
-              <img 
-                src={githubAuth.avatarUrl} 
-                alt={githubAuth.username} 
-                title={githubAuth.username}
-                style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }}
-              />
-            </div>
-          ) : null}
+          <div className="ws-tabs-project-actions">
+            <button
+              ref={avatarBtnRef}
+              type="button"
+              className={`ws-action-btn od-tooltip ${githubMenuOpen ? 'active' : ''}`}
+              data-tooltip={githubAuth?.connected ? "GitHub Integration" : "Connect to GitHub"}
+              data-tooltip-placement="bottom"
+              onClick={() => setGithubMenuOpen((v) => !v)}
+            >
+              {githubAuth?.connected && githubAuth.avatarUrl ? (
+                <img
+                  src={githubAuth.avatarUrl}
+                  alt={githubAuth.username}
+                  style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }}
+                />
+              ) : (
+                <Icon name="github" size={17} />
+              )}
+            </button>
+          </div>
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
@@ -2194,6 +2207,16 @@ export function FileWorkspace({
           message={launcherToast}
           role="alert"
           onDismiss={() => setLauncherToast(null)}
+        />
+      ) : null}
+      {githubMenuOpen ? (
+        <GitHubIntegrationMenu
+          anchor={avatarBtnRef.current}
+          projectId={projectId}
+          githubAuth={githubAuth}
+          onOpenGitHubSettings={onOpenGitHubSettings}
+          onClose={() => setGithubMenuOpen(false)}
+          onRemoteChanged={() => void onRefreshFiles()}
         />
       ) : null}
       <div className="ws-body">

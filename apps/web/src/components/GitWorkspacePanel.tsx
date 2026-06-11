@@ -1,6 +1,7 @@
 import type { GitHubAuthStatusResponse, GitStatusFile } from '@open-design/contracts';
 import { useEffect, useState } from 'react';
 import { useT } from '../i18n';
+import { useProjectGit } from '../providers/ProjectGitProvider';
 import { streamMessage } from '../providers/anthropic';
 import {
   commitProjectGit,
@@ -50,34 +51,11 @@ export function GitWorkspacePanel({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
-  const [newRemoteUrl, setNewRemoteUrl] = useState('');
-  const [showRemoteForm, setShowRemoteForm] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<{
-    ahead: number;
-    behind: number;
-    status: 'synced' | 'ahead' | 'behind' | 'diverged' | 'no-remote' | 'error';
-    error?: string;
-  } | null>(null);
+  const { remoteUrl, syncStatus, refreshGitState, isLoading } = useProjectGit();
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
 
-  const loadGitHubAndSync = async () => {
-    try {
-      const remote = await fetchProjectGitRemote(projectId);
-      setRemoteUrl(remote.remoteUrl);
-      if (remote.remoteUrl) {
-        setNewRemoteUrl(remote.remoteUrl);
-        const sync = await fetchProjectGitSyncStatus(projectId);
-        setSyncStatus(sync);
-      } else {
-        setSyncStatus({ ahead: 0, behind: 0, status: 'no-remote' });
-      }
-    } catch (err) {
-      console.error('Failed to load GitHub / Sync state', err);
-    }
-  };
 
   const handleFullSync = async () => {
     try {
@@ -86,7 +64,7 @@ export function GitWorkspacePanel({
       await pullProjectGit(projectId);
       await pushProjectGit(projectId);
       await loadStatus();
-      await loadGitHubAndSync();
+      await refreshGitState();
       onRefreshFiles?.();
     } catch (err: any) {
       setError(err?.message || 'Sync failed');
@@ -328,7 +306,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
   useEffect(() => {
     void loadStatus(true);
-    void loadGitHubAndSync();
+    // Load happens in ProjectGitProvider
   }, [projectId, filesRefreshKey]);
 
   const handleSelectFile = async (file: GitStatusFile) => {
@@ -477,17 +455,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                 type="button"
                 className={`${styles.compactSyncBtn} od-tooltip`}
                 onClick={handleFullSync}
-                disabled={syncing || pulling || pushing}
+                disabled={syncing || pulling || pushing || isLoading}
                 data-tooltip={t('workspace.gitSync')}
                 data-tooltip-placement="bottom"
               >
-                {syncing || pulling || pushing ? (
+                {syncing || pulling || pushing || isLoading ? (
                   <Spinner size={10} />
                 ) : (
                   <Icon name="refresh" size={12} />
                 )}
                 <span className={styles.compactSyncNumbers}>
-                  {syncStatus.behind}↓ {syncStatus.ahead}↑
+                  {isLoading ? 0 : syncStatus.behind}↓ {isLoading ? 0 : syncStatus.ahead}↑
                 </span>
               </button>
             )}

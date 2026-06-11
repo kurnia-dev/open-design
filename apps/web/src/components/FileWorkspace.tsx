@@ -77,6 +77,7 @@ import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { Toast } from './Toast';
+import { ProjectGitProvider } from '../providers/ProjectGitProvider';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import {
@@ -1905,7 +1906,8 @@ export function FileWorkspace({
   const launcherActions = buildLauncherActions(launcherContext);
 
   return (
-    <div
+    <ProjectGitProvider projectId={projectId} filesRefreshKey={filesRefreshKey}>
+      <div
       className={[
         'workspace',
         designSystemProject ? 'has-design-system-tab' : '',
@@ -2582,6 +2584,7 @@ export function FileWorkspace({
         ) : null}
       </AnimatePresence>
     </div>
+    </ProjectGitProvider>
   );
 }
 

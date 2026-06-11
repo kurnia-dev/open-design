@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../Icon';
 import { Spinner } from '../Loading';
-import { fetchProjectGitRemote, setProjectGitRemote } from '../../providers/registry';
+import { setProjectGitRemote } from '../../providers/registry';
+import { useProjectGit } from '../../providers/ProjectGitProvider';
 import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 import styles from './GitHubIntegrationMenu.module.css';
 
@@ -22,44 +23,29 @@ export function GitHubIntegrationMenu({
   onOpenGitHubSettings,
   onClose,
   onRemoteChanged,
-}: Props) {
+}: Props) { 
+  const { remoteUrl, refreshGitState, setRemoteUrlState } = useProjectGit();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
   const [newRemoteUrl, setNewRemoteUrl] = useState('');
   const [showRemoteForm, setShowRemoteForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    async function loadRemote() {
-      try {
-        setLoading(true);
-        const remote = await fetchProjectGitRemote(projectId);
-        if (!mounted) return;
-        setRemoteUrl(remote.remoteUrl);
-        if (remote.remoteUrl) {
-          setNewRemoteUrl(remote.remoteUrl);
-        }
-      } catch (err) {
-        console.error('Failed to load remote', err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-    void loadRemote();
-    return () => { mounted = false; };
-  }, [projectId]);
+    if (remoteUrl) setNewRemoteUrl(remoteUrl);
+    setLoading(false);
+  }, [remoteUrl]);
 
   const handleSetRemote = async () => {
     if (!newRemoteUrl.trim()) return;
     try {
       setLoading(true);
       await setProjectGitRemote(projectId, newRemoteUrl.trim());
-      setRemoteUrl(newRemoteUrl.trim());
+      setRemoteUrlState(newRemoteUrl.trim());
       setShowRemoteForm(false);
+      await refreshGitState();
       onRemoteChanged?.();
     } catch (err: any) {
       setError(err?.message || 'Failed to set remote URL');

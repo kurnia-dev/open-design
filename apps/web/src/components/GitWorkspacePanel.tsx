@@ -459,11 +459,11 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                 data-tooltip={t('workspace.gitSync')}
                 data-tooltip-placement="bottom"
               >
-                {syncing || pulling || pushing || isLoading ? (
-                  <Spinner size={10} />
-                ) : (
-                  <Icon name="refresh" size={12} />
-                )}
+                <Icon
+                  name="refresh"
+                  size={12}
+                  className={syncing || pulling || pushing || isLoading ? styles.spinIcon : undefined}
+                />
                 <span className={styles.compactSyncNumbers}>
                   {isLoading ? 0 : syncStatus.behind}↓ {isLoading ? 0 : syncStatus.ahead}↑
                 </span>
@@ -478,7 +478,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             data-tooltip={t('workspace.gitRefresh')}
             data-tooltip-placement="bottom"
           >
-            {loading ? <Spinner size={12} /> : <Icon name="refresh" size={13} />}
+            <Icon name="refresh" size={13} className={loading ? styles.spinIcon : undefined} />
           </button>
         </div>
 

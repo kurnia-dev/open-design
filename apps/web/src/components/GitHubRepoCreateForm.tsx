@@ -163,7 +163,7 @@ export function GitHubRepoCreateForm({
     return () => clearTimeout(timer);
   }, [value.name, value.owner]);
 
-  if (!connected || loading) {
+  if (!connected) {
     return null;
   }
 
@@ -184,9 +184,11 @@ export function GitHubRepoCreateForm({
               type="button"
               className={styles.ownerTrigger}
               onClick={() => !disabled && setOwnersOpen(!ownersOpen)}
-              disabled={disabled}
+              disabled={disabled || loading}
             >
-              {selectedOwner ? (
+              {loading ? (
+                <span className={styles.placeholder}>Loading...</span>
+              ) : selectedOwner ? (
                 <>
                   <img
                     src={selectedOwner.avatarUrl}

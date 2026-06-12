@@ -47,9 +47,15 @@ export function GitHubIntegrationMenu({
     setLoading(false);
   }, [remoteUrl]);
 
+  // Reset error on any user interaction/input
+  useEffect(() => {
+    setError(null);
+  }, [createData, newRemoteUrl, formMode, showRemoteForm]);
+
   const handleSetRemote = async () => {
     if (!newRemoteUrl.trim()) return;
     try {
+      setError(null);
       setLoading(true);
       await setProjectGitRemote(projectId, newRemoteUrl.trim());
       setRemoteUrlState(newRemoteUrl.trim());
@@ -188,6 +194,7 @@ export function GitHubIntegrationMenu({
                   onClick={() => {
                     void (async () => {
                       try {
+                        setError(null);
                         setLoading(true);
                         const repo = await createGitHubRepo(
                           createData.name,

@@ -1821,6 +1821,7 @@ export interface Dict {
   'designs.emptyNoMatch': string;
   'designs.deleteTitle': string;
   'designs.deleteConfirm': string;
+  'designs.deleteConfirmWithDs': string;
   'designs.cardFreeform': string;
   'designs.badgeLive': string;
   'designs.liveArtifactBadgesAria': string;
@@ -1853,6 +1854,7 @@ export interface Dict {
   'designs.deleteSelected': string;
   'designs.selectedCount': string;
   'designs.deleteSelectedConfirm': string;
+  'designs.deleteSelectedConfirmWithDs': string;
   'designs.deleteSelectedSuccess': string;
   'designs.deleteSelectedPartial': string;
   'designs.tagPrototype': string;

@@ -54,6 +54,7 @@ import {
   uploadProjectFiles,
   replaceProjectWorkingDir,
   fetchGitHubAuthStatus,
+  deleteDesignSystemDraft,
 } from './providers/registry';
 import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 import {
@@ -1514,18 +1515,6 @@ function AppInner() {
     navigate({ kind: 'project', projectId, fileName: liveArtifactTabId(artifactId) });
   }, []);
 
-  const handleDeleteProject = useCallback(async (id: string) => {
-    const ok = await deleteProjectApi(id);
-    if (!ok) return false;
-    clearLocalProject(id, { deleted: true });
-    iframeKeepAlivePool.evictProject(id, { includeActive: true });
-    setProjects((curr) => curr.filter((p) => p.id !== id));
-    if (route.kind === 'project' && route.projectId === id) {
-      navigate({ kind: 'home', view: 'home' });
-    }
-    return true;
-  }, [clearLocalProject, iframeKeepAlivePool, route]);
-
   const handleRenameProject = useCallback(async (id: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -1625,6 +1614,28 @@ function AppInner() {
     },
     [iframeKeepAlivePool],
   );
+
+  const handleDeleteProject = useCallback(async (id: string) => {
+    const project = projects.find((p) => p.id === id);
+    const designSystemId = project?.designSystemId;
+
+    const ok = await deleteProjectApi(id);
+    if (!ok) return false;
+
+    if (designSystemId) {
+      await deleteDesignSystemDraft(designSystemId, true);
+      handleDesignSystemsChanged(designSystemId);
+    }
+
+    clearLocalProject(id, { deleted: true });
+    iframeKeepAlivePool.evictProject(id, { includeActive: true });
+    setProjects((curr) => curr.filter((p) => p.id !== id));
+    if (route.kind === 'project' && route.projectId === id) {
+      navigate({ kind: 'home', view: 'home' });
+    }
+    return true;
+  }, [clearLocalProject, iframeKeepAlivePool, route, projects, handleDesignSystemsChanged]);
+
   const handleDesignSystemImportRebuildJob = useCallback(
     (designSystemId: string, job: DesignSystemGenerationJob) => {
       setPendingDesignSystemRevisionJobs((current) => ({

@@ -349,9 +349,12 @@ export function DesignsTab({
 		setRenameInput("");
 	};
 	const handleDeleteProject = (project: Project) => {
+		const isDs = isDesignSystemProject(project);
 		setConfirmTarget({
 			title: t("designs.deleteTitle"),
-			message: t("designs.deleteConfirm", { name: project.name }),
+			message: isDs
+				? t("designs.deleteConfirmWithDs", { name: project.name })
+				: t("designs.deleteConfirm", { name: project.name }),
 			confirmLabel: t("designs.menuDelete"),
 			onConfirm: () => onDelete(project.id),
 		});
@@ -359,9 +362,13 @@ export function DesignsTab({
 	const handleBatchDelete = () => {
 		const ids = Array.from(selected);
 		if (ids.length === 0) return;
+		const selectedProjects = projects.filter((p) => ids.includes(p.id));
+		const hasDs = selectedProjects.some(isDesignSystemProject);
 		setConfirmTarget({
 			title: t("designs.deleteTitle"),
-			message: t("designs.deleteSelectedConfirm", { n: ids.length }),
+			message: hasDs
+				? t("designs.deleteSelectedConfirmWithDs", { n: ids.length })
+				: t("designs.deleteSelectedConfirm", { n: ids.length }),
 			confirmLabel: t("designs.deleteSelected"),
 			onConfirm: async () => {
 				const results = await Promise.all(

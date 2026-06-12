@@ -81,6 +81,9 @@ import type {
   GitHubDeviceFlowPollResponse,
   GitHubRepoItem,
   GitHubReposResponse,
+  GitHubOwnerItem,
+  GitHubOwnersResponse,
+  GitHubRepoCheckResponse,
 } from '@open-design/contracts';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
@@ -560,6 +563,12 @@ export interface DesignSystemDraftInput {
   body?: string;
   sourceNotes?: string;
   provenance?: DesignSystemProvenance;
+  gitHubRepo?: {
+    owner: string;
+    ownerType: 'user' | 'organization';
+    name: string;
+    private: boolean;
+  };
 }
 
 export async function createDesignSystemDraft(
@@ -2478,6 +2487,44 @@ export async function fetchGitHubRepos(): Promise<GitHubReposResponse> {
     throw new Error(`Failed to fetch GitHub repos (${resp.status})`);
   }
   return (await resp.json()) as GitHubReposResponse;
+}
+
+export async function fetchGitHubOwners(): Promise<GitHubOwnersResponse> {
+  const resp = await fetch('/api/github/owners');
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch GitHub owners (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubOwnersResponse;
+}
+
+export async function checkGitHubRepoAvailability(owner: string, repo: string): Promise<GitHubRepoCheckResponse> {
+  const resp = await fetch(`/api/github/repo-check?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+  if (!resp.ok) {
+    throw new Error(`Failed to check repo availability (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubRepoCheckResponse;
+}
+
+export async function createGitHubRepo(
+  name: string,
+  isPrivate: boolean,
+  owner?: string,
+  ownerType?: 'user' | 'organization'
+): Promise<GitHubRepoItem> {
+  const resp = await fetch('/api/github/repos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, private: isPrivate, owner, ownerType }),
+  });
+  if (!resp.ok) {
+    let msg = `Failed to create repository (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (body?.error?.message) msg = body.error.message;
+    } catch {}
+    throw new Error(msg);
+  }
+  return (await resp.json()) as GitHubRepoItem;
 }
 
 export async function connectGitHub(token: string): Promise<GitHubAuthStatusResponse> {

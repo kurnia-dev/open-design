@@ -177,3 +177,128 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+
+.createForm {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.createHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 8px;
+}
+
+.createHeader h4 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.createField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.createField label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.createRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.createRow input {
+  cursor: pointer;
+}
+
+.createActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cancelActionBtn,
+.createActionBtn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.1s ease;
+}
+
+.cancelActionBtn {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+  outline: none;
+}
+
+.cancelActionBtn:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+
+.createActionBtn {
+  background: var(--selected);
+  color: white;
+  outline: none;
+}
+
+.createActionBtn:hover {
+  background: color-mix(in srgb, var(--selected) 90%, black);
+}
+
+.createActionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.errorText {
+  color: var(--red, #ef4444);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.createOptionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: calc(100% - 16px);
+  margin: 8px;
+  padding: 8px;
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+}
+
+.createOptionBtn:hover {
+  background: var(--bg-panel);
+  border-color: var(--selected);
+  color: var(--selected);
+}

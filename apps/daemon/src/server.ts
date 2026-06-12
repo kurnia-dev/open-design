@@ -128,6 +128,7 @@ import {
   updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
 import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
+import { getGitHubToken, createGitHubRepository } from './github-tokens.js';
 import { prepareDesignTokenContractRebuild } from './design-token-contract-rebuild.js';
 import {
   applyDiffReviewDecisionToCwd,
@@ -4812,6 +4813,34 @@ export async function startServer({
     await removeLegacyDesignSystemWorkspaceArtifacts(project);
     await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
     console.log("ensureUserDesignSystemWorkspaceProject: project updated");
+
+    const githubUrl = summary.provenance?.githubUrls?.[0];
+    const tokenObj = await getGitHubToken(RUNTIME_DATA_DIR);
+    const accessToken = tokenObj?.accessToken;
+    if (githubUrl && accessToken) {
+      try {
+        const projectDir = path.join(PROJECTS_DIR, projectId);
+        const hasGit = fs.existsSync(path.join(projectDir, '.git'));
+        if (!hasGit) {
+          const runGit = (args: string[]) => new Promise((resolve, reject) => {
+            const child = spawn('git', args, { cwd: projectDir, stdio: 'ignore' });
+            child.on('close', (code) => code === 0 ? resolve(undefined) : reject(new Error(`git ${args.join(' ')} failed with code ${code}`)));
+            child.on('error', reject);
+          });
+          await runGit(['init']);
+          await runGit(['add', '.']);
+          await runGit(['commit', '-m', 'Initial commit']);
+          const authPushUrl = githubUrl.replace('https://github.com/', `https://x-access-token:${accessToken}@github.com/`);
+          await runGit(['remote', 'add', 'origin', authPushUrl]);
+          await runGit(['branch', '-M', 'main']);
+          await runGit(['push', '-u', 'origin', 'main']);
+          await runGit(['remote', 'set-url', 'origin', githubUrl]);
+        }
+      } catch (gitErr) {
+        console.warn('[server] Failed to push design system workspace project to GitHub:', gitErr);
+      }
+    }
+
     const dirId = id.startsWith('user:') ? id.slice('user:'.length) : id;
     const systemDir = path.join(USER_DESIGN_SYSTEMS_DIR, dirId);
     const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
@@ -6792,6 +6821,42 @@ export async function startServer({
 
   app.post('/api/design-systems', async (req, res) => {
     try {
+      const { gitHubRepo } = req.body || {};
+      let createdRepoUrl: string | undefined;
+      const dataDir = RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (gitHubRepo) {
+        if (!accessToken) {
+          return res.status(401).json({ error: 'Not connected to GitHub, cannot create repository' });
+        }
+        try {
+          const repo = await createGitHubRepository({
+            accessToken,
+            name: gitHubRepo.name,
+            private: gitHubRepo.private,
+            owner: gitHubRepo.owner,
+            ownerType: gitHubRepo.ownerType,
+          });
+          createdRepoUrl = repo.cloneUrl;
+        } catch (repoErr: any) {
+          return res.status(400).json({ error: `Failed to create GitHub repository: ${repoErr.message || repoErr}` });
+        }
+      }
+
+      if (createdRepoUrl) {
+        if (!req.body.provenance || typeof req.body.provenance !== 'object') {
+          req.body.provenance = {};
+        }
+        if (!Array.isArray(req.body.provenance.githubUrls)) {
+          req.body.provenance.githubUrls = [];
+        }
+        req.body.provenance.githubUrls.push(createdRepoUrl);
+      }
+
       const created = await createUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.body || {});
       res.status(201).json({ ...created, designSystem: created });
     } catch (err) {

@@ -69,6 +69,12 @@ export async function createProject(input: {
   pluginId?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
+  gitHubRepo?: {
+    owner: string;
+    ownerType: 'user' | 'organization';
+    name: string;
+    private: boolean;
+  };
 }): Promise<{ project: Project; conversationId: string; appliedPluginSnapshotId?: string } | null> {
   try {
     // `randomUUID` falls back to `crypto.getRandomValues` / `Math.random`

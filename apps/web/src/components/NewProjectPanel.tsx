@@ -18,6 +18,7 @@ import type {
 } from '@open-design/contracts/analytics';
 
 import { useT } from '../i18n';
+import { GitHubRepoCreateForm, type GitHubRepoCreateData } from './GitHubRepoCreateForm';
 import type { Dict } from '../i18n/types';
 import { fetchPromptTemplate, openFolderDialog } from '../providers/registry';
 import { isStoredMediaProviderEntryPresent } from '../state/config';
@@ -119,6 +120,12 @@ export interface CreateInput {
   designSystemId: string | null;
   metadata: ProjectMetadata;
   userWorkingDirToken?: string;
+  gitHubRepo?: {
+    owner: string;
+    ownerType: 'user' | 'organization';
+    name: string;
+    private: boolean;
+  };
 }
 
 export type ImportClaudeDesignOutcome =
@@ -327,6 +334,12 @@ export function NewProjectPanel({
   const [includeOsWidgets, setIncludeOsWidgets] = useState(false);
   const [speakerNotes, setSpeakerNotes] = useState(false);
   const [animations, setAnimations] = useState(false);
+  const [gitHubRepo, setGitHubRepo] = useState<GitHubRepoCreateData>({
+    owner: '',
+    ownerType: 'user',
+    name: '',
+    private: true,
+  });
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [imageModel, setImageModel] = useState(DEFAULT_IMAGE_MODEL);
   const [imageAspect, setImageAspect] = useState<MediaAspect>('1:1');
@@ -702,8 +715,14 @@ export function NewProjectPanel({
       },
       { requestId },
     );
+    const finalProjectName = trimmedName || autoName(tab, mediaSurface, t);
+    const cleanSuggestedSlug = finalProjectName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9-_]+/g, '-');
+
     onCreate({
-      name: trimmedName || autoName(tab, mediaSurface, t),
+      name: finalProjectName,
       skillId: skillIdForTab,
       designSystemId: primaryDs,
       metadata: {
@@ -712,6 +731,14 @@ export function NewProjectPanel({
         ...(workingDir ? { userWorkingDir: workingDir } : {}),
       },
       ...(workingDirToken ? { userWorkingDirToken: workingDirToken } : {}),
+      ...(gitHubRepo.name.trim() !== '' ? {
+        gitHubRepo: {
+          owner: gitHubRepo.owner,
+          ownerType: gitHubRepo.ownerType,
+          name: gitHubRepo.name || cleanSuggestedSlug,
+          private: gitHubRepo.private,
+        }
+      } : {}),
       requestId,
     });
   }
@@ -839,6 +866,7 @@ export function NewProjectPanel({
             onChange={(e) => setName(e.target.value)}
           />
         </div>
+
 
         <div className="newproj-working-dir-row">
           <button
@@ -1022,6 +1050,13 @@ export function NewProjectPanel({
           />
         ) : null}
 
+        <GitHubRepoCreateForm
+          value={gitHubRepo}
+          onChange={setGitHubRepo}
+          suggestedName={name}
+          disabled={!canCreate || loading}
+        />
+        
         <button
           className="primary newproj-create"
           data-testid="create-project"

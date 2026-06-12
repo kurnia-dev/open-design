@@ -1219,6 +1219,7 @@ function AppInner() {
             ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
             : {}),
           ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
+          gitHubRepo: input.gitHubRepo,
         });
         if (!result) {
           throw new Error('CREATE_REQUEST_FAILED');

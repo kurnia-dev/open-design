@@ -51,3 +51,16 @@ export interface GitHubRepoItem {
 }
 
 export type GitHubReposResponse = GitHubRepoItem[];
+
+export interface GitHubOwnerItem {
+  login: string;
+  avatarUrl: string;
+  type: 'user' | 'organization';
+}
+
+export type GitHubOwnersResponse = GitHubOwnerItem[];
+
+
+export interface GitHubRepoCheckResponse {
+  available: boolean;
+}

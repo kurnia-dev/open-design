@@ -21,6 +21,7 @@ import {
   uploadProjectFile,
   writeProjectTextFile,
 } from '../providers/registry';
+import { GitHubRepoCreateForm, type GitHubRepoCreateData } from './GitHubRepoCreateForm';
 import {
   createConversation,
   getProject,
@@ -306,6 +307,12 @@ export function DesignSystemCreationFlow({
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
   const [error, setError] = useState<string | null>(null);
+  const [gitHubRepo, setGitHubRepo] = useState<GitHubRepoCreateData>({
+    owner: '',
+    ownerType: 'user',
+    name: '',
+    private: true,
+  });
   const [generationStarting, setGenerationStarting] = useState(false);
   const [sourceProcessingCount, setSourceProcessingCount] = useState(0);
   const composioConfigured = isComposioConfigured(config?.composio);
@@ -606,6 +613,11 @@ export function DesignSystemCreationFlow({
     }
     try {
       const title = inferDesignSystemTitle(state);
+      const cleanSuggestedSlug = title
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9-_]+/g, '-');
+
       const created = await createDesignSystemDraft({
         title,
         summary: state.company,
@@ -615,6 +627,14 @@ export function DesignSystemCreationFlow({
         artifactMode: 'agent-managed',
         sourceNotes: buildSourceNotes(state),
         provenance: buildProvenance(state),
+        ...(gitHubRepo.name.trim() !== '' ? {
+          gitHubRepo: {
+            owner: gitHubRepo.owner,
+            ownerType: gitHubRepo.ownerType,
+            name: gitHubRepo.name || cleanSuggestedSlug,
+            private: gitHubRepo.private,
+          }
+        } : {}),
       });
       if (!created) {
         setError('Could not generate this design system.');
@@ -749,6 +769,7 @@ export function DesignSystemCreationFlow({
           />
         </label>
 
+
         <section className="ds-resource-section">
           <h2>Add source material <span>(optional)</span></h2>
           <p>Use anything that shows your current style.</p>
@@ -874,6 +895,14 @@ export function DesignSystemCreationFlow({
           </label>
         )}
         {error ? <div className="ds-editor-error">{error}</div> : null}
+
+        <GitHubRepoCreateForm
+          value={gitHubRepo}
+          onChange={setGitHubRepo}
+          suggestedName={inferDesignSystemTitle(state)}
+          disabled={generationStarting}
+        />
+
         {embedded ? (
           <div className="ds-setup-actions ds-setup-actions--embedded">
             <Button variant="ghost" onClick={onBack}>

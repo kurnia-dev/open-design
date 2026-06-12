@@ -138,3 +138,63 @@ export async function clearGitHubToken(dataDir: string): Promise<void> {
     await writeTokensFile(dataDir, {});
   });
 }
+
+export interface CreateRepoParams {
+  accessToken: string;
+  name: string;
+  private?: boolean;
+  owner?: string;
+  ownerType?: 'user' | 'organization';
+}
+
+export async function createGitHubRepository(params: CreateRepoParams): Promise<{
+  fullName: string;
+  cloneUrl: string;
+  private: boolean;
+  fork: boolean;
+  description?: string | null;
+}> {
+  const { accessToken, name, private: isPrivate, owner, ownerType } = params;
+  if (!name || !name.trim()) {
+    throw new Error('repository name is required');
+  }
+
+  let url = 'https://api.github.com/user/repos';
+  if (owner && owner.trim() && ownerType === 'organization') {
+    url = `https://api.github.com/orgs/${owner.trim()}/repos`;
+  }
+
+  const createResp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+      'User-Agent': 'Open-Design-Daemon'
+    },
+    body: JSON.stringify({
+      name: name.trim(),
+      private: !!isPrivate,
+    }),
+  });
+
+  if (!createResp.ok) {
+    let errMsg = createResp.statusText;
+    try {
+      const body = await createResp.json() as any;
+      if (body?.message) errMsg = body.message;
+    } catch {}
+    throw new Error(`Failed to create repository: ${errMsg}`);
+  }
+
+  const repo = await createResp.json() as any;
+  return {
+    fullName: repo.full_name,
+    cloneUrl: repo.clone_url,
+    private: repo.private,
+    fork: repo.fork,
+    description: repo.description,
+  };
+}
+

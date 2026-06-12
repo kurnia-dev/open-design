@@ -33,7 +33,7 @@ import {
 } from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 import { callLlmOnce } from './memory-llm.js';
-import { getGitHubToken, setGitHubToken, clearGitHubToken } from './github-tokens.js';
+import { getGitHubToken, setGitHubToken, clearGitHubToken, createGitHubRepository } from './github-tokens.js';
 
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> { }
@@ -877,6 +877,8 @@ async function initializeReactViteProject(
   isPublishedDesignSystem = false,
   publishedPackages: string[] = [],
   skipGitCommit = false,
+  cloneUrl?: string,
+  accessToken?: string,
 ) {
   await mkdir(path.join(dir, 'src'), { recursive: true });
 
@@ -1085,8 +1087,15 @@ dist-ssr
     });
     await runGit(['init']);
     await runGit(['add', '.']);
-    if (!skipGitCommit) {
+    if (!skipGitCommit || cloneUrl) {
       await runGit(['commit', '-m', 'Initial commit']);
+    }
+    if (cloneUrl && accessToken) {
+      const authPushUrl = cloneUrl.replace('https://github.com/', `https://x-access-token:${accessToken}@github.com/`);
+      await runGit(['remote', 'add', 'origin', authPushUrl]);
+      await runGit(['branch', '-M', 'main']);
+      await runGit(['push', '-u', 'origin', 'main']);
+      await runGit(['remote', 'set-url', 'origin', cloneUrl]);
     }
   } catch (err) {
     console.warn('[project-routes] Failed to initialize git repository:', err);
@@ -1591,13 +1600,38 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.post('/api/projects', async (req, res) => {
     try {
-      const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief } =
+      const { id, name, projectLocationId, skillId, designSystemId, pendingPrompt, metadata, customInstructions, skipDiscoveryBrief, gitHubRepo } =
         req.body || {};
       if (typeof id !== 'string' || !isSafeId(id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
+      }
+
+      let createdRepoUrl: string | undefined;
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (gitHubRepo) {
+        if (!accessToken) {
+          return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub, cannot create repository');
+        }
+        try {
+          const repo = await createGitHubRepository({
+            accessToken,
+            name: gitHubRepo.name,
+            private: gitHubRepo.private,
+            owner: gitHubRepo.owner,
+            ownerType: gitHubRepo.ownerType,
+          });
+          createdRepoUrl = repo.cloneUrl;
+        } catch (repoErr: any) {
+          return sendApiError(res, 400, 'BAD_REQUEST', `Failed to create GitHub repository: ${repoErr.message || repoErr}`);
+        }
       }
       // baseDir is privileged: it lets a project root directly inside the
       // user's filesystem. The /api/import/folder endpoint is the only
@@ -1666,44 +1700,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           throw err;
         }
       }
-      const projectMetadata =
-        metadata && typeof metadata === 'object'
+      const projectMetadata = {
+        ...(metadata && typeof metadata === 'object' ? metadata : {}),
+        ...(createdRepoUrl ? { gitHubRepoUrl: createdRepoUrl } : {}),
+        ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
+        ...(externalProjectDir
           ? {
-            ...metadata,
-            ...(skipDiscoveryBrief === true ? { skipDiscoveryBrief: true } : {}),
-            ...(externalProjectDir
-              ? {
-                baseDir: externalProjectDir,
-                importedFrom: 'project-location',
-                projectLocationId: selectedLocationId,
-              }
-              : {}),
-            ...(Array.isArray(metadata.linkedDirs)
-              ? (() => {
-                const v = validateLinkedDirs(metadata.linkedDirs);
-                return v.error ? {} : { linkedDirs: v.dirs };
-              })()
-              : {}),
+            baseDir: externalProjectDir,
+            importedFrom: 'project-location',
+            projectLocationId: selectedLocationId,
           }
-          : skipDiscoveryBrief === true
-            ? {
-              skipDiscoveryBrief: true,
-              ...(externalProjectDir
-                ? {
-                  baseDir: externalProjectDir,
-                  importedFrom: 'project-location',
-                  projectLocationId: selectedLocationId,
-                }
-                : {}),
-            }
-            : externalProjectDir
-              ? {
-                kind: 'prototype',
-                baseDir: externalProjectDir,
-                importedFrom: 'project-location',
-                projectLocationId: selectedLocationId,
-              }
-              : null;
+          : {}),
+      };
       const now = Date.now();
       let project;
       try {
@@ -1782,7 +1790,9 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               designSystemPackages,
               isPublishedDesignSystem,
               publishedPackages,
-              !(await getGitHubToken(ctx.paths.RUNTIME_DATA_DIR))
+              !(await getGitHubToken(ctx.paths.RUNTIME_DATA_DIR)),
+              createdRepoUrl,
+              accessToken
             );
           } catch (initErr) {
             console.error(`[project-routes] Failed to initialize React Vite project:`, initErr);
@@ -3462,28 +3472,34 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   app.get('/api/github/auth-status', async (req, res) => {
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const headerAccessToken = typeof headerToken === 'string' && headerToken.trim() ? headerToken.trim() : null;
       const tokenObj = await getGitHubToken(dataDir);
-      if (!tokenObj) {
+      
+      const accessToken = headerAccessToken || tokenObj?.accessToken;
+      if (!accessToken) {
         return res.json({ connected: false });
       }
       const profileResp = await fetch('https://api.github.com/user', {
         headers: {
-          'Authorization': `Bearer ${tokenObj.accessToken}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
           'User-Agent': 'Open-Design-Daemon'
         }
       });
       if (!profileResp.ok) {
         if (profileResp.status === 401) {
-          await clearGitHubToken(dataDir);
+          if (!headerAccessToken) {
+            await clearGitHubToken(dataDir);
+          }
           return res.json({ connected: false });
         }
         return res.json({
           connected: true,
-          username: tokenObj.username,
-          avatarUrl: tokenObj.avatarUrl,
-          scopes: tokenObj.scopes,
-          savedAt: tokenObj.savedAt
+          username: tokenObj?.username || '',
+          avatarUrl: tokenObj?.avatarUrl || '',
+          scopes: tokenObj?.scopes || [],
+          savedAt: tokenObj?.savedAt || Date.now()
         });
       }
       const profile = await profileResp.json() as any;
@@ -3492,13 +3508,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
       
       const updatedToken = {
-        accessToken: tokenObj.accessToken,
+        accessToken,
         username: profile.login,
         avatarUrl: profile.avatar_url,
         scopes,
         savedAt: Date.now()
       };
-      await setGitHubToken(dataDir, updatedToken);
+      if (!headerAccessToken) {
+        await setGitHubToken(dataDir, updatedToken);
+      }
       
       res.json({
         connected: true,
@@ -3512,17 +3530,84 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get('/api/github/owners', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (!accessToken) {
+        return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
+      }
+
+      const userResp = await fetch('https://api.github.com/user', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'Open-Design-Daemon'
+        }
+      });
+
+      if (!userResp.ok) {
+        return sendApiError(res, userResp.status, 'BAD_REQUEST', `Failed to fetch user profile: ${userResp.statusText}`);
+      }
+
+      const user = await userResp.json() as any;
+
+      const orgsResp = await fetch('https://api.github.com/user/orgs', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'Open-Design-Daemon'
+        }
+      });
+
+      let orgs: any[] = [];
+      if (orgsResp.ok) {
+        orgs = await orgsResp.json() as any[];
+      } else {
+        console.warn(`[project-routes] Failed to fetch user orgs: ${orgsResp.statusText}`);
+      }
+
+      const owners = [
+        {
+          login: user.login,
+          avatarUrl: user.avatar_url,
+          type: 'user'
+        },
+        ...orgs.map((org: any) => ({
+          login: org.login,
+          avatarUrl: org.avatar_url,
+          type: 'organization'
+        }))
+      ];
+
+      res.json(owners);
+    } catch (err: any) {
+      console.error('[project-routes] GET /api/github/owners error:', err);
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
   app.get('/api/github/repos', async (req, res) => {
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
-      const tokenObj = await getGitHubToken(dataDir);
-      if (!tokenObj || !tokenObj.accessToken) {
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (!accessToken) {
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
       }
 
       const reposResp = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
         headers: {
-          'Authorization': `Bearer ${tokenObj.accessToken}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
@@ -3544,6 +3629,72 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       res.json(repos);
     } catch (err: any) {
       console.error('[project-routes] GET /api/github/repos error:', err);
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.get('/api/github/repo-check', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (!accessToken) {
+        return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
+      }
+
+      const { owner, repo } = req.query;
+      if (!owner || !repo || typeof owner !== 'string' || typeof repo !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'Missing owner or repo parameter');
+      }
+
+      const checkResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+
+      if (checkResp.status === 404) {
+        return res.json({ available: true });
+      } else if (checkResp.ok) {
+        return res.json({ available: false });
+      } else {
+        return sendApiError(res, checkResp.status, 'BAD_REQUEST', `Failed to check repo: ${checkResp.statusText}`);
+      }
+    } catch (err: any) {
+      console.error('[project-routes] GET /api/github/repo-check error:', err);
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+  app.post('/api/github/repos', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (!accessToken) {
+        return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
+      }
+
+      const { name, private: isPrivate, owner, ownerType } = req.body || {};
+      const repo = await createGitHubRepository({
+        accessToken,
+        name,
+        private: isPrivate,
+        owner,
+        ownerType,
+      });
+
+      res.json(repo);
+    } catch (err: any) {
+      console.error('[project-routes] POST /api/github/repos error:', err);
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
     }
   });
@@ -3601,7 +3752,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           'Accept': 'application/json',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ client_id: 'Iv23lim64Zye3mXvzg5O' })
+        body: JSON.stringify({
+          client_id: 'Iv23lim64Zye3mXvzg5O',
+          scope: 'repo'
+        })
       });
       if (!resp.ok) {
         return sendApiError(res, resp.status, 'BAD_REQUEST', `Failed to start device flow: ${resp.statusText}`);

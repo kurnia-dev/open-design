@@ -1530,6 +1530,11 @@ export interface Dict {
   'dsManager.statusDraft': string;
   'dsManager.openSystemAria': string;
   'dsManager.deleteSystemAria': string;
+  'dsManager.deleteModalTitle': string;
+  'dsManager.deleteModalConfirm': string;
+  'dsManager.deleteModalDirtyTitle': string;
+  'dsManager.deleteModalDirtyWarning': string;
+  'dsManager.deleteModalForceDelete': string;
   'dsManager.presetsAria': string;
   'dsManager.eyebrowLibrary': string;
   'dsManager.eyebrowTemplates': string;

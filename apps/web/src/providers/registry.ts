@@ -711,14 +711,28 @@ export async function updateDesignSystemDraft(
   }
 }
 
-export async function deleteDesignSystemDraft(id: string): Promise<boolean> {
+export async function deleteDesignSystemDraft(
+  id: string,
+  force?: boolean,
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+    const url = `/api/design-systems/${encodeURIComponent(id)}${force ? '?force=true' : ''}`;
+    const resp = await fetch(url, {
       method: 'DELETE',
     });
-    return resp.ok;
-  } catch {
-    return false;
+    if (resp.status === 204 || resp.ok) {
+      return { success: true };
+    }
+    if (resp.status === 409) {
+      const body = await resp.json().catch(() => ({}));
+      if (body.error === 'GIT_DIRTY') {
+        return { success: false, error: 'GIT_DIRTY' };
+      }
+    }
+    const body = await resp.json().catch(() => ({}));
+    return { success: false, error: body.error || 'unknown' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'unknown' };
   }
 }
 

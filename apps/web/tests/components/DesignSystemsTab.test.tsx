@@ -14,7 +14,16 @@ vi.mock('../../src/providers/registry', async () => {
     ...actual,
     fetchDesignSystemShowcase: vi.fn(async () => null),
     updateDesignSystemDraft: vi.fn(async () => null),
-    deleteDesignSystemDraft: vi.fn(async () => true),
+    deleteDesignSystemDraft: vi.fn(async () => ({ success: true })),
+  };
+});
+
+vi.mock('../../src/providers/ProjectGitProvider', () => {
+  return {
+    useProjectGit: () => ({
+      githubAuth: { connected: false },
+      refreshGitState: vi.fn(),
+    }),
   };
 });
 

@@ -147,6 +147,7 @@ export function DesignSystemsTab({
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
 
   const [importOpen, setImportOpen] = useState(false);
+  const [deleteModalSystem, setDeleteModalSystem] = useState<DesignSystemSummary | null>(null);
   const [category, setCategory] = useState<string>('All');
   // Cache fetched showcase HTML across re-renders so cards never re-flicker
   // when the user filters / scrolls back. null = "in flight"; undefined =
@@ -306,23 +307,29 @@ export function DesignSystemsTab({
     }
   }
 
-  async function deleteSystem(system: DesignSystemSummary) {
-    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
-    if (!ok) {
-      trackDesignSystemStatusResult(analytics.track, {
-        page_name: 'design_systems',
-        area: 'design_system_status',
-        action: 'delete',
-        result: 'cancelled',
-        design_system_id: system.id,
-        status_before: mapStatusToTracking(system.status),
-        status_after: mapStatusToTracking(system.status),
-        is_default_before: system.id === selectedId,
-        is_default_after: system.id === selectedId,
-        duration_ms: 0,
-      });
-      return;
-    }
+  function deleteSystem(system: DesignSystemSummary) {
+    setDeleteModalSystem(system);
+  }
+
+  function trackDeleteCancelled(system: DesignSystemSummary) {
+    trackDesignSystemStatusResult(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_status',
+      action: 'delete',
+      result: 'cancelled',
+      design_system_id: system.id,
+      status_before: mapStatusToTracking(system.status),
+      status_after: mapStatusToTracking(system.status),
+      is_default_before: system.id === selectedId,
+      is_default_after: system.id === selectedId,
+      duration_ms: 0,
+    });
+  }
+
+  async function performDelete(
+    system: DesignSystemSummary,
+    force?: boolean,
+  ): Promise<{ success: boolean; error?: string }> {
     setBusyId(system.id);
     const startedAt = performance.now();
     const statusBefore = mapStatusToTracking(system.status);
@@ -330,20 +337,25 @@ export function DesignSystemsTab({
     let succeeded = false;
     let errorCode: string | undefined;
     try {
-      const deleted = await deleteDesignSystemDraft(system.id);
-      succeeded = Boolean(deleted);
-      if (!succeeded) errorCode = 'DS_DELETE_RETURNED_FALSE';
-      if (succeeded && selectedId === system.id) {
-        const fallback = systems.find((candidate) =>
-          candidate.id !== system.id && isUserSystem(candidate),
-        );
-        if (fallback) onSelect(fallback.id);
+      const result = await deleteDesignSystemDraft(system.id, force);
+      succeeded = result.success;
+      if (!succeeded) errorCode = result.error || 'DS_DELETE_FAILED';
+      if (succeeded) {
+        if (selectedId === system.id) {
+          const fallback = systems.find(
+            (candidate) =>
+              candidate.id !== system.id && isUserSystem(candidate),
+          );
+          if (fallback) onSelect(fallback.id);
+        }
+        await refreshSystems();
       }
-      await refreshSystems();
+      return result;
     } catch (err) {
-      errorCode = err instanceof Error
-        ? `DS_DELETE_THREW:${err.message.slice(0, 80)}`
-        : 'DS_DELETE_THREW';
+      errorCode =
+        err instanceof Error
+          ? `DS_DELETE_THREW:${err.message.slice(0, 80)}`
+          : 'DS_DELETE_THREW';
       throw err;
     } finally {
       setBusyId(null);
@@ -356,9 +368,6 @@ export function DesignSystemsTab({
         status_before: statusBefore,
         status_after: succeeded ? 'deleted' : statusBefore,
         is_default_before: wasDefault,
-        // After a successful delete the row is gone; if it was the
-        // default the consumer remapped to a fallback above, so this
-        // DS is no longer the default either way.
         is_default_after: false,
         error_code: errorCode,
         duration_ms: Math.round(performance.now() - startedAt),
@@ -756,6 +765,14 @@ export function DesignSystemsTab({
         onSystemsRefresh={onSystemsRefresh}
         onOpenSettings={onOpenSettings}
       />
+
+      <DeleteSystemModal
+        isOpen={!!deleteModalSystem}
+        system={deleteModalSystem}
+        onClose={() => setDeleteModalSystem(null)}
+        onConfirmDelete={performDelete}
+        onCancel={trackDeleteCancelled}
+      />
     </div>
   );
 }
@@ -1118,3 +1135,160 @@ function GitImportModal({
     </div>
   );
 }
+
+function DeleteSystemModal({
+  isOpen,
+  system,
+  onClose,
+  onConfirmDelete,
+  onCancel,
+}: {
+  isOpen: boolean;
+  system: DesignSystemSummary | null;
+  onClose: () => void;
+  onConfirmDelete: (
+    system: DesignSystemSummary,
+    force?: boolean,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onCancel: (system: DesignSystemSummary) => void;
+}) {
+  const { t } = useI18n();
+  const [deleting, setDeleting] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDeleting(false);
+      setIsDirty(false);
+      setError(null);
+    }
+  }, [isOpen]);
+
+  if (!isOpen || !system) return null;
+
+  const handleClose = () => {
+    if (deleting) return;
+    onCancel(system);
+    onClose();
+  };
+
+  const handleDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      const result = await onConfirmDelete(system, isDirty);
+      if (result.success) {
+        onClose();
+      } else if (result.error === 'GIT_DIRTY') {
+        setIsDirty(true);
+      } else {
+        setError(result.error || 'Delete failed');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={handleClose}>
+      <form
+        className="modal"
+        style={{
+          maxWidth: '440px',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
+          padding: '24px',
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleDelete}
+      >
+        <h2
+          style={{
+            margin: 0,
+            fontSize: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Icon name="alert-triangle" size={20} style={{ color: 'var(--danger)' }} />
+          {t('dsManager.deleteModalTitle')}
+        </h2>
+
+        {!isDirty ? (
+          <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.5 }}>
+            {t('dsManager.deleteModalConfirm', { title: system.title })}
+          </p>
+        ) : (
+          <div
+            style={{
+              padding: '12px 16px',
+              background: 'color-mix(in srgb, var(--danger, #ff6b6b) 10%, var(--bg-muted))',
+              border: '1px solid color-mix(in srgb, var(--danger, #ff6b6b) 30%, var(--border))',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: 'var(--danger, #ff6b6b)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+            }}
+          >
+            <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Icon name="alert-triangle" size={14} />
+              {t('dsManager.deleteModalDirtyTitle')}
+            </span>
+            <span style={{ color: 'var(--text)' }}>
+              {t('dsManager.deleteModalDirtyWarning')}
+            </span>
+          </div>
+        )}
+
+        {deleting && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              color: 'var(--text-soft)',
+              fontSize: '13px',
+            }}
+          >
+            <Icon name="spinner" size={14} className="spin" />
+            <span>{t('common.loading')}</span>
+          </div>
+        )}
+
+        {error && (
+          <p style={{ margin: 0, color: 'var(--danger)', fontSize: '13px' }}>
+            {error}
+          </p>
+        )}
+
+        <div
+          className="row"
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '10px',
+            marginTop: '12px',
+          }}
+        >
+          <button type="button" disabled={deleting} onClick={handleClose}>
+            {t('common.cancel')}
+          </button>
+          <button type="submit" className="primary danger" disabled={deleting}>
+            {isDirty ? t('dsManager.deleteModalForceDelete') : t('common.delete')}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+

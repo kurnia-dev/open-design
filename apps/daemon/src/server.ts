@@ -7001,14 +7001,44 @@ export async function startServer({
     }
   });
 
+  const execFileAsync = promisify(execFile);
+
+  async function isGitDirClean(dirPath: string): Promise<boolean> {
+    if (!fs.existsSync(dirPath)) return true;
+    try {
+      await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: dirPath, timeout: 5000 });
+      const { stdout } = await execFileAsync('git', ['status', '--porcelain'], { cwd: dirPath, timeout: 5000 });
+      return stdout.trim().length === 0;
+    } catch {
+      return true;
+    }
+  }
+
   app.delete('/api/design-systems/:id', async (req, res) => {
     try {
+      const dirId = req.params.id.startsWith('user:') ? req.params.id.slice('user:'.length) : req.params.id;
+      const dsDir = path.join(USER_DESIGN_SYSTEMS_DIR, dirId);
+      const projectId = `ds-${dirId}`;
+      const projectDir = path.join(PROJECTS_DIR, projectId);
+
+      const force = req.query.force === 'true';
+      if (!force) {
+        const [dsClean, projectClean] = await Promise.all([
+          isGitDirClean(dsDir),
+          isGitDirClean(projectDir),
+        ]);
+        if (!dsClean || !projectClean) {
+          return res.status(409).json({
+            error: 'GIT_DIRTY',
+            message: 'Working tree is not clean. Uncommitted changes will be lost if deleted.',
+          });
+        }
+      }
+
       const ok = await deleteUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id);
       if (!ok) {
         return res.status(404).json({ error: 'editable design system not found' });
       }
-      const dirId = req.params.id.startsWith('user:') ? req.params.id.slice('user:'.length) : req.params.id;
-      const projectId = `ds-${dirId}`;
       dbDeleteProject(db, projectId);
       await removeProjectDir(PROJECTS_DIR, projectId).catch(() => { });
       res.status(204).end();

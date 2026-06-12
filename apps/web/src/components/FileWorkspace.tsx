@@ -2631,6 +2631,7 @@ function DesignSystemProjectPanel({
   onConnectRepo?: () => void;
   githubConnected?: boolean;
 }) {
+  const t = useT();
   const [reviewDecisions, setReviewDecisions] = useState<Record<string, DesignSystemReviewDecision>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [feedbackSection, setFeedbackSection] = useState<string | null>(null);
@@ -3013,8 +3014,8 @@ function DesignSystemProjectPanel({
           <span className="ds-project-generation-mark">
             <Icon name="blocks" size={24} />
           </span>
-          <h1>Creating your design system...</h1>
-          <p>Keep this tab open. You can come back in a few minutes.</p>
+          <h1>{t('publish.creatingTitle')}</h1>
+          <p>{t('publish.creatingDesc')}</p>
           <div
             className="ds-project-generation-progress"
             role="progressbar"
@@ -3046,17 +3047,17 @@ function DesignSystemProjectPanel({
           </span>
           <h1>
             {hasFailedPublish
-              ? 'Publishing failed'
+              ? t('publish.titleError')
               : hasSuccessfulPublish
-                ? 'Design system published!'
-                : 'Publishing your design system...'}
+                ? t('publish.titleSuccess')
+                : t('publish.titleRunning')}
           </h1>
           <p>
             {hasFailedPublish
-              ? 'Review the error logs below to diagnose the issue.'
+              ? t('publish.descError')
               : hasSuccessfulPublish
-                ? 'Your design system packages are published to Verdaccio successfully.'
-                : 'Keep this tab open. We are running the build and publishing to verdaccio.'}
+                ? t('publish.descSuccess')
+                : t('publish.descRunning')}
           </p>
 
           <div
@@ -3077,8 +3078,8 @@ function DesignSystemProjectPanel({
             }}
           >
             <div style={{ color: hasFailedPublish ? 'var(--red)' : hasSuccessfulPublish ? 'var(--green)' : 'var(--text-secondary)', marginBottom: 8, fontWeight: 'bold', borderBottom: '1px solid var(--border)', paddingBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Console Logs</span>
-              {isPublishing && <span className="animate-pulse" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>● Running</span>}
+              <span>{t('publish.consoleLogs')}</span>
+              {isPublishing && <span className="animate-pulse" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>● {t('publish.runningState')}</span>}
             </div>
             <div style={{ lineHeight: 1.6 }}>
               <Ansi>{publishLogs.filter(line => line.trim().length > 0).join('\n')}</Ansi>
@@ -3094,7 +3095,7 @@ function DesignSystemProjectPanel({
                   setPublishLogs([]);
                 }}
               >
-                Back to Workspace
+                {t('publish.backToWorkspace')}
               </Button>
             </div>
           )}

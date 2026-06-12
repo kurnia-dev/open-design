@@ -1000,7 +1000,7 @@ async function initializeReactViteProject(
 
   const listItems = (isPublishedDesignSystem && publishedPackages.length > 0)
     ? publishedPackages
-      .map(pkgName => `<li><strong>${pkgName}</strong> (installed from local Verdaccio registry)</li>`)
+      .map(pkgName => `<li><strong>${pkgName}</strong> (installed from local npm registry)</li>`)
       .join('\n        ')
     : designSystemPackages
       .map(pkg => `<li><strong>${pkg.name}</strong> (linked from <code>${pkg.path}</code>)</li>`)

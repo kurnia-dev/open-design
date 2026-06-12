@@ -3246,4 +3246,15 @@ export interface Dict {
   'github.pickRepository': string;
   'github.pasteUrlInstead': string;
   'github.importing': string;
+  'publish.creatingTitle': string;
+  'publish.creatingDesc': string;
+  'publish.titleError': string;
+  'publish.titleSuccess': string;
+  'publish.titleRunning': string;
+  'publish.descError': string;
+  'publish.descSuccess': string;
+  'publish.descRunning': string;
+  'publish.consoleLogs': string;
+  'publish.runningState': string;
+  'publish.backToWorkspace': string;
 }

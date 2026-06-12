@@ -424,7 +424,7 @@ describe('design systems registry', () => {
     expect(generatedFiles?.map((file) => file.path)).not.toEqual(expect.arrayContaining(['README.md']));
   });
 
-  it('triggers build and publish to local Verdaccio registry when status transitions to published', async () => {
+  it('triggers build and publish to local npm registry when status transitions to published', async () => {
     const projectsRoot = await mkdtemp(path.join(tmpdir(), 'od-projects-'));
     const projectId = 'ds-acme-publish';
     const projectDir = path.join(projectsRoot, projectId);

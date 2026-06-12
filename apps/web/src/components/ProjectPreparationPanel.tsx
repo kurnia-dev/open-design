@@ -58,6 +58,61 @@ export function ProjectPreparationPanel({
     );
   };
 
+  // Determine the status label
+  let mainStatusText = 'Preparing your project';
+  if (step1Status === 'running') {
+    mainStatusText = 'Installing project dependencies';
+  } else if (step1Status === 'failed') {
+    mainStatusText = 'Setup failed';
+  } else if (step2Status === 'running') {
+    mainStatusText = 'Booting development server';
+  } else if (step2Status === 'completed') {
+    mainStatusText = 'Project is ready';
+  }
+
+  // Animation CSS styles
+  const styles = `
+    @keyframes od-shimmer {
+      0% { opacity: 0.15; }
+      50% { opacity: 0.45; }
+      100% { opacity: 0.15; }
+    }
+    @keyframes od-flow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes od-float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+      100% { transform: translateY(0px); }
+    }
+    @keyframes od-pulse-border {
+      0% { border-color: var(--border); }
+      50% { border-color: var(--accent); }
+      100% { border-color: var(--border); }
+    }
+    .od-skeleton-line {
+      height: 8px;
+      border-radius: 4px;
+      background: var(--border);
+      opacity: 0.2;
+    }
+    .od-skeleton-line.is-running-install {
+      animation: od-shimmer 1.8s ease-in-out infinite;
+    }
+    .od-skeleton-line.is-running-dev {
+      background: linear-gradient(90deg, var(--border) 0%, var(--accent) 50%, var(--border) 100%);
+      background-size: 200% 100%;
+      opacity: 0.7;
+      animation: od-flow 2s linear infinite;
+    }
+    .od-skeleton-line.is-failed {
+      background: var(--red);
+      opacity: 0.3;
+    }
+  `;
+
   return (
     <div style={{
       display: 'flex',
@@ -67,8 +122,81 @@ export function ProjectPreparationPanel({
       height: '100%',
       padding: '24px',
       boxSizing: 'border-box',
-      background: 'var(--bg)'
+      background: 'var(--bg)',
+      flexDirection: 'column',
+      gap: '24px'
     }}>
+      <style>{styles}</style>
+
+      {/* Dashed Animation Card */}
+      <div style={{
+        width: '280px',
+        height: '180px',
+        border: step1Status === 'failed'
+          ? '2.5px dashed var(--red)'
+          : step2Status === 'running'
+            ? '2.5px dashed var(--accent)'
+            : '2.5px dashed var(--border)',
+        borderRadius: '16px',
+        padding: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        gap: '12px',
+        position: 'relative',
+        background: 'rgba(0, 0, 0, 0.02)',
+        animation: step2Status === 'running' ? 'od-pulse-border 2s infinite' : 'none'
+      }}>
+        {/* Skeleton code lines */}
+        <div
+          className={`od-skeleton-line ${step1Status === 'running' ? 'is-running-install' : step2Status === 'running' ? 'is-running-dev' : step1Status === 'failed' ? 'is-failed' : ''}`}
+          style={{ width: '70%', animationDelay: '0s' }}
+        />
+        <div
+          className={`od-skeleton-line ${step1Status === 'running' ? 'is-running-install' : step2Status === 'running' ? 'is-running-dev' : step1Status === 'failed' ? 'is-failed' : ''}`}
+          style={{ width: '50%', animationDelay: '0.3s' }}
+        />
+        <div
+          className={`od-skeleton-line ${step1Status === 'running' ? 'is-running-install' : step2Status === 'running' ? 'is-running-dev' : step1Status === 'failed' ? 'is-failed' : ''}`}
+          style={{ width: '85%', animationDelay: '0.6s' }}
+        />
+        <div
+          className={`od-skeleton-line ${step1Status === 'running' ? 'is-running-install' : step2Status === 'running' ? 'is-running-dev' : step1Status === 'failed' ? 'is-failed' : ''}`}
+          style={{ width: '40%', animationDelay: '0.9s' }}
+        />
+
+        {/* Floating circular code symbol badge */}
+        <div style={{
+          position: 'absolute',
+          bottom: '16px',
+          left: '16px',
+          width: '36px',
+          height: '36px',
+          borderRadius: '50%',
+          border: step1Status === 'failed' ? '1.5px solid var(--red)' : '1.5px solid var(--border)',
+          background: 'var(--bg-card, var(--bg-2))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          animation: step1Status === 'running' || step2Status === 'running' ? 'od-float 2.5s ease-in-out infinite' : 'none',
+        }}>
+          {step1Status === 'failed' ? (
+            <Icon name="alert-triangle" size={14} style={{ color: 'var(--red)' }} />
+          ) : (
+            <span style={{
+              fontSize: '11px',
+              fontFamily: 'monospace',
+              fontWeight: 'bold',
+              color: step2Status === 'running' ? 'var(--accent)' : 'var(--text-secondary)'
+            }}>
+              {"</>"}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Centered status indicators panel */}
       <div style={{
         width: '100%',
         maxWidth: '400px',
@@ -82,7 +210,7 @@ export function ProjectPreparationPanel({
         textAlign: 'left'
       }}>
         <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text)' }}>
-          Project Preparation
+          {mainStatusText}
         </h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

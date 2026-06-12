@@ -1,6 +1,5 @@
 import { Button } from '@open-design/components';
-import Ansi from 'ansi-to-react';
-import type { ChatSessionMode, WorkspaceContextItem, GitHubAuthStatusResponse } from '@open-design/contracts';
+import type { ChatSessionMode, GitHubAuthStatusResponse, WorkspaceContextItem } from '@open-design/contracts';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { AnimatePresence } from 'motion/react';
 import {
@@ -21,6 +20,7 @@ import { useAnalytics } from '../analytics/provider';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
 import type { QuestionForm } from '../artifacts/question-form';
 import { useT } from '../i18n';
+import { ProjectGitProvider } from '../providers/ProjectGitProvider';
 import {
   deleteProjectFile,
   fetchProjectFileText,
@@ -68,17 +68,17 @@ import { DesignBrowserPanel, labelFromUrl, type BrowserPageInfo } from './Design
 import { DesignFilesPanel, type DesignFilesNavState } from './DesignFilesPanel';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { GenerationPreviewStage } from './GenerationPreviewStage';
+import { GitWorkspacePanel } from './GitWorkspacePanel';
 import { Icon, type IconName } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
-import { Spinner } from './Loading';
 import { PasteTextDialog } from './PasteTextDialog';
+import { ProjectPreparationPanel } from './ProjectPreparationPanel';
+import { ProjectPublishingPanel } from './ProjectPublishingPanel';
 import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { Toast } from './Toast';
-import { ProjectPreparationPanel } from './ProjectPreparationPanel';
-import { ProjectGitProvider } from '../providers/ProjectGitProvider';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import {
@@ -87,12 +87,11 @@ import {
   parseSketchWorkspaceDocument,
   type SketchItem,
 } from './sketch-model';
+import { GitHubIntegrationMenu } from './workspace/GitHubIntegrationMenu';
 import { SideChatTab, type ActiveConversationChatState } from './workspace/SideChatTab';
 import { TabLauncherMenu } from './workspace/TabLauncherMenu';
 import { TerminalViewer } from './workspace/TerminalViewer';
 import { buildLauncherActions, type LauncherContext } from './workspace/tab-launcher';
-import { GitWorkspacePanel } from './GitWorkspacePanel';
-import { GitHubIntegrationMenu } from './workspace/GitHubIntegrationMenu';
 
 interface Props {
   projectId: string;
@@ -1911,674 +1910,674 @@ export function FileWorkspace({
   return (
     <ProjectGitProvider projectId={projectId} filesRefreshKey={filesRefreshKey}>
       <div
-      className={[
-        'workspace',
-        designSystemProject ? 'has-design-system-tab' : '',
-        activeDevServerUrl ? 'has-dev-server-preview-tab' : '',
-      ].filter(Boolean).join(' ')}
-      data-testid="file-workspace"
-    >
-      <div className="ws-tabs-shell">
-        {onFocusModeChange && focusMode ? (
-          <button
-            type="button"
-            className="icon-only ws-focus-expand od-tooltip"
-            data-testid="workspace-focus-toggle"
-            aria-pressed={focusMode}
-            title={t('workspace.showChat')}
-            data-tooltip={t('workspace.showChat')}
-            data-tooltip-placement="bottom"
-            aria-label={t('workspace.showChat')}
-            onClick={() => onFocusModeChange(false)}
-          >
-            <Icon name="chevron-right" size={15} />
-          </button>
-        ) : null}
-        <div
-          ref={tabsBarRef}
-          className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
-          role="tablist"
-          aria-label={t('workspace.designFiles')}
-          onWheel={(event) => {
-            // Translate vertical wheel into horizontal tab scroll so Windows
-            // mouse-wheel users (no horizontal wheel/trackpad) can reach
-            // overflowed tabs. Only act when there's actually horizontal
-            // overflow and the gesture is predominantly vertical.
-            const el = event.currentTarget;
-            if (el.scrollWidth <= el.clientWidth) return;
-            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-            el.scrollLeft += event.deltaY;
-          }}
-          onDragLeave={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-            setDragOverTab(null);
-          }}
-          onDrop={(event) => {
-            if (event.target !== event.currentTarget) return;
-            clearTabDragState();
-          }}
-        >
-          {designSystemProject ? (
+        className={[
+          'workspace',
+          designSystemProject ? 'has-design-system-tab' : '',
+          activeDevServerUrl ? 'has-dev-server-preview-tab' : '',
+        ].filter(Boolean).join(' ')}
+        data-testid="file-workspace"
+      >
+        <div className="ws-tabs-shell">
+          {onFocusModeChange && focusMode ? (
             <button
               type="button"
-              className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === DESIGN_SYSTEM_TAB}
-              tabIndex={0}
-              data-testid="design-system-project-tab"
-              onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
-              title="Design System"
+              className="icon-only ws-focus-expand od-tooltip"
+              data-testid="workspace-focus-toggle"
+              aria-pressed={focusMode}
+              title={t('workspace.showChat')}
+              data-tooltip={t('workspace.showChat')}
+              data-tooltip-placement="bottom"
+              aria-label={t('workspace.showChat')}
+              onClick={() => onFocusModeChange(false)}
             >
-              <span className="tab-icon" aria-hidden>
-                <Icon name="blocks" size={13} />
-              </span>
-              <span className="ws-tab-label">Design System</span>
+              <Icon name="chevron-right" size={15} />
             </button>
           ) : null}
-          {activeDevServerUrl ? (
+          <div
+            ref={tabsBarRef}
+            className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
+            role="tablist"
+            aria-label={t('workspace.designFiles')}
+            onWheel={(event) => {
+              // Translate vertical wheel into horizontal tab scroll so Windows
+              // mouse-wheel users (no horizontal wheel/trackpad) can reach
+              // overflowed tabs. Only act when there's actually horizontal
+              // overflow and the gesture is predominantly vertical.
+              const el = event.currentTarget;
+              if (el.scrollWidth <= el.clientWidth) return;
+              if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+              el.scrollLeft += event.deltaY;
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+              setDragOverTab(null);
+            }}
+            onDrop={(event) => {
+              if (event.target !== event.currentTarget) return;
+              clearTabDragState();
+            }}
+          >
+            {designSystemProject ? (
+              <button
+                type="button"
+                className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
+                role="tab"
+                aria-selected={activeTab === DESIGN_SYSTEM_TAB}
+                tabIndex={0}
+                data-testid="design-system-project-tab"
+                onClick={() => setPersistedActive(DESIGN_SYSTEM_TAB)}
+                title="Design System"
+              >
+                <span className="tab-icon" aria-hidden>
+                  <Icon name="blocks" size={13} />
+                </span>
+                <span className="ws-tab-label">Design System</span>
+              </button>
+            ) : null}
+            {activeDevServerUrl ? (
+              <button
+                type="button"
+                className={`ws-tab dev-server-preview-tab ${activeTab === DEV_SERVER_PREVIEW_TAB ? 'active' : ''}`}
+                role="tab"
+                aria-selected={activeTab === DEV_SERVER_PREVIEW_TAB}
+                tabIndex={0}
+                data-testid="dev-server-preview-tab"
+                onClick={() => setPersistedActive(DEV_SERVER_PREVIEW_TAB)}
+                title="Preview"
+              >
+                <span className="tab-icon" aria-hidden>
+                  <Icon name="globe" size={13} />
+                </span>
+                <span className="ws-tab-label">Preview</span>
+              </button>
+            ) : null}
             <button
               type="button"
-              className={`ws-tab dev-server-preview-tab ${activeTab === DEV_SERVER_PREVIEW_TAB ? 'active' : ''}`}
+              className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
               role="tab"
-              aria-selected={activeTab === DEV_SERVER_PREVIEW_TAB}
+              aria-selected={activeTab === DESIGN_FILES_TAB}
               tabIndex={0}
-              data-testid="dev-server-preview-tab"
-              onClick={() => setPersistedActive(DEV_SERVER_PREVIEW_TAB)}
-              title="Preview"
+              data-testid="design-files-tab"
+              onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
+              title={t('workspace.designFiles')}
             >
               <span className="tab-icon" aria-hidden>
-                <Icon name="globe" size={13} />
+                <Icon name="grid" size={13} />
               </span>
-              <span className="ws-tab-label">Preview</span>
+              <span className="ws-tab-label">{t('workspace.designFiles')}</span>
             </button>
-          ) : null}
-          <button
-            type="button"
-            className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
-            role="tab"
-            aria-selected={activeTab === DESIGN_FILES_TAB}
-            tabIndex={0}
-            data-testid="design-files-tab"
-            onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-            title={t('workspace.designFiles')}
-          >
-            <span className="tab-icon" aria-hidden>
-              <Icon name="grid" size={13} />
-            </span>
-            <span className="ws-tab-label">{t('workspace.designFiles')}</span>
-          </button>
 
-          {showQuestionsTab ? (
-            <button
-              type="button"
-              className={`ws-tab questions-tab ${activeTab === QUESTIONS_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === QUESTIONS_TAB}
-              tabIndex={0}
-              data-testid="questions-tab"
-              onClick={() => setActiveTab(QUESTIONS_TAB)}
-              title={t('questions.tabLabel')}
-            >
-              <span className="tab-icon" aria-hidden>
-                <Icon name="help-circle" size={13} />
-              </span>
-              <span className="ws-tab-label">{t('questions.tabLabel')}</span>
-            </button>
-          ) : null}
-          {orderedWorkspaceTabs.map((entry) => {
-            if (entry.kind === 'browser') {
-              const browserTab = entry.browserTab;
-              const browserUrl = browserTab.url?.trim() ?? '';
-              const browserTitle = browserUrl
-                ? browserTab.title?.trim() || labelFromUrl(browserUrl)
-                : browserTab.label;
-              const browserMeta = browserUrl ? formatBrowserTabUrl(browserUrl) : undefined;
+            {showQuestionsTab ? (
+              <button
+                type="button"
+                className={`ws-tab questions-tab ${activeTab === QUESTIONS_TAB ? 'active' : ''}`}
+                role="tab"
+                aria-selected={activeTab === QUESTIONS_TAB}
+                tabIndex={0}
+                data-testid="questions-tab"
+                onClick={() => setActiveTab(QUESTIONS_TAB)}
+                title={t('questions.tabLabel')}
+              >
+                <span className="tab-icon" aria-hidden>
+                  <Icon name="help-circle" size={13} />
+                </span>
+                <span className="ws-tab-label">{t('questions.tabLabel')}</span>
+              </button>
+            ) : null}
+            {orderedWorkspaceTabs.map((entry) => {
+              if (entry.kind === 'browser') {
+                const browserTab = entry.browserTab;
+                const browserUrl = browserTab.url?.trim() ?? '';
+                const browserTitle = browserUrl
+                  ? browserTab.title?.trim() || labelFromUrl(browserUrl)
+                  : browserTab.label;
+                const browserMeta = browserUrl ? formatBrowserTabUrl(browserUrl) : undefined;
+                return (
+                  <Tab
+                    key={browserTab.id}
+                    label={browserTitle}
+                    meta={browserMeta}
+                    title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
+                    active={activeTab === browserTab.id}
+                    onActivate={() => setPersistedActive(browserTab.id)}
+                    onClose={() => closeBrowserTab(browserTab.id)}
+                    kind="browser"
+                  />
+                );
+              }
+              const name = entry.name;
+              const sketchEntry = sketches[name];
+              const dirtyMark =
+                sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
+              const isPending = sketchEntry && !sketchEntry.persisted;
+              const onDisk = visibleFiles.find((f) => f.name === name);
+              const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
+              const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
+              const isTerminal = isTerminalTabId(name);
+              const isSideChat = isSideChatTabId(name);
+              // Terminal and side-chat tabs are not files: give them a friendly
+              // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
+              let label: string;
+              if (isTerminal) {
+                // Number multiple terminals so the tabs stay distinguishable.
+                const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
+                label =
+                  ordinal > 1
+                    ? `${t('workspace.newTerminal')} ${ordinal}`
+                    : t('workspace.newTerminal');
+              } else if (isSideChat) {
+                const conv = conversations.find(
+                  (c) => c.id === conversationIdFromSideChatTabId(name),
+                );
+                label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
+              } else {
+                label = `${liveArtifact?.title ?? name}${dirtyMark}`;
+              }
+              const iconNameOverride: IconName | undefined = isTerminal
+                ? 'terminal'
+                : isSideChat
+                  ? 'comment'
+                  : undefined;
               return (
                 <Tab
-                  key={browserTab.id}
-                  label={browserTitle}
-                  meta={browserMeta}
-                  title={browserUrl ? `${browserTitle}\n${browserUrl}` : browserTitle}
-                  active={activeTab === browserTab.id}
-                  onActivate={() => setPersistedActive(browserTab.id)}
-                  onClose={() => closeBrowserTab(browserTab.id)}
-                  kind="browser"
-                />
-              );
-            }
-            const name = entry.name;
-            const sketchEntry = sketches[name];
-            const dirtyMark =
-              sketchEntry && (sketchEntry.dirty || !sketchEntry.persisted) ? ' •' : '';
-            const isPending = sketchEntry && !sketchEntry.persisted;
-            const onDisk = visibleFiles.find((f) => f.name === name);
-            const liveArtifact = liveArtifactEntries.find((entry) => entry.tabId === name);
-            const kind = liveArtifact ? 'live-artifact' : onDisk?.kind ?? (isSketchName(name) ? 'sketch' : 'text');
-            const isTerminal = isTerminalTabId(name);
-            const isSideChat = isSideChatTabId(name);
-            // Terminal and side-chat tabs are not files: give them a friendly
-            // label + glyph instead of the raw `terminal:<id>` / `chat:<id>` id.
-            let label: string;
-            if (isTerminal) {
-              // Number multiple terminals so the tabs stay distinguishable.
-              const ordinal = tabNames.filter(isTerminalTabId).indexOf(name) + 1;
-              label =
-                ordinal > 1
-                  ? `${t('workspace.newTerminal')} ${ordinal}`
-                  : t('workspace.newTerminal');
-            } else if (isSideChat) {
-              const conv = conversations.find(
-                (c) => c.id === conversationIdFromSideChatTabId(name),
-              );
-              label = conv?.title?.trim() || t('workspace.sideChatDefaultTitle');
-            } else {
-              label = `${liveArtifact?.title ?? name}${dirtyMark}`;
-            }
-            const iconNameOverride: IconName | undefined = isTerminal
-              ? 'terminal'
-              : isSideChat
-                ? 'comment'
-                : undefined;
-            return (
-              <Tab
-                key={name}
-                label={label}
-                iconNameOverride={iconNameOverride}
-                active={activeTab === name}
-                onActivate={() =>
-                  isPending ? activatePending(name) : setPersistedActive(name)
-                }
-                onClose={() => closeTab(name)}
-                kind={kind}
-                liveArtifact={liveArtifact}
-                draggable={persistedTabs.includes(name)}
-                dragging={draggedTabName === name}
-                dragOverEdge={
-                  dragOverTab?.name === name && draggedTabName !== name
-                    ? dragOverTab.edge
-                    : null
-                }
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'move';
-                  event.dataTransfer.setData('text/plain', name);
-                  draggedTabNameRef.current = name;
-                  setDraggedTabName(name);
-                }}
-                onDragOver={(event) => {
-                  const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
-                  if (!currentDraggedName || currentDraggedName === name) return;
-                  if (!persistedTabs.includes(currentDraggedName)) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'move';
-                  const edge = tabDropEdgeFromEvent(event);
-                  setDragOverTab((current) =>
-                    current?.name === name && current.edge === edge
-                      ? current
-                      : { name, edge },
-                  );
-                }}
-                onDragLeave={() => {
-                  setDragOverTab((current) => (current?.name === name ? null : current));
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const draggedName = draggedTabNameRef.current || draggedTabName;
-                  if (draggedName) {
-                    reorderPersistedTab(draggedName, name, tabDropEdgeFromEvent(event));
+                  key={name}
+                  label={label}
+                  iconNameOverride={iconNameOverride}
+                  active={activeTab === name}
+                  onActivate={() =>
+                    isPending ? activatePending(name) : setPersistedActive(name)
                   }
-                  clearTabDragState();
-                }}
-                onDragEnd={clearTabDragState}
-              />
-            );
-          })}
-        </div>
-        <div className="ws-add-tab">
-          <button
-            ref={launcherBtnRef}
-            type="button"
-            className="icon-only ws-tab-add od-tooltip"
-            data-testid="workspace-add-tab"
-            aria-haspopup="dialog"
-            aria-expanded={launcherOpen}
-            title={t('workspace.newTab')}
-            data-tooltip={t('workspace.newTab')}
-            data-tooltip-placement="bottom"
-            aria-label={t('workspace.newTab')}
-            onClick={() => setLauncherOpen((v) => !v)}
-          >
-            <Icon name="plus" size={15} />
-          </button>
-        </div>
-        {/* Pinned to the right for project/file actions; the tab launcher sits
-            next to the file tabs so its spatial relationship stays clear. */}
-        <div className="ws-tabs-actions">
-          <div
-            id={APP_CHROME_FILE_ACTIONS_ID}
-            className="ws-tabs-file-actions"
-            data-app-chrome-file-actions="true"
-          />
-          <button
-            type="button"
-            className={`ws-action-btn git-action-btn od-tooltip${activeTab === GIT_TAB ? ' active' : ''}`}
-            data-testid="git-action-btn"
-            onClick={() => setPersistedActive(GIT_TAB)}
-            data-tooltip="Git Changes"
-            data-tooltip-placement="bottom"
-            aria-label="Git Changes"
-          >
-            <Icon name="fork" size={15} />
-          </button>
-          <div className="ws-tabs-project-actions">
-            <button
-              ref={avatarBtnRef}
-              type="button"
-              className={`ws-action-btn od-tooltip ${githubMenuOpen ? 'active' : ''}`}
-              data-tooltip={githubAuth?.connected ? "GitHub Integration" : "Connect to GitHub"}
-              data-tooltip-placement="bottom"
-              onClick={() => setGithubMenuOpen((v) => !v)}
-            >
-              {githubAuth?.connected && githubAuth.avatarUrl ? (
-                <img
-                  src={githubAuth.avatarUrl}
-                  alt={githubAuth.username}
-                  style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }}
+                  onClose={() => closeTab(name)}
+                  kind={kind}
+                  liveArtifact={liveArtifact}
+                  draggable={persistedTabs.includes(name)}
+                  dragging={draggedTabName === name}
+                  dragOverEdge={
+                    dragOverTab?.name === name && draggedTabName !== name
+                      ? dragOverTab.edge
+                      : null
+                  }
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', name);
+                    draggedTabNameRef.current = name;
+                    setDraggedTabName(name);
+                  }}
+                  onDragOver={(event) => {
+                    const currentDraggedName = draggedTabNameRef.current ?? draggedTabName;
+                    if (!currentDraggedName || currentDraggedName === name) return;
+                    if (!persistedTabs.includes(currentDraggedName)) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    const edge = tabDropEdgeFromEvent(event);
+                    setDragOverTab((current) =>
+                      current?.name === name && current.edge === edge
+                        ? current
+                        : { name, edge },
+                    );
+                  }}
+                  onDragLeave={() => {
+                    setDragOverTab((current) => (current?.name === name ? null : current));
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const draggedName = draggedTabNameRef.current || draggedTabName;
+                    if (draggedName) {
+                      reorderPersistedTab(draggedName, name, tabDropEdgeFromEvent(event));
+                    }
+                    clearTabDragState();
+                  }}
+                  onDragEnd={clearTabDragState}
                 />
-              ) : (
-                <Icon name="github" size={17} />
-              )}
+              );
+            })}
+          </div>
+          <div className="ws-add-tab">
+            <button
+              ref={launcherBtnRef}
+              type="button"
+              className="icon-only ws-tab-add od-tooltip"
+              data-testid="workspace-add-tab"
+              aria-haspopup="dialog"
+              aria-expanded={launcherOpen}
+              title={t('workspace.newTab')}
+              data-tooltip={t('workspace.newTab')}
+              data-tooltip-placement="bottom"
+              aria-label={t('workspace.newTab')}
+              onClick={() => setLauncherOpen((v) => !v)}
+            >
+              <Icon name="plus" size={15} />
             </button>
           </div>
-          {headerActions ? (
-            <div className="ws-tabs-project-actions">{headerActions}</div>
-          ) : null}
+          {/* Pinned to the right for project/file actions; the tab launcher sits
+            next to the file tabs so its spatial relationship stays clear. */}
+          <div className="ws-tabs-actions">
+            <div
+              id={APP_CHROME_FILE_ACTIONS_ID}
+              className="ws-tabs-file-actions"
+              data-app-chrome-file-actions="true"
+            />
+            <button
+              type="button"
+              className={`ws-action-btn git-action-btn od-tooltip${activeTab === GIT_TAB ? ' active' : ''}`}
+              data-testid="git-action-btn"
+              onClick={() => setPersistedActive(GIT_TAB)}
+              data-tooltip="Git Changes"
+              data-tooltip-placement="bottom"
+              aria-label="Git Changes"
+            >
+              <Icon name="fork" size={15} />
+            </button>
+            <div className="ws-tabs-project-actions">
+              <button
+                ref={avatarBtnRef}
+                type="button"
+                className={`ws-action-btn od-tooltip ${githubMenuOpen ? 'active' : ''}`}
+                data-tooltip={githubAuth?.connected ? "GitHub Integration" : "Connect to GitHub"}
+                data-tooltip-placement="bottom"
+                onClick={() => setGithubMenuOpen((v) => !v)}
+              >
+                {githubAuth?.connected && githubAuth.avatarUrl ? (
+                  <img
+                    src={githubAuth.avatarUrl}
+                    alt={githubAuth.username}
+                    style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '1px solid var(--border)' }}
+                  />
+                ) : (
+                  <Icon name="github" size={17} />
+                )}
+              </button>
+            </div>
+            {headerActions ? (
+              <div className="ws-tabs-project-actions">{headerActions}</div>
+            ) : null}
+          </div>
         </div>
-      </div>
-      {launcherOpen ? (
-        <TabLauncherMenu
-          anchor={launcherBtnRef.current}
-          files={visibleFiles}
-          workspaceContexts={workspaceContexts}
-          openTabNames={tabNames}
-          actions={launcherActions}
-          launcherContext={launcherContext}
-          onOpenFile={openFile}
-          onOpenTab={focusWorkspaceTab}
-          onClose={() => setLauncherOpen(false)}
-        />
-      ) : null}
-      {launcherToast ? (
-        <Toast
-          message={launcherToast}
-          role="alert"
-          onDismiss={() => setLauncherToast(null)}
-        />
-      ) : null}
-      {githubMenuOpen ? (
-        <GitHubIntegrationMenu
-          anchor={avatarBtnRef.current}
-          projectId={projectId}
-          githubAuth={githubAuth}
-          onOpenGitHubSettings={onOpenGitHubSettings}
-          onClose={() => setGithubMenuOpen(false)}
-          onRemoteChanged={() => void onRefreshFiles()}
-        />
-      ) : null}
-      <div className="ws-body">
-        {/* Banner moved into DesignFilesPanel for the Design Files tab so
+        {launcherOpen ? (
+          <TabLauncherMenu
+            anchor={launcherBtnRef.current}
+            files={visibleFiles}
+            workspaceContexts={workspaceContexts}
+            openTabNames={tabNames}
+            actions={launcherActions}
+            launcherContext={launcherContext}
+            onOpenFile={openFile}
+            onOpenTab={focusWorkspaceTab}
+            onClose={() => setLauncherOpen(false)}
+          />
+        ) : null}
+        {launcherToast ? (
+          <Toast
+            message={launcherToast}
+            role="alert"
+            onDismiss={() => setLauncherToast(null)}
+          />
+        ) : null}
+        {githubMenuOpen ? (
+          <GitHubIntegrationMenu
+            anchor={avatarBtnRef.current}
+            projectId={projectId}
+            githubAuth={githubAuth}
+            onOpenGitHubSettings={onOpenGitHubSettings}
+            onClose={() => setGithubMenuOpen(false)}
+            onRemoteChanged={() => void onRefreshFiles()}
+          />
+        ) : null}
+        <div className="ws-body">
+          {/* Banner moved into DesignFilesPanel for the Design Files tab so
             single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
             no longer leaves a stale banner mounted above the preview.
             Keep a fallback here that fires only when activeTab is not the
             Design Files tab, which preserves visibility for the
             partial-upload case where the last successful file auto-opens
             into a viewer surface. */}
-        {uploadError && activeTab !== DESIGN_FILES_TAB ? (
-          <div className="df-upload-banner" data-testid="upload-error-banner">
-            <span>{uploadError}</span>
-            <button
-              type="button"
-              data-testid="upload-error-dismiss"
-              onClick={() => setUploadError(null)}
+          {uploadError && activeTab !== DESIGN_FILES_TAB ? (
+            <div className="df-upload-banner" data-testid="upload-error-banner">
+              <span>{uploadError}</span>
+              <button
+                type="button"
+                data-testid="upload-error-dismiss"
+                onClick={() => setUploadError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+          {browserTabs.filter((browserTab) => liveBrowserTabIds.includes(browserTab.id)).map((browserTab) => (
+            <div
+              key={`${projectId}:${browserTab.id}`}
+              className={`ws-browser-panel ${activeTab === browserTab.id ? 'active' : ''}`}
+              aria-hidden={activeTab === browserTab.id ? undefined : true}
             >
-              Dismiss
-            </button>
-          </div>
-        ) : null}
-        {browserTabs.filter((browserTab) => liveBrowserTabIds.includes(browserTab.id)).map((browserTab) => (
-          <div
-            key={`${projectId}:${browserTab.id}`}
-            className={`ws-browser-panel ${activeTab === browserTab.id ? 'active' : ''}`}
-            aria-hidden={activeTab === browserTab.id ? undefined : true}
-          >
-            <DesignBrowserPanel
+              <DesignBrowserPanel
+                projectId={projectId}
+                resolvedDir={resolvedDir}
+                initialIconUrl={browserTab.iconUrl}
+                initialTitle={browserTab.title}
+                initialUrl={browserTab.url}
+                sendDisabled={Boolean(streaming)}
+                previewComments={previewComments}
+                onSavePreviewComment={onSavePreviewComment}
+                onRemovePreviewComment={onRemovePreviewComment}
+                onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+                onRequestBrowserUsePrompt={onRequestBrowserUsePrompt}
+                onRefreshFiles={onRefreshFiles}
+                onOpenFile={openFile}
+                onPageInfoChange={(info) => updateBrowserTabInfo(browserTab.id, info)}
+              />
+            </div>
+          ))}
+          {activeTab === QUESTIONS_TAB ? (
+            <QuestionsPanel
+              key={questionFormKey ?? undefined}
+              formKey={questionFormKey}
+              form={questionForm ?? questionFormPreview}
+              interactive={questionFormInteractive}
+              submitDisabled={questionFormSubmitDisabled}
+              submittedAnswers={questionFormSubmittedAnswers}
+              generating={questionsGenerating}
+              onSubmit={(text) => onSubmitQuestionForm?.(text)}
+            />
+          ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+            <DesignSystemProjectPanel
               projectId={projectId}
-              resolvedDir={resolvedDir}
-              initialIconUrl={browserTab.iconUrl}
-              initialTitle={browserTab.title}
-              initialUrl={browserTab.url}
-              sendDisabled={Boolean(streaming)}
-              previewComments={previewComments}
-              onSavePreviewComment={onSavePreviewComment}
-              onRemovePreviewComment={onRemovePreviewComment}
-              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-              onRequestBrowserUsePrompt={onRequestBrowserUsePrompt}
-              onRefreshFiles={onRefreshFiles}
-              onOpenFile={openFile}
-              onPageInfoChange={(info) => updateBrowserTabInfo(browserTab.id, info)}
-            />
-          </div>
-        ))}
-        {activeTab === QUESTIONS_TAB ? (
-          <QuestionsPanel
-            key={questionFormKey ?? undefined}
-            formKey={questionFormKey}
-            form={questionForm ?? questionFormPreview}
-            interactive={questionFormInteractive}
-            submitDisabled={questionFormSubmitDisabled}
-            submittedAnswers={questionFormSubmittedAnswers}
-            generating={questionsGenerating}
-            onSubmit={(text) => onSubmitQuestionForm?.(text)}
-          />
-        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
-          <DesignSystemProjectPanel
-            projectId={projectId}
-            system={designSystemProject}
-            files={visibleFiles}
-            streaming={Boolean(streaming)}
-            activityEvents={designSystemActivityEvents}
-            onOpenFile={openFile}
-            onUploadAssets={() => fileInputRef.current?.click()}
-            defaultDesignSystemId={defaultDesignSystemId}
-            onSetDefaultDesignSystem={onSetDefaultDesignSystem}
-            onDesignSystemsRefresh={onDesignSystemsRefresh}
-            onNeedsWork={onDesignSystemNeedsWork}
-            designSystemReview={designSystemReview}
-            onReviewDecision={onDesignSystemReviewDecision}
-            onUseDesignSystem={onUseDesignSystem}
-            onConnectRepo={onConnectRepo}
-            githubConnected={githubAuth?.connected}
-          />
-        ) : activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl ? (
-          npmInstallStatus === 'running' || npmInstallStatus === 'failed' || devServerReady === false ? (
-            <ProjectPreparationPanel
-              npmInstallStatus={npmInstallStatus}
-              npmInstallMessage={npmInstallMessage}
-              npmInstallLogs={npmInstallLogs}
-              devServerReady={devServerReady}
-            />
-          ) : (
-            <FileViewer
-              projectId={projectId}
-              projectKind={projectKind}
-              file={devPreviewFile}
-              devServerUrl={activeDevServerUrl}
-              devServerReady={devServerReady}
-              liveHtml=""
-              isDeck={false}
-              filesRefreshKey={filesRefreshKey}
-              commentQueueOnSend={commentQueueOnSend}
-              commentSendDisabled={commentSendDisabled}
-              previewComments={previewComments}
-              onSavePreviewComment={onSavePreviewComment}
-              onRemovePreviewComment={onRemovePreviewComment}
-              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-              commentPortalId={commentPortalId}
-              onCommentModeChange={onCommentModeChange}
-            />
-          )
-        )
-          : activeTab === GIT_TAB ? (
-            <GitWorkspacePanel
-              projectId={projectId}
-              filesRefreshKey={filesRefreshKey}
-              onRefreshFiles={onRefreshFiles}
-              chatConfig={chatConfig}
-              onOpenGitHubSettings={onOpenGitHubSettings}
-              githubAuth={githubAuth}
-            />
-          ) : isBrowserTabId(activeTab) ? (
-            null
-          ) : showGenerationPreview && generationPreview ? (
-            <GenerationPreviewStage
-              model={generationPreview}
-              onRetry={
-                generationPreview.retryTarget && onRetry
-                  ? () => onRetry(generationPreview.retryTarget!)
-                  : undefined
-              }
-              onAuthorizeAndRetry={
-                generationPreview.retryTarget && onAuthorizeAndRetry
-                  ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
-                  : undefined
-              }
-              onLaunchTerminalAuth={onLaunchTerminalAuth}
-              amrAuthorizeSourceDetail="generation_preview_authorize_retry"
-              amrRechargeSourceDetail="generation_preview_recharge"
-              amrGuidance={
-                generationPreview.promoteAmrSwitch
-                  && generationPreview.errorCode
-                  && generationPreview.retryTarget
-                  && onAuthorizeAndRetry ? (
-                  <AmrGuidance
-                    errorCode={generationPreview.errorCode}
-                    projectId={projectId}
-                    projectKind={projectKind}
-                    conversationId={conversationId ?? null}
-                    assistantMessageId={generationPreview.retryTarget.id}
-                    runId={generationPreview.retryTarget.runId ?? null}
-                    sourceDetail="generation_preview_switch_retry_card"
-                    onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
-                  />
-                ) : undefined
-              }
-            />
-          ) : activeTab === DESIGN_FILES_TAB ? (
-            <DesignFilesPanel
-              key={projectId}
-              projectId={projectId}
-              rootDirName={rootDirName}
-              reloading={reloading}
+              system={designSystemProject}
               files={visibleFiles}
-              folders={projectFolders}
-              liveArtifacts={liveArtifactEntries}
-              onRefreshFiles={onRefreshFiles}
-              onCurrentDirChange={setUploadDir}
-              navState={designFilesNavRef.current}
-              onNavStateChange={onDesignFilesNavStateChange}
+              streaming={Boolean(streaming)}
+              activityEvents={designSystemActivityEvents}
               onOpenFile={openFile}
-              onOpenLiveArtifact={(tabId) => openFile(tabId)}
-              onRenameFile={handleRename}
-              onDeleteFile={(name) => {
-                trackFileManagerClick(analytics.track, {
-                  page_name: 'file_manager',
-                  area: 'file_manager',
-                  element: 'delete',
-                });
-                void handleDelete(name);
-              }}
-              onDeleteFiles={(names) => {
-                trackFileManagerClick(analytics.track, {
-                  page_name: 'file_manager',
-                  area: 'file_manager',
-                  element: 'delete',
-                });
-                return handleDeleteMany(names);
-              }}
-              onUpload={() => {
-                trackFileManagerClick(analytics.track, {
-                  page_name: 'file_manager',
-                  area: 'file_manager',
-                  element: 'upload',
-                });
-                fileInputRef.current?.click();
-              }}
-              onUploadFiles={(picked) => void uploadFiles(picked)}
-              onPaste={() => {
-                trackFileManagerClick(analytics.track, {
-                  page_name: 'file_manager',
-                  area: 'file_manager',
-                  element: 'paste',
-                });
-                setShowPasteDialog(true);
-              }}
-              onNewSketch={() => {
-                trackFileManagerClick(analytics.track, {
-                  page_name: 'file_manager',
-                  area: 'file_manager',
-                  element: 'new_sketch',
-                });
-                startNewSketch();
-              }}
-              uploadError={uploadError}
-              onClearUploadError={() => setUploadError(null)}
-              preferredPreviewFile={preferredPreviewFile}
-              autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
-              onPluginFolderAgentAction={onPluginFolderAgentAction}
-              activePluginActionPaths={activePluginActionPaths}
-              hiddenPluginActionPaths={hiddenPluginActionPaths}
+              onUploadAssets={() => fileInputRef.current?.click()}
+              defaultDesignSystemId={defaultDesignSystemId}
+              onSetDefaultDesignSystem={onSetDefaultDesignSystem}
+              onDesignSystemsRefresh={onDesignSystemsRefresh}
+              onNeedsWork={onDesignSystemNeedsWork}
+              designSystemReview={designSystemReview}
+              onReviewDecision={onDesignSystemReviewDecision}
+              onUseDesignSystem={onUseDesignSystem}
+              onConnectRepo={onConnectRepo}
+              githubConnected={githubAuth?.connected}
             />
-          ) : isActiveSketch && activeSketch && activeFile ? (
-            activeSketch.loaded ? (
-              <SketchEditor
-                fileName={activeFile.name}
-                items={activeSketch.items}
-                hasPreservedRawItems={
-                  !activeSketch.discardRawItemsOnSave && activeSketch.rawItems.length > activeSketch.items.length
-                }
-                onItemsChange={(items) => setSketchItems(activeFile.name, items)}
-                onClear={() => clearSketch(activeFile.name)}
-                onSave={() => saveSketch(activeFile.name)}
-                saving={activeSketch.saving}
-                dirty={activeSketch.dirty || !activeSketch.persisted}
-                onCancel={() => closeTab(activeFile.name)}
+          ) : activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl ? (
+            npmInstallStatus === 'running' || npmInstallStatus === 'failed' || devServerReady === false ? (
+              <ProjectPreparationPanel
+                npmInstallStatus={npmInstallStatus}
+                npmInstallMessage={npmInstallMessage}
+                npmInstallLogs={npmInstallLogs}
+                devServerReady={devServerReady}
               />
             ) : (
-              <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
+              <FileViewer
+                projectId={projectId}
+                projectKind={projectKind}
+                file={devPreviewFile}
+                devServerUrl={activeDevServerUrl}
+                devServerReady={devServerReady}
+                liveHtml=""
+                isDeck={false}
+                filesRefreshKey={filesRefreshKey}
+                commentQueueOnSend={commentQueueOnSend}
+                commentSendDisabled={commentSendDisabled}
+                previewComments={previewComments}
+                onSavePreviewComment={onSavePreviewComment}
+                onRemovePreviewComment={onRemovePreviewComment}
+                onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+                commentPortalId={commentPortalId}
+                onCommentModeChange={onCommentModeChange}
+              />
             )
-          ) : isSideChatTabId(activeTab) && chatConfig && chatAgentsById ? (
-            <SideChatTab
-              key={`${projectId}:${activeTab}`}
-              projectId={projectId}
-              conversationId={conversationIdFromSideChatTabId(activeTab)}
-              config={chatConfig}
-              agentsById={chatAgentsById}
-              locale={chatLocale ?? 'en'}
-              projectFiles={visibleFiles}
-              conversations={conversations}
-              onSelectConversation={onSelectConversation ?? (() => { })}
-              onDeleteConversation={onDeleteConversation ?? (() => { })}
-              onRenameConversation={onRenameConversation}
-              onSessionModeChange={onConversationSessionModeChange}
-              onNewConversation={onNewConversation}
-              activeConversationChat={activeConversationChat}
-              onRequestOpenFile={openFile}
-            />
-          ) : isTerminalTabId(activeTab) ? (
-            <TerminalViewer
-              key={activeTab}
-              projectId={projectId}
-              terminalId={terminalIdFromTabId(activeTab)}
-              onClose={() => closeTab(activeTab)}
-              onSessionIdChange={handleTerminalSessionChange}
-            />
-          ) : activeLiveArtifact ? (
-            <LiveArtifactViewer
-              projectId={projectId}
-              liveArtifact={activeLiveArtifact}
-              liveArtifactEvents={liveArtifactEvents}
-              onRefreshArtifacts={onRefreshFiles}
-            />
-          ) : activeFile ? (
-            <FileViewer
-              projectId={projectId}
-              projectKind={projectKind}
-              file={activeFile}
-              filesRefreshKey={filesRefreshKey}
-              isDeck={isDeck}
-              onExportAsPptx={onExportAsPptx}
-              streaming={streaming}
-              commentQueueOnSend={commentQueueOnSend}
-              commentSendDisabled={commentSendDisabled}
-              previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
-              onSavePreviewComment={onSavePreviewComment}
-              onRemovePreviewComment={onRemovePreviewComment}
-              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-              onFileSaved={onRefreshFiles}
-              onOpenFileReplacing={openFileReplacing}
-              commentPortalId={commentPortalId}
-              onCommentModeChange={onCommentModeChange}
-              shareRequest={
-                shareRequest && shareRequest.name === activeFile.name
-                  ? { nonce: shareRequest.nonce }
-                  : null
-              }
-              slideNavRequest={deliverableSlideNavForActiveFile(
-                slideNavRequest,
-                activeFile.name,
-                slideNavDeliverableNonce,
-              )}
-            />
-          ) : (
-            <div className="viewer-empty">
-              {t('workspace.openFromDesignFiles')}{' '}
-              <a
-                className="link"
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setActiveTab(DESIGN_FILES_TAB);
+          )
+            : activeTab === GIT_TAB ? (
+              <GitWorkspacePanel
+                projectId={projectId}
+                filesRefreshKey={filesRefreshKey}
+                onRefreshFiles={onRefreshFiles}
+                chatConfig={chatConfig}
+                onOpenGitHubSettings={onOpenGitHubSettings}
+                githubAuth={githubAuth}
+              />
+            ) : isBrowserTabId(activeTab) ? (
+              null
+            ) : showGenerationPreview && generationPreview ? (
+              <GenerationPreviewStage
+                model={generationPreview}
+                onRetry={
+                  generationPreview.retryTarget && onRetry
+                    ? () => onRetry(generationPreview.retryTarget!)
+                    : undefined
+                }
+                onAuthorizeAndRetry={
+                  generationPreview.retryTarget && onAuthorizeAndRetry
+                    ? () => onAuthorizeAndRetry(generationPreview.retryTarget!)
+                    : undefined
+                }
+                onLaunchTerminalAuth={onLaunchTerminalAuth}
+                amrAuthorizeSourceDetail="generation_preview_authorize_retry"
+                amrRechargeSourceDetail="generation_preview_recharge"
+                amrGuidance={
+                  generationPreview.promoteAmrSwitch
+                    && generationPreview.errorCode
+                    && generationPreview.retryTarget
+                    && onAuthorizeAndRetry ? (
+                    <AmrGuidance
+                      errorCode={generationPreview.errorCode}
+                      projectId={projectId}
+                      projectKind={projectKind}
+                      conversationId={conversationId ?? null}
+                      assistantMessageId={generationPreview.retryTarget.id}
+                      runId={generationPreview.retryTarget.runId ?? null}
+                      sourceDetail="generation_preview_switch_retry_card"
+                      onActivate={() => onAuthorizeAndRetry(generationPreview.retryTarget!)}
+                    />
+                  ) : undefined
+                }
+              />
+            ) : activeTab === DESIGN_FILES_TAB ? (
+              <DesignFilesPanel
+                key={projectId}
+                projectId={projectId}
+                rootDirName={rootDirName}
+                reloading={reloading}
+                files={visibleFiles}
+                folders={projectFolders}
+                liveArtifacts={liveArtifactEntries}
+                onRefreshFiles={onRefreshFiles}
+                onCurrentDirChange={setUploadDir}
+                navState={designFilesNavRef.current}
+                onNavStateChange={onDesignFilesNavStateChange}
+                onOpenFile={openFile}
+                onOpenLiveArtifact={(tabId) => openFile(tabId)}
+                onRenameFile={handleRename}
+                onDeleteFile={(name) => {
+                  trackFileManagerClick(analytics.track, {
+                    page_name: 'file_manager',
+                    area: 'file_manager',
+                    element: 'delete',
+                  });
+                  void handleDelete(name);
                 }}
-              >
-                {t('workspace.designFilesLink')}
-              </a>
-              .
-            </div>
-          )}
+                onDeleteFiles={(names) => {
+                  trackFileManagerClick(analytics.track, {
+                    page_name: 'file_manager',
+                    area: 'file_manager',
+                    element: 'delete',
+                  });
+                  return handleDeleteMany(names);
+                }}
+                onUpload={() => {
+                  trackFileManagerClick(analytics.track, {
+                    page_name: 'file_manager',
+                    area: 'file_manager',
+                    element: 'upload',
+                  });
+                  fileInputRef.current?.click();
+                }}
+                onUploadFiles={(picked) => void uploadFiles(picked)}
+                onPaste={() => {
+                  trackFileManagerClick(analytics.track, {
+                    page_name: 'file_manager',
+                    area: 'file_manager',
+                    element: 'paste',
+                  });
+                  setShowPasteDialog(true);
+                }}
+                onNewSketch={() => {
+                  trackFileManagerClick(analytics.track, {
+                    page_name: 'file_manager',
+                    area: 'file_manager',
+                    element: 'new_sketch',
+                  });
+                  startNewSketch();
+                }}
+                uploadError={uploadError}
+                onClearUploadError={() => setUploadError(null)}
+                preferredPreviewFile={preferredPreviewFile}
+                autoPreviewDesignArtifacts={autoPreviewDesignArtifacts}
+                onPluginFolderAgentAction={onPluginFolderAgentAction}
+                activePluginActionPaths={activePluginActionPaths}
+                hiddenPluginActionPaths={hiddenPluginActionPaths}
+              />
+            ) : isActiveSketch && activeSketch && activeFile ? (
+              activeSketch.loaded ? (
+                <SketchEditor
+                  fileName={activeFile.name}
+                  items={activeSketch.items}
+                  hasPreservedRawItems={
+                    !activeSketch.discardRawItemsOnSave && activeSketch.rawItems.length > activeSketch.items.length
+                  }
+                  onItemsChange={(items) => setSketchItems(activeFile.name, items)}
+                  onClear={() => clearSketch(activeFile.name)}
+                  onSave={() => saveSketch(activeFile.name)}
+                  saving={activeSketch.saving}
+                  dirty={activeSketch.dirty || !activeSketch.persisted}
+                  onCancel={() => closeTab(activeFile.name)}
+                />
+              ) : (
+                <div className="viewer-empty">{t('workspace.loadingSketch')}</div>
+              )
+            ) : isSideChatTabId(activeTab) && chatConfig && chatAgentsById ? (
+              <SideChatTab
+                key={`${projectId}:${activeTab}`}
+                projectId={projectId}
+                conversationId={conversationIdFromSideChatTabId(activeTab)}
+                config={chatConfig}
+                agentsById={chatAgentsById}
+                locale={chatLocale ?? 'en'}
+                projectFiles={visibleFiles}
+                conversations={conversations}
+                onSelectConversation={onSelectConversation ?? (() => { })}
+                onDeleteConversation={onDeleteConversation ?? (() => { })}
+                onRenameConversation={onRenameConversation}
+                onSessionModeChange={onConversationSessionModeChange}
+                onNewConversation={onNewConversation}
+                activeConversationChat={activeConversationChat}
+                onRequestOpenFile={openFile}
+              />
+            ) : isTerminalTabId(activeTab) ? (
+              <TerminalViewer
+                key={activeTab}
+                projectId={projectId}
+                terminalId={terminalIdFromTabId(activeTab)}
+                onClose={() => closeTab(activeTab)}
+                onSessionIdChange={handleTerminalSessionChange}
+              />
+            ) : activeLiveArtifact ? (
+              <LiveArtifactViewer
+                projectId={projectId}
+                liveArtifact={activeLiveArtifact}
+                liveArtifactEvents={liveArtifactEvents}
+                onRefreshArtifacts={onRefreshFiles}
+              />
+            ) : activeFile ? (
+              <FileViewer
+                projectId={projectId}
+                projectKind={projectKind}
+                file={activeFile}
+                filesRefreshKey={filesRefreshKey}
+                isDeck={isDeck}
+                onExportAsPptx={onExportAsPptx}
+                streaming={streaming}
+                commentQueueOnSend={commentQueueOnSend}
+                commentSendDisabled={commentSendDisabled}
+                previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}
+                onSavePreviewComment={onSavePreviewComment}
+                onRemovePreviewComment={onRemovePreviewComment}
+                onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+                onFileSaved={onRefreshFiles}
+                onOpenFileReplacing={openFileReplacing}
+                commentPortalId={commentPortalId}
+                onCommentModeChange={onCommentModeChange}
+                shareRequest={
+                  shareRequest && shareRequest.name === activeFile.name
+                    ? { nonce: shareRequest.nonce }
+                    : null
+                }
+                slideNavRequest={deliverableSlideNavForActiveFile(
+                  slideNavRequest,
+                  activeFile.name,
+                  slideNavDeliverableNonce,
+                )}
+              />
+            ) : (
+              <div className="viewer-empty">
+                {t('workspace.openFromDesignFiles')}{' '}
+                <a
+                  className="link"
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveTab(DESIGN_FILES_TAB);
+                  }}
+                >
+                  {t('workspace.designFilesLink')}
+                </a>
+                .
+              </div>
+            )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          data-testid="design-files-upload-input"
+          style={{ display: 'none' }}
+          onChange={handleFilePicked}
+        />
+        <AnimatePresence>
+          {showPasteDialog ? (
+            <PasteTextDialog
+              onClose={() => setShowPasteDialog(false)}
+              onSave={async (name, content) => {
+                setShowPasteDialog(false);
+                // Save under the folder currently being viewed, if any.
+                const target = uploadDir ? `${uploadDir}/${name}` : name;
+                const file = await writeProjectTextFile(projectId, target, content);
+                if (file) {
+                  await onRefreshFiles();
+                  openFile(file.name);
+                }
+              }}
+            />
+          ) : null}
+        </AnimatePresence>
+        <AnimatePresence>
+          {quickSwitcherOpen ? (
+            <QuickSwitcher
+              projectId={projectId}
+              files={visibleFiles}
+              workspaceContexts={workspaceContexts}
+              onOpenFile={(name) => {
+                openFile(name);
+                setQuickSwitcherOpen(false);
+              }}
+              onOpenTab={(tabId) => {
+                focusWorkspaceTab(tabId);
+                setQuickSwitcherOpen(false);
+              }}
+              onClose={() => setQuickSwitcherOpen(false)}
+            />
+          ) : null}
+        </AnimatePresence>
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        data-testid="design-files-upload-input"
-        style={{ display: 'none' }}
-        onChange={handleFilePicked}
-      />
-      <AnimatePresence>
-        {showPasteDialog ? (
-          <PasteTextDialog
-            onClose={() => setShowPasteDialog(false)}
-            onSave={async (name, content) => {
-              setShowPasteDialog(false);
-              // Save under the folder currently being viewed, if any.
-              const target = uploadDir ? `${uploadDir}/${name}` : name;
-              const file = await writeProjectTextFile(projectId, target, content);
-              if (file) {
-                await onRefreshFiles();
-                openFile(file.name);
-              }
-            }}
-          />
-        ) : null}
-      </AnimatePresence>
-      <AnimatePresence>
-        {quickSwitcherOpen ? (
-          <QuickSwitcher
-            projectId={projectId}
-            files={visibleFiles}
-            workspaceContexts={workspaceContexts}
-            onOpenFile={(name) => {
-              openFile(name);
-              setQuickSwitcherOpen(false);
-            }}
-            onOpenTab={(tabId) => {
-              focusWorkspaceTab(tabId);
-              setQuickSwitcherOpen(false);
-            }}
-            onClose={() => setQuickSwitcherOpen(false)}
-          />
-        ) : null}
-      </AnimatePresence>
-    </div>
     </ProjectGitProvider>
   );
 }
@@ -2635,13 +2634,6 @@ function DesignSystemProjectPanel({
   const [statusBusy, setStatusBusy] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishLogs, setPublishLogs] = useState<string[]>([]);
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [publishLogs]);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -3026,76 +3018,13 @@ function DesignSystemProjectPanel({
     );
   }
 
-  const hasFailedPublish = publishLogs.some((line) => line.includes('ERROR:'));
-  const hasSuccessfulPublish = publishLogs.some((line) => line.includes('SUCCESS:'));
-
   if (isPublishing || publishLogs.length > 0) {
     return (
-      <div className="ds-project-panel ds-project-panel--generating">
-        <div className="ds-project-generation-stage" style={{ width: 'min(800px, calc(100% - 48px))' }}>
-          <span className="ds-project-generation-mark">
-            {hasFailedPublish ? (
-              <Icon name="alert-triangle" size={24} style={{ color: 'var(--red)' }} />
-            ) : (
-              <Icon name="blocks" size={24} />
-            )}
-          </span>
-          <h1>
-            {hasFailedPublish
-              ? t('publish.titleError')
-              : hasSuccessfulPublish
-                ? t('publish.titleSuccess')
-                : t('publish.titleRunning')}
-          </h1>
-          <p>
-            {hasFailedPublish
-              ? t('publish.descError')
-              : hasSuccessfulPublish
-                ? t('publish.descSuccess')
-                : t('publish.descRunning')}
-          </p>
-
-          <div
-            style={{
-              marginTop: 24,
-              width: '100%',
-              padding: '16px',
-              background: 'transparent',
-              color: 'var(--text-secondary)',
-              borderRadius: 8,
-              fontFamily: 'monospace',
-              fontSize: 12.5,
-              height: 400,
-              overflowY: 'auto',
-              whiteSpace: 'pre-wrap',
-              border: '1px solid var(--border)',
-              textAlign: 'left',
-            }}
-          >
-            <div style={{ color: hasFailedPublish ? 'var(--red)' : hasSuccessfulPublish ? 'var(--green)' : 'var(--text-secondary)', marginBottom: 8, fontWeight: 'bold', borderBottom: '1px solid var(--border)', paddingBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>{t('publish.consoleLogs')}</span>
-              {isPublishing && <span className="animate-pulse" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>● {t('publish.runningState')}</span>}
-            </div>
-            <div style={{ lineHeight: 1.6 }}>
-              <Ansi>{publishLogs.filter(line => line.trim().length > 0).join('\n')}</Ansi>
-            </div>
-            <div ref={logsEndRef} />
-          </div>
-
-          {!isPublishing && (
-            <div style={{ marginTop: 24 }}>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setPublishLogs([]);
-                }}
-              >
-                {t('publish.backToWorkspace')}
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
+      <ProjectPublishingPanel
+        isPublishing={isPublishing}
+        publishLogs={publishLogs}
+        setPublishLogs={setPublishLogs}
+      />
     );
   }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goRuntime "runtime"
 	"strings"
@@ -29,6 +30,9 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
+	// Start Next.js and daemon sidecars if they are not running yet
+	a.startSidecars()
+
 	// Check screen dimensions. If the primary monitor is smaller than 1280x720,
 	// automatically maximize the window to ensure it fits and is fully usable.
 	screens, err := wailsRuntime.ScreenGetAll(ctx)
@@ -47,6 +51,59 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	go a.startRedirectionLoop()
+}
+
+func (a *App) startSidecars() {
+	// 1. Try to discover if already running
+	url := a.DiscoverWebURL()
+	if url != "" {
+		return
+	}
+
+	// 2. Try starting using tools-dev in development
+	pnpmPath, err := exec.LookPath("pnpm")
+	if err == nil {
+		cmd := exec.Command(pnpmPath, "tools-dev", "start", "web")
+		
+		// Look for workspace root
+		cwd, err := os.Getwd()
+		if err == nil {
+			if strings.HasSuffix(cwd, "desktop-wails") {
+				cmd.Dir = "../.."
+			} else if _, err := os.Stat("../../package.json"); err == nil {
+				cmd.Dir = "../.."
+			}
+		}
+		
+		// Ensure environment path is propagated so pnpm can resolve node
+		cmd.Env = os.Environ()
+		
+		_ = cmd.Start()
+		
+		// Poll for up to 10 seconds to see if web socket becomes ready
+		for i := 0; i < 20; i++ {
+			time.Sleep(500 * time.Millisecond)
+			if a.DiscoverWebURL() != "" {
+				return
+			}
+		}
+	}
+
+	// 3. In production, try starting using system node + prebundled sidecars
+	nodePath, err := exec.LookPath("node")
+	if err == nil {
+		exePath, err := os.Executable()
+		if err == nil {
+			// On macOS packaged bundle, resources are at ../Resources
+			resourcesDir := filepath.Join(filepath.Dir(exePath), "../Resources")
+			daemonEntry := filepath.Join(resourcesDir, "app/prebundled/daemon/daemon-sidecar.mjs")
+			
+			if _, err := os.Stat(daemonEntry); err == nil {
+				daemonCmd := exec.Command(nodePath, daemonEntry)
+				_ = daemonCmd.Start()
+			}
+		}
+	}
 }
 
 func (a *App) startRedirectionLoop() {

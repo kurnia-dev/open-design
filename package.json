@@ -14,6 +14,7 @@
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-serve": "pnpm exec tools-serve",
+    "wails-dev": "pnpm tools-dev start web && pnpm --filter @open-design/desktop-wails dev",
     "nix:update-hash": "node --experimental-strip-types ./scripts/update-nix-pnpm-deps-hash.ts",
     "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/product-neutrality.test.ts scripts/approve-fork-pr-workflows.test.ts scripts/postinstall.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",

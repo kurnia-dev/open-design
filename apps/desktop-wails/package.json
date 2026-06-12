@@ -1,0 +1,10 @@
+{
+  "name": "@open-design/desktop-wails",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wails dev",
+    "build": "wails build"
+  }
+}

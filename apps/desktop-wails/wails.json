@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "open-design-wails",
+  "outputfilename": "open-design-wails",
+  "frontend:dir": "frontend",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "author": {
+    "name": "open-design contributors",
+    "email": "support@opendesign.dev"
+  },
+  "info": {
+    "outputFilename": "open-design-wails"
+  }
+}

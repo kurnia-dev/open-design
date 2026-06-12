@@ -3064,25 +3064,24 @@ function DesignSystemProjectPanel({
               marginTop: 24,
               width: '100%',
               padding: '16px',
-              background: '#0f1115',
-              color: '#a9b1d6',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
               borderRadius: 8,
               fontFamily: 'monospace',
               fontSize: 12.5,
               height: 400,
               overflowY: 'auto',
               whiteSpace: 'pre-wrap',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              border: '1px solid var(--border)',
               textAlign: 'left',
-              boxShadow: 'inset 0 4px 12px rgba(0,0,0,0.5)',
             }}
           >
-            <div style={{ color: hasFailedPublish ? '#f87171' : hasSuccessfulPublish ? '#4ade80' : '#38bdf8', marginBottom: 8, fontWeight: 'bold', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ color: hasFailedPublish ? 'var(--red)' : hasSuccessfulPublish ? 'var(--green)' : 'var(--text-secondary)', marginBottom: 8, fontWeight: 'bold', borderBottom: '1px solid var(--border)', paddingBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>Console Logs</span>
-              {isPublishing && <span className="animate-pulse" style={{ fontSize: 11, color: '#a7f3d0' }}>● Running</span>}
+              {isPublishing && <span className="animate-pulse" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>● Running</span>}
             </div>
             <div style={{ lineHeight: 1.6 }}>
-              <Ansi>{publishLogs.join('\n')}</Ansi>
+              <Ansi>{publishLogs.filter(line => line.trim().length > 0).join('\n')}</Ansi>
             </div>
             <div ref={logsEndRef} />
           </div>

@@ -2035,6 +2035,24 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.delete('/api/projects/:id', async (req, res) => {
     try {
+      const activeProc = activeInstallProcesses.get(req.params.id);
+      if (activeProc) {
+        console.log(`[project-routes] Terminating install process for project ${req.params.id} due to project deletion`);
+        activeInstallProcesses.delete(req.params.id);
+        if (activeProc.pid) {
+          try {
+            process.kill(-activeProc.pid, 'SIGTERM');
+          } catch (err) {
+            activeProc.kill('SIGTERM');
+          }
+        } else {
+          activeProc.kill('SIGTERM');
+        }
+      }
+      npmInstallStatuses.delete(req.params.id);
+      npmInstallMessages.delete(req.params.id);
+      npmInstallLogs.delete(req.params.id);
+
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => { });
       /** @type {import('@open-design/contracts').OkResponse} */

@@ -162,17 +162,17 @@ export function buildPersistedConfig(next: AppConfig, current: AppConfig): AppCo
     onboardingCompleted: current.onboardingCompleted ? true : next.onboardingCompleted,
     ...(stalePrivacySnapshot
       ? {
-          installationId: current.installationId,
-          privacyDecisionAt: current.privacyDecisionAt,
-          telemetry: current.telemetry,
-        }
+        installationId: current.installationId,
+        privacyDecisionAt: current.privacyDecisionAt,
+        telemetry: current.telemetry,
+      }
       : {}),
     composio: next.composio
       ? {
-          apiKey: '',
-          apiKeyConfigured: Boolean(next.composio.apiKeyConfigured),
-          apiKeyTail: next.composio.apiKeyTail ?? '',
-        }
+        apiKey: '',
+        apiKeyConfigured: Boolean(next.composio.apiKeyConfigured),
+        apiKeyTail: next.composio.apiKeyTail ?? '',
+      }
       : next.composio,
   };
 }
@@ -1023,10 +1023,10 @@ function AppInner() {
     await Promise.all([
       shouldSyncMediaProviders
         ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
-            force: options?.forceMediaProviderSync,
-            daemonProviders: daemonMediaProviders,
-            throwOnError: options?.forceMediaProviderSync,
-          })
+          force: options?.forceMediaProviderSync,
+          daemonProviders: daemonMediaProviders,
+          throwOnError: options?.forceMediaProviderSync,
+        })
         : Promise.resolve(),
       syncConfigToDaemon(persisted),
     ]);
@@ -1198,8 +1198,8 @@ function AppInner() {
       // as a no-design-system project rather than silently inheriting the
       // workspace default.
       const derivedPendingPrompt =
-      input.pendingPrompt ??
-      (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
+        input.pendingPrompt ??
+        (input.metadata?.promptTemplate?.prompt?.trim() || undefined);
 
       const kind = input.metadata?.kind ?? null;
       const fidelity = fidelityToTracking(input.metadata?.fidelity ?? null);
@@ -1347,9 +1347,9 @@ function AppInner() {
       }
       const project = result.appliedPluginSnapshotId
         ? {
-            ...result.project,
-            appliedPluginSnapshotId: result.appliedPluginSnapshotId,
-          }
+          ...result.project,
+          appliedPluginSnapshotId: result.appliedPluginSnapshotId,
+        }
         : result.project;
       rememberLocalProject(project.id);
       flushSync(() => {
@@ -1389,9 +1389,9 @@ function AppInner() {
       }
       const project = outcome.appliedPluginSnapshotId
         ? {
-            ...outcome.project,
-            appliedPluginSnapshotId: outcome.appliedPluginSnapshotId,
-          }
+          ...outcome.project,
+          appliedPluginSnapshotId: outcome.appliedPluginSnapshotId,
+        }
         : outcome.project;
       rememberLocalProject(project.id);
       setProjects((curr) => [
@@ -1670,6 +1670,7 @@ function AppInner() {
     let cancelled = false;
     (async () => {
       const project = await getProject(route.projectId);
+      console.log("project", project, activeProject)
       if (cancelled) return;
       if (project) {
         setProjects((curr) => {
@@ -2037,53 +2038,53 @@ function AppInner() {
       )}
       <TooltipLayer />
       <AnimatePresence>
-      {settingsOpen ? (
-        <SettingsDialog
-          initial={config}
-          agents={agents}
-          agentsLoading={agentsLoading}
-          daemonLive={daemonLive}
-          appVersionInfo={appVersionInfo}
-          welcome={settingsWelcome}
-          githubAuth={githubAuth}
-          githubAuthLoading={githubAuthLoading}
-          onRefreshGitHubAuth={refreshGitHubAuth}
-          initialSection={settingsInitialSection}
-          initialHighlight={settingsHighlight}
-          composioConfigLoading={composioConfigLoading}
-          onPersist={handleConfigPersist}
-          onPersistComposioKey={handleConfigPersistComposioKey}
-          onClose={() => {
-            // Closing the dialog is the canonical "I'm done" gesture
-            // now that there is no global Save button. We mark
-            // onboardingCompleted on close so the welcome modal stops
-            // re-prompting on every refresh, regardless of whether
-            // the user changed anything during the session.
-            const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
-            if (!next.onboardingCompleted || !config.onboardingCompleted) {
-              latestPersistedConfigRef.current = next;
-              saveConfig(next);
-              void syncConfigToDaemon(next);
-              setConfig(next);
-            }
-            setSettingsOpen(false);
-            setSettingsHighlight(null);
-          }}
-          onRefreshAgents={refreshAgents}
-          onAmrLoginStatusChange={handleAmrLoginStatusChange}
-          onSkillsRefresh={refreshSkills}
-          daemonMediaProviders={daemonMediaProviders}
-          daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
-          mediaProvidersNotice={mediaProvidersNotice}
-          onReloadMediaProviders={reloadMediaProvidersFromDaemon}
-          onProjectsRefresh={refreshProjects}
-          onSkillsChanged={handleSkillsChanged}
-          onDesignSystemsChanged={handleDesignSystemsChanged}
-          onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
-          providerModelsCache={providerModelsCache}
-          onProviderModelsCacheChange={setProviderModelsCache}
-        />
-      ) : null}
+        {settingsOpen ? (
+          <SettingsDialog
+            initial={config}
+            agents={agents}
+            agentsLoading={agentsLoading}
+            daemonLive={daemonLive}
+            appVersionInfo={appVersionInfo}
+            welcome={settingsWelcome}
+            githubAuth={githubAuth}
+            githubAuthLoading={githubAuthLoading}
+            onRefreshGitHubAuth={refreshGitHubAuth}
+            initialSection={settingsInitialSection}
+            initialHighlight={settingsHighlight}
+            composioConfigLoading={composioConfigLoading}
+            onPersist={handleConfigPersist}
+            onPersistComposioKey={handleConfigPersistComposioKey}
+            onClose={() => {
+              // Closing the dialog is the canonical "I'm done" gesture
+              // now that there is no global Save button. We mark
+              // onboardingCompleted on close so the welcome modal stops
+              // re-prompting on every refresh, regardless of whether
+              // the user changed anything during the session.
+              const next = resolveSettingsCloseConfig(config, latestPersistedConfigRef.current);
+              if (!next.onboardingCompleted || !config.onboardingCompleted) {
+                latestPersistedConfigRef.current = next;
+                saveConfig(next);
+                void syncConfigToDaemon(next);
+                setConfig(next);
+              }
+              setSettingsOpen(false);
+              setSettingsHighlight(null);
+            }}
+            onRefreshAgents={refreshAgents}
+            onAmrLoginStatusChange={handleAmrLoginStatusChange}
+            onSkillsRefresh={refreshSkills}
+            daemonMediaProviders={daemonMediaProviders}
+            daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
+            mediaProvidersNotice={mediaProvidersNotice}
+            onReloadMediaProviders={reloadMediaProvidersFromDaemon}
+            onProjectsRefresh={refreshProjects}
+            onSkillsChanged={handleSkillsChanged}
+            onDesignSystemsChanged={handleDesignSystemsChanged}
+            onDesignSystemImportRebuildJob={handleDesignSystemImportRebuildJob}
+            providerModelsCache={providerModelsCache}
+            onProviderModelsCacheChange={setProviderModelsCache}
+          />
+        ) : null}
       </AnimatePresence>
       <MemoryToast onOpenMemory={() => openSettings('memory')} />
       {workingDirError ? (
@@ -2101,33 +2102,33 @@ function AppInner() {
           index.css sits above modal backdrops so opening Settings does
           not hide the banner. */}
       <AnimatePresence>
-      {showPrivacyConsent ? (
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-        >
-        <PrivacyConsentModal
-          onAccept={() => {
-            // Default opt-in: clicking "I get it" enables the same telemetry
-            // surface the previous two-button "Share usage data" path opted
-            // into. The banner footer + PrivacySection give the user a
-            // one-click path to flip everything off later.
-            // The banner owns only the privacy decision; it does not drive
-            // navigation. Onboarding is gated by `onboardingCompleted` on
-            // its own and runs in parallel.
-            const installationId = generateInstallationIdSafe();
-            void handleConfigPersist({
-              ...latestPersistedConfigRef.current,
-              installationId,
-              privacyDecisionAt: Date.now(),
-              telemetry: { metrics: true, content: true, artifactManifest: false },
-            });
-          }}
-        />
-      </motion.div>
-      ) : null}
+        {showPrivacyConsent ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+          >
+            <PrivacyConsentModal
+              onAccept={() => {
+                // Default opt-in: clicking "I get it" enables the same telemetry
+                // surface the previous two-button "Share usage data" path opted
+                // into. The banner footer + PrivacySection give the user a
+                // one-click path to flip everything off later.
+                // The banner owns only the privacy decision; it does not drive
+                // navigation. Onboarding is gated by `onboardingCompleted` on
+                // its own and runs in parallel.
+                const installationId = generateInstallationIdSafe();
+                void handleConfigPersist({
+                  ...latestPersistedConfigRef.current,
+                  installationId,
+                  privacyDecisionAt: Date.now(),
+                  telemetry: { metrics: true, content: true, artifactManifest: false },
+                });
+              }}
+            />
+          </motion.div>
+        ) : null}
       </AnimatePresence>
     </>
   );

@@ -1193,13 +1193,16 @@ function runProjectInstall(
       detached: process.platform !== 'win32',
       shell: process.platform === 'win32',
       windowsHide: true,
+      env: {
+        ...process.env,
+        FORCE_COLOR: '1',
+      },
     });
     child.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
       console.log(`[project-routes][${tool}] ${text.trim()}`);
       for (const rawLine of text.split('\n')) {
-        // Strip ANSI colour codes before sending to the UI
-        const line = rawLine.replace(/\x1B\[[0-9;]*m/g, '').trimEnd();
+        const line = rawLine.trimEnd();
         if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
       }
     });
@@ -1207,7 +1210,7 @@ function runProjectInstall(
       const text = data.toString();
       console.warn(`[project-routes][${tool}] ${text.trim()}`);
       for (const rawLine of text.split('\n')) {
-        const line = rawLine.replace(/\x1B\[[0-9;]*m/g, '').trimEnd();
+        const line = rawLine.trimEnd();
         if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
       }
     });

@@ -11,6 +11,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import { normalizeCustomReason, projectKindToTracking } from '@open-design/contracts/analytics';
 import { AnimatePresence } from 'motion/react';
+import Ansi from 'ansi-to-react';
 import {
   useCallback,
   useEffect,
@@ -5731,9 +5732,7 @@ export function ProjectView({
               {npmInstallLogs.length === 0 ? (
                 <span style={{ color: 'var(--text-4)', fontStyle: 'italic' }}>Waiting for output...</span>
               ) : (
-                npmInstallLogs.map((line, i) => (
-                  <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
-                ))
+                <Ansi>{npmInstallLogs.join('\n')}</Ansi>
               )}
               <div ref={(el) => el?.scrollIntoView({ block: 'end' })} />
             </div>

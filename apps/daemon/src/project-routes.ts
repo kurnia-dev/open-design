@@ -4087,7 +4087,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       try {
         await execGit(['fetch', fetchUrl, branch]);
       } catch (fetchErr: any) {
-        return res.json({ ahead: 0, behind: 0, status: 'error', error: String(fetchErr?.message || fetchErr) });
+        const errMsg = String(fetchErr?.message || fetchErr);
+        if (errMsg.includes("couldn't find remote ref")) {
+          try {
+            const countRaw = await execGit(['rev-list', '--count', 'HEAD']);
+            const ahead = Number(countRaw.trim()) || 0;
+            return res.json({ ahead, behind: 0, status: ahead > 0 ? 'ahead' : 'synced' });
+          } catch (e) {
+            return res.json({ ahead: 0, behind: 0, status: 'synced' });
+          }
+        }
+        return res.json({ ahead: 0, behind: 0, status: 'error', error: errMsg });
       }
 
       const revListOutput = await execGit(['rev-list', '--left-right', '--count', `HEAD...FETCH_HEAD`]);

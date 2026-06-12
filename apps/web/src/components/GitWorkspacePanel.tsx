@@ -393,6 +393,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
       await commitProjectGit(projectId, commitMsg.trim());
       setCommitMsg('');
       await loadStatus();
+      await refreshGitState();
       onRefreshFiles?.();
     } catch (err: any) {
       setError(err?.message || 'Failed to commit changes');

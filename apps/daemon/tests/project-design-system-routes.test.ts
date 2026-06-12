@@ -323,4 +323,32 @@ describe('project design system route gates', () => {
     const body = (await resp.json()) as { error?: { message?: string } };
     expect(body.error?.message).toMatch(/draft design systems cannot be used/i);
   });
+
+  it('deletes the backing workspace project and folder when a design system is deleted', async () => {
+    const draft = await createUserDesignSystem('draft');
+
+    const workspaceResp = await fetch(
+      `${baseUrl}/api/design-systems/${encodeURIComponent(draft.id)}/workspace`,
+      { method: 'POST' },
+    );
+    expect(workspaceResp.status).toBe(201);
+    const workspaceBody = (await workspaceResp.json()) as {
+      project: { id: string };
+    };
+    const projectId = workspaceBody.project.id;
+
+    const getProjectRespBefore = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`);
+    expect(getProjectRespBefore.status).toBe(200);
+
+    const deleteResp = await fetch(`${baseUrl}/api/design-systems/${encodeURIComponent(draft.id)}`, {
+      method: 'DELETE',
+    });
+    expect(deleteResp.status).toBe(204);
+
+    const getProjectRespAfter = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`);
+    expect(getProjectRespAfter.status).toBe(404);
+
+    const getDSRespAfter = await fetch(`${baseUrl}/api/design-systems/${encodeURIComponent(draft.id)}`);
+    expect(getDSRespAfter.status).toBe(404);
+  });
 });

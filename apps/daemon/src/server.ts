@@ -7007,6 +7007,10 @@ export async function startServer({
       if (!ok) {
         return res.status(404).json({ error: 'editable design system not found' });
       }
+      const dirId = req.params.id.startsWith('user:') ? req.params.id.slice('user:'.length) : req.params.id;
+      const projectId = `ds-${dirId}`;
+      dbDeleteProject(db, projectId);
+      await removeProjectDir(PROJECTS_DIR, projectId).catch(() => { });
       res.status(204).end();
     } catch (err) {
       res.status(500).json({ error: String(err) });

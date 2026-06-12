@@ -130,6 +130,49 @@ const COMPONENT_EXTENSIONS = new Set(['.tsx', '.jsx', '.vue', '.svelte']);
 const ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico']);
 const FONT_EXTENSIONS = new Set(['.woff', '.woff2', '.ttf', '.otf']);
 const COMPONENT_NAMES = ['Button', 'Input', 'Card', 'Nav', 'Navbar', 'Sidebar'];
+
+async function getExistingPackageName(
+  dirId: string,
+  userDesignSystemsRoot: string,
+  projectsRoot?: string,
+): Promise<string | undefined> {
+  const manifestPath = path.join(userDesignSystemsRoot, dirId, 'manifest.json');
+  if (await exists(manifestPath)) {
+    try {
+      const content = await readFile(manifestPath, 'utf8');
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && typeof parsed.packageName === 'string') {
+        return parsed.packageName;
+      }
+    } catch {}
+  }
+
+  const pkgPath = path.join(userDesignSystemsRoot, dirId, 'package.json');
+  if (await exists(pkgPath)) {
+    try {
+      const content = await readFile(pkgPath, 'utf8');
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+        return parsed.name;
+      }
+    } catch {}
+  }
+
+  if (projectsRoot) {
+    const projPkgPath = path.join(projectsRoot, `ds-${dirId}`, 'package.json');
+    if (await exists(projPkgPath)) {
+      try {
+        const content = await readFile(projPkgPath, 'utf8');
+        const parsed = JSON.parse(content) as Record<string, unknown>;
+        if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+          return parsed.name;
+        }
+      } catch {}
+    }
+  }
+  return undefined;
+}
+
 export async function importLocalDesignSystemProject(
   sourceRootInput: string,
   userDesignSystemsRoot: string,
@@ -143,6 +186,25 @@ export async function importLocalDesignSystemProject(
 
   options.onProgress?.('Scanning project files...');
   const scan = await scanProject(sourceRoot);
+
+  if (scan.packageName) {
+    let entries: any[] = [];
+    try {
+      entries = await readdir(userDesignSystemsRoot, { withFileTypes: true });
+    } catch {
+      // ignore
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+      const existingPkgName = await getExistingPackageName(entry.name, userDesignSystemsRoot, options.projectsRoot);
+      if (existingPkgName && existingPkgName.toLowerCase() === scan.packageName.toLowerCase()) {
+        throw new LocalDesignSystemImportError(
+          'BAD_REQUEST',
+          `A design system with the package name "${scan.packageName}" has already been imported.`,
+        );
+      }
+    }
+  }
   const isGitProject =
     options.source?.type === 'github' ||
     options.source?.type === 'git' ||
@@ -201,6 +263,9 @@ export async function importLocalDesignSystemProject(
         path: sourceRoot,
         importedAt: now.toISOString(),
       };
+      if (scan.packageName) {
+        parsed.packageName = scan.packageName;
+      }
       await writeFile(manifestPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
     } catch (err) {
       throw new LocalDesignSystemImportError('INTERNAL_ERROR', `failed to update manifest.json: ${String(err)}`);
@@ -515,6 +580,7 @@ function renderManifest(
     id,
     name,
     category: 'Imported',
+    packageName: scan.packageName,
     description: scan.packageDescription ?? `Extracted from local project ${path.basename(scan.sourceRoot)}.`,
     source: {
       ...source,

@@ -252,12 +252,28 @@ describe('importLocalDesignSystemProject', () => {
     const first = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
       reservedIds: ['kami-app'],
     });
+    fs.writeFileSync(
+      path.join(sourceRoot, 'package.json'),
+      JSON.stringify({
+        name: '@other/kami-app',
+        description: 'A focused workspace for AI design reviews.',
+        dependencies: { react: '^18.0.0', tailwindcss: '^3.0.0' },
+      }),
+    );
     const second = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
       reservedIds: ['kami-app'],
     });
 
     expect(first.id).toBe('kami-app-2');
     expect(second.id).toBe('kami-app-3');
+  });
+
+  it('throws an error if a project with the same package name in package.json was already imported', async () => {
+    await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot);
+
+    await expect(
+      importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot),
+    ).rejects.toThrow('A design system with the package name "@acme/kami-app" has already been imported.');
   });
 
   it('writes selected importMode and applied craft semantics into manifest', async () => {

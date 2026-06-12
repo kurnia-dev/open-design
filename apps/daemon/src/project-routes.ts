@@ -4037,7 +4037,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       await execGit(['pull', pullUrl, branch]);
       res.json({ ok: true });
     } catch (err: any) {
-      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+      const errMsg = String(err?.message || err);
+      if (errMsg.includes("couldn't find remote ref")) {
+        // The remote branch doesn't exist yet (e.g. newly created empty repo). 
+        // This is not a real failure, we can just proceed.
+        return res.json({ ok: true });
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', errMsg);
     }
   });
 

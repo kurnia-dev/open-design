@@ -2,11 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../Icon';
 import { Spinner } from '../Loading';
-import { CustomSelect } from '../CustomSelect';
-import { setProjectGitRemote, fetchGitHubRepos } from '../../providers/registry';
+import { setProjectGitRemote } from '../../providers/registry';
 import { GitHubRepoSelect } from '../GitHubRepoSelect';
+import { GitHubRepoCreateForm, type GitHubRepoCreateData } from '../GitHubRepoCreateForm';
 import { useProjectGit } from '../../providers/ProjectGitProvider';
-import type { GitHubAuthStatusResponse, GitHubRepoItem } from '@open-design/contracts';
+import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 import styles from './GitHubIntegrationMenu.module.css';
 
 interface Props {
@@ -28,30 +28,19 @@ export function GitHubIntegrationMenu({
 }: Props) { 
   const { remoteUrl, refreshGitState, setRemoteUrlState } = useProjectGit();
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [newRemoteUrl, setNewRemoteUrl] = useState('');
   const [showRemoteForm, setShowRemoteForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [showManualInput, setShowManualInput] = useState(false);
-
-  useEffect(() => {
-    if (showRemoteForm && githubAuth?.connected) {
-      fetchGitHubRepos()
-        .then((fetchedRepos) => {
-          // If the user already has a remote that isn't in the list, show manual input
-          if (remoteUrl && !fetchedRepos.some(r => r.cloneUrl === remoteUrl)) {
-            setShowManualInput(true);
-          }
-        })
-        .catch(() => {
-          // Fallback to manual input if fetch fails
-          setShowManualInput(true);
-        });
-    }
-  }, [showRemoteForm, githubAuth?.connected, remoteUrl]);
+  const [formMode, setFormMode] = useState<'create' | 'existing'>('create');
+  const [createData, setCreateData] = useState<GitHubRepoCreateData>({
+    owner: githubAuth?.username ?? '',
+    ownerType: 'user',
+    name: '',
+    private: true,
+  });
 
   useEffect(() => {
     if (remoteUrl) setNewRemoteUrl(remoteUrl);
@@ -79,10 +68,9 @@ export function GitHubIntegrationMenu({
     function update() {
       if (!anchor) return;
       const r = anchor.getBoundingClientRect();
-      const width = 320;
-      // Position bottom-right aligned with the avatar
-      const left = Math.max(12, Math.min(r.right - width, window.innerWidth - width - 12));
-      setPos({ top: r.bottom + 6, left });
+      // Right-anchor: align menu's right edge with anchor's right edge, clamp to viewport
+      const right = Math.max(12, window.innerWidth - r.right);
+      setPos({ top: r.bottom + 6, right });
     }
     update();
     window.addEventListener('scroll', update, true);
@@ -99,6 +87,8 @@ export function GitHubIntegrationMenu({
       if (anchor?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
       if (target.closest?.('.od-select-menu')) return;
+      // Allow clicks inside any floating dropdown (repo select, visibility, owner)
+      if (target.closest?.('[data-floating-menu]')) return;
       onClose();
     }
     function onKey(e: KeyboardEvent) {
@@ -118,7 +108,7 @@ export function GitHubIntegrationMenu({
     <div
       ref={menuRef}
       className={styles.menu}
-      style={{ top: pos.top, left: pos.left }}
+      style={{ top: pos.top, right: pos.right, width: showRemoteForm ? 480 : 340 }}
       role="dialog"
       aria-label="GitHub Integration"
     >
@@ -178,45 +168,91 @@ export function GitHubIntegrationMenu({
           )}
         </div>
         {showRemoteForm ? (
-          <form
-            className={styles.connectForm}
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (newRemoteUrl.trim() && !loading) {
-                void handleSetRemote();
-              }
-            }}
-          >
-            {(!showManualInput && githubAuth?.connected) ? (
-              <GitHubRepoSelect
-                value={newRemoteUrl}
-                onChange={setNewRemoteUrl}
-                onSelectManual={() => setShowManualInput(true)}
-                showManualOption={true}
-                triggerClassName={styles.connectInput}
-                menuClassName={styles.selectMenu}
-                placeholder="Select a repository..."
-              />
-            ) : (
-              <input
-                type="text"
-                placeholder="https://github.com/owner/repo.git"
-                value={newRemoteUrl}
-                onChange={(e) => setNewRemoteUrl(e.target.value)}
-                className={styles.connectInput}
-                autoFocus
-              />
-            )}
-            {error && <div style={{ color: 'var(--red)', fontSize: '11px' }}>{error}</div>}
-            <div className={styles.connectActionGroup}>
-              <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>
-                Cancel
-              </button>
-              <button type="submit" className={styles.connectBtn} aria-disabled={!newRemoteUrl.trim() || loading}>
-                {loading ? <Spinner size={10} /> : 'Save'}
-              </button>
+          formMode === 'create' ? (
+            <div className={styles.createAltBox}>
+              <div className={styles.createAltForm}>
+                <GitHubRepoCreateForm
+                  value={createData}
+                  onChange={setCreateData}
+                />
+              </div>
+              {error && <div style={{ color: 'var(--red)', fontSize: '11px' }}>{error}</div>}
+              <div className={styles.connectActionGroup}>
+                <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.connectBtn}
+                  disabled={!createData.owner || !createData.name || loading}
+                  onClick={() => {
+                    const url = `https://github.com/${createData.owner}/${createData.name}.git`;
+                    void (async () => {
+                      try {
+                        setLoading(true);
+                        await setProjectGitRemote(projectId, url);
+                        setRemoteUrlState(url);
+                        setShowRemoteForm(false);
+                        await refreshGitState();
+                        onRemoteChanged?.();
+                      } catch (err: any) {
+                        setError(err?.message || 'Failed to set remote URL');
+                      } finally {
+                        setLoading(false);
+                      }
+                    })();
+                  }}
+                >
+                  {loading ? <Spinner size={10} /> : 'Connect'}
+                </button>
+              </div>
+              {githubAuth?.connected && (
+                <button
+                  type="button"
+                  className={styles.modeToggleBtn}
+                  onClick={() => setFormMode('existing')}
+                >
+                  Use existing repository
+                </button>
+              )}
             </div>
-          </form>
+          ) : (
+            <form
+              className={styles.connectForm}
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newRemoteUrl.trim() && !loading) {
+                  void handleSetRemote();
+                }
+              }}
+            >
+              {githubAuth?.connected ? (
+                <GitHubRepoSelect
+                  value={newRemoteUrl}
+                  onChange={setNewRemoteUrl}
+                  triggerClassName={styles.connectInput}
+                  menuClassName={styles.selectMenu}
+                  placeholder="Select a repository..."
+                />
+              ) : null}
+              {error && <div style={{ color: 'var(--red)', fontSize: '11px' }}>{error}</div>}
+              <div className={styles.connectActionGroup}>
+                <button type="button" onClick={() => setShowRemoteForm(false)} className={styles.cancelBtn}>
+                  Cancel
+                </button>
+                <button type="submit" className={styles.connectBtn} aria-disabled={!newRemoteUrl.trim() || loading}>
+                  {loading ? <Spinner size={10} /> : 'Save'}
+                </button>
+              </div>
+              <button
+                type="button"
+                className={styles.modeToggleBtn}
+                onClick={() => setFormMode('create')}
+              >
+                Create a new repository instead
+              </button>
+            </form>
+          )
         ) : (
           <span className={styles.remoteUrl}>
             {loading ? <Spinner size={12} /> : remoteUrl || 'No remote configured'}

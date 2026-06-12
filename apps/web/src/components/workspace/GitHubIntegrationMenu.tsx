@@ -4,6 +4,7 @@ import { Icon } from '../Icon';
 import { Spinner } from '../Loading';
 import { CustomSelect } from '../CustomSelect';
 import { setProjectGitRemote, fetchGitHubRepos } from '../../providers/registry';
+import { GitHubRepoSelect } from '../GitHubRepoSelect';
 import { useProjectGit } from '../../providers/ProjectGitProvider';
 import type { GitHubAuthStatusResponse, GitHubRepoItem } from '@open-design/contracts';
 import styles from './GitHubIntegrationMenu.module.css';
@@ -34,16 +35,12 @@ export function GitHubIntegrationMenu({
   const [showRemoteForm, setShowRemoteForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [repos, setRepos] = useState<GitHubRepoItem[]>([]);
-  const [reposLoading, setReposLoading] = useState(false);
   const [showManualInput, setShowManualInput] = useState(false);
 
   useEffect(() => {
     if (showRemoteForm && githubAuth?.connected) {
-      setReposLoading(true);
       fetchGitHubRepos()
         .then((fetchedRepos) => {
-          setRepos(fetchedRepos);
           // If the user already has a remote that isn't in the list, show manual input
           if (remoteUrl && !fetchedRepos.some(r => r.cloneUrl === remoteUrl)) {
             setShowManualInput(true);
@@ -52,8 +49,7 @@ export function GitHubIntegrationMenu({
         .catch(() => {
           // Fallback to manual input if fetch fails
           setShowManualInput(true);
-        })
-        .finally(() => setReposLoading(false));
+        });
     }
   }, [showRemoteForm, githubAuth?.connected, remoteUrl]);
 
@@ -191,30 +187,14 @@ export function GitHubIntegrationMenu({
               }
             }}
           >
-            {reposLoading ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', fontSize: 13 }}>
-                <Spinner size={12} /> Loading repositories...
-              </div>
-            ) : (!showManualInput && githubAuth?.connected) ? (
-              <CustomSelect
+            {(!showManualInput && githubAuth?.connected) ? (
+              <GitHubRepoSelect
                 value={newRemoteUrl}
-                options={[
-                  ...repos.map(r => ({
-                    value: r.cloneUrl,
-                    label: r.private ? `${r.fullName} (Private)` : r.fullName
-                  })),
-                  { value: 'manual', label: 'Other (Enter manually...)' }
-                ]}
-                onChange={(val) => {
-                  if (val === 'manual') {
-                    setShowManualInput(true);
-                  } else {
-                    setNewRemoteUrl(val);
-                  }
-                }}
+                onChange={setNewRemoteUrl}
+                onSelectManual={() => setShowManualInput(true)}
+                showManualOption={true}
                 triggerClassName={styles.connectInput}
                 menuClassName={styles.selectMenu}
-                ariaLabel="Select repository"
                 placeholder="Select a repository..."
               />
             ) : (

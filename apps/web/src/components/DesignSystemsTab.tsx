@@ -11,6 +11,7 @@ import type {
   TrackingDesignSystemStatusAction,
   TrackingDesignSystemStatusValue,
 } from '@open-design/contracts/analytics';
+import type { GitHubAuthStatusResponse, GitHubRepoItem } from '@open-design/contracts';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,
@@ -21,9 +22,13 @@ import {
   fetchDesignSystemShowcase,
   importGitDesignSystem,
   updateDesignSystemDraft,
+  fetchGitHubAuthStatus,
+  fetchGitHubRepos,
 } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
+import { GitHubRepoSelect } from './GitHubRepoSelect';
+import styles from './DesignSystemsTab.module.css';
 import type { DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 
 interface Props {
@@ -35,6 +40,7 @@ interface Props {
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
   templates?: ProjectTemplate[];
+  onOpenSettings?: (section?: any) => void;
 }
 
 const CATEGORY_ORDER = [
@@ -111,6 +117,7 @@ export function DesignSystemsTab({
   onOpenSystem,
   onSystemsRefresh,
   templates = [],
+  onOpenSettings,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -148,12 +155,18 @@ export function DesignSystemsTab({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const toggleCraftSlug = (current: string[], slug: string, enabled: boolean) => {
-    const next = new Set(current);
-    if (enabled) next.add(slug);
-    else next.delete(slug);
-    return Array.from(next);
-  };
+  const [githubAuth, setGitHubAuth] = useState<GitHubAuthStatusResponse | null>(null);
+  const [showManualInput, setShowManualInput] = useState(false);
+
+  useEffect(() => {
+    if (importOpen) {
+      fetchGitHubAuthStatus()
+        .then(auth => setGitHubAuth(auth))
+        .catch(() => setShowManualInput(true));
+    }
+  }, [importOpen]);
+
+
 
   async function handleGitImport(e: React.FormEvent) {
     e.preventDefault();
@@ -796,70 +809,63 @@ export function DesignSystemsTab({
           >
             <h2 style={{ margin: 0, fontSize: '18px' }}>{t('dsManager.importGitTitle')}</h2>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                {t('settings.designSystemsGitUrl')}
-              </label>
-              <input
-                type="text"
-                className="library-import-input"
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
-                placeholder="https://example.com/owner/repo.git"
-                value={importUrl}
-                autoFocus
-                disabled={importing}
-                onChange={(e) => setImportUrl(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                {t('settings.designSystemsStructure')}
-              </label>
-              <select
-                style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
-                value={importMode}
-                disabled={importing}
-                onChange={(e) => setImportMode(e.target.value as any)}
-              >
-                <option value="hybrid">{t('settings.designSystemsModeHybrid')}</option>
-                <option value="normalized">{t('settings.designSystemsModeNormalized')}</option>
-                <option value="verbatim">{t('settings.designSystemsModeVerbatim')}</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                {t('settings.designSystemsCraft')}
-              </label>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={craftApplies.includes('color')}
-                    disabled={importing}
-                    onChange={(e) =>
-                      setCraftApplies((current) =>
-                        toggleCraftSlug(current, 'color', e.target.checked),
-                      )
-                    }
-                  />
-                  <span>{t('settings.designSystemsCraftColor')}</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={craftApplies.includes('accessibility-baseline')}
-                    disabled={importing}
-                    onChange={(e) =>
-                      setCraftApplies((current) =>
-                        toggleCraftSlug(current, 'accessibility-baseline', e.target.checked),
-                      )
-                    }
-                  />
-                  <span>{t('settings.designSystemsCraftAccessibility')}</span>
-                </label>
+            {!githubAuth?.connected ? (
+              <div style={{ padding: '12px', background: 'var(--bg-muted)', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-soft)' }}>
+                  <Icon name="github" size={14} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+                  GitHub is not connected.
+                </span>
+                <button
+                  type="button"
+                  className="ghost compact"
+                  onClick={() => {
+                    setImportOpen(false);
+                    onOpenSettings?.('github');
+                  }}
+                >
+                  Connect
+                </button>
               </div>
+            ) : null}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                  {t('settings.designSystemsGitUrl')}
+                </label>
+                {githubAuth?.connected && (
+                  <button
+                    type="button"
+                    className="ghost compact"
+                    style={{ fontSize: '11px', padding: '2px 6px', minHeight: 'auto' }}
+                    onClick={() => setShowManualInput(!showManualInput)}
+                  >
+                    {showManualInput ? 'Pick repository' : 'Paste URL instead'}
+                  </button>
+                )}
+              </div>
+              
+              {showManualInput || !githubAuth?.connected ? (
+                <input
+                  type="text"
+                  className="library-import-input"
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
+                  placeholder="https://example.com/owner/repo.git"
+                  value={importUrl}
+                  autoFocus
+                  disabled={importing}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                />
+              ) : (
+                <GitHubRepoSelect
+                  value={importUrl}
+                  onChange={setImportUrl}
+                  placeholder="Select a repository"
+                  disabled={importing}
+                  menuClassName={styles.selectMenu}
+                  ariaLabel="Select a repository"
+                />
+              )}
             </div>
 
             {importError ? (

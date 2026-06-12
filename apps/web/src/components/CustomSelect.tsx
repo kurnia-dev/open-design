@@ -30,6 +30,7 @@ interface Props {
   portal?: boolean;
   title?: string;
   onFocus?: () => void;
+  searchable?: boolean;
 }
 
 interface FlatOption extends CustomSelectOption {
@@ -69,6 +70,7 @@ export function CustomSelect({
   portal = true,
   title,
   onFocus,
+  searchable = false,
 }: Props) {
   const reactId = useId();
   const idBase = reactId.replace(/:/g, '');
@@ -79,9 +81,32 @@ export function CustomSelect({
   const [open, setOpen] = useState(false);
   const [activeValue, setActiveValue] = useState(value);
   const [position, setPosition] = useState<MenuPosition | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  const flatOptions = useMemo(() => flattenOptions(options), [options]);
-  const selected = flatOptions.find((option) => option.value === value);
+  useEffect(() => {
+    if (!open) setSearchQuery('');
+  }, [open]);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !searchQuery) return options;
+    const q = searchQuery.toLowerCase();
+    return options.map(item => {
+      if (isGroup(item)) {
+        const filteredGroup = item.options.filter(o => 
+          o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q)
+        );
+        if (filteredGroup.length === 0) return null;
+        return { ...item, options: filteredGroup };
+      }
+      if (item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q)) return item;
+      return null;
+    }).filter(Boolean) as CustomSelectItem[];
+  }, [options, searchable, searchQuery]);
+
+  const allFlatOptions = useMemo(() => flattenOptions(options), [options]);
+  const flatOptions = useMemo(() => flattenOptions(filteredOptions), [filteredOptions]);
+  const selected = allFlatOptions.find((option) => option.value === value);
   const selectedLabel = selected?.label ?? placeholder ?? value;
   const enabledOptions = useMemo(
     () => flatOptions.filter((option) => !option.disabled),
@@ -203,6 +228,21 @@ export function CustomSelect({
     }
   };
 
+  useEffect(() => {
+    if (open && searchable && searchInputRef.current) {
+      searchInputRef.current.focus();
+    } else if (!open && wasOpenRef.current && buttonRef.current) {
+      buttonRef.current.focus();
+    }
+  }, [open, searchable]);
+
+  const menuStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    padding: 0,
+    overflow: 'hidden',
+  };
+
   const menu = (
     <div
       ref={menuRef}
@@ -221,41 +261,80 @@ export function CustomSelect({
               left: position.left,
               width: position.width,
               maxHeight: position.maxHeight,
+              ...menuStyle,
             }
-          : undefined
+          : menuStyle
       }
     >
-      {options.map((item) => {
-        if (isGroup(item)) {
-          return (
-            <div className="od-select-group" key={`group:${item.label}`}>
-              <div className="od-select-group-label">{item.label}</div>
-              {item.options.map((option) => (
-                <SelectOptionButton
-                  key={option.value}
-                  option={option}
-                  selected={option.value === value}
-                  active={option.value === activeValue}
-                  id={optionIdByValue.get(option.value)}
-                  onChoose={choose}
-                  onActive={setActiveValue}
-                />
-              ))}
-            </div>
-          );
-        }
-        return (
-          <SelectOptionButton
-            key={item.value}
-            option={item}
-            selected={item.value === value}
-            active={item.value === activeValue}
-            id={optionIdByValue.get(item.value)}
-            onChoose={choose}
-            onActive={setActiveValue}
+      {searchable && (
+        <div style={{ padding: '8px', borderBottom: '1px solid var(--border)', background: 'var(--bg-panel)', flexShrink: 0 }}>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            style={{ width: '100%', padding: '6px 8px', fontSize: '13px', background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: '4px', outline: 'none' }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                e.stopPropagation();
+              }
+              if (e.key === 'Escape') {
+                setOpen(false);
+              } else if (e.key === 'Enter') {
+                if (activeValue) {
+                  choose(activeValue);
+                }
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const currentIndex = flatOptions.findIndex((o) => o.value === activeValue);
+                const nextOption = flatOptions.slice(currentIndex + 1).find((o) => !o.disabled);
+                if (nextOption) setActiveValue(nextOption.value);
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const currentIndex = flatOptions.findIndex((o) => o.value === activeValue);
+                const prevIndex = currentIndex >= 0 ? currentIndex : flatOptions.length;
+                const prevOption = [...flatOptions].slice(0, prevIndex).reverse().find((o) => !o.disabled);
+                if (prevOption) setActiveValue(prevOption.value);
+              }
+            }}
           />
-        );
-      })}
+        </div>
+      )}
+      <div style={{ overflowY: 'auto', padding: '4px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {filteredOptions.map((item) => {
+          if (isGroup(item)) {
+            return (
+              <div className="od-select-group" key={`group:${item.label}`}>
+                <div className="od-select-group-label">{item.label}</div>
+                {item.options.map((option) => (
+                  <SelectOptionButton
+                    key={option.value}
+                    option={option}
+                    selected={option.value === value}
+                    active={option.value === activeValue}
+                    id={optionIdByValue.get(option.value)}
+                    onChoose={choose}
+                    onActive={setActiveValue}
+                  />
+                ))}
+              </div>
+            );
+          }
+          return (
+            <SelectOptionButton
+              key={item.value}
+              option={item}
+              selected={item.value === value}
+              active={item.value === activeValue}
+              id={optionIdByValue.get(item.value)}
+              onChoose={choose}
+              onActive={setActiveValue}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 

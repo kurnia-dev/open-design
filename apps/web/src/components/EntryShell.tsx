@@ -826,6 +826,7 @@ export function EntryShell({
                     onOpenSystem={onOpenDesignSystem}
                     onSystemsRefresh={onDesignSystemsRefresh}
                     onPreview={(id) => setPreviewSystemId(id)}
+                    onOpenSettings={onOpenSettings}
                   />
                 </div>
               )}

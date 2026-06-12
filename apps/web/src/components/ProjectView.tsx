@@ -5689,57 +5689,9 @@ export function ProjectView({
             />
           )
         ) : null}
-        {npmInstallStatus === 'running' ? (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              flex: 1,
-              minWidth: 0,
-              height: '100%',
-              background: 'var(--bg)',
-              overflow: 'hidden',
-            }}
-          >
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '16px 24px',
-              borderBottom: '1px solid var(--border)',
-              background: 'var(--bg-2)',
-              flexShrink: 0,
-            }}>
-              <Spinner size={18} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <strong style={{ fontSize: 14, lineHeight: 1.4 }}>Installing dependencies</strong>
-                <span style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.4 }}>{npmInstallMessage || 'Setting up your project...'}</span>
-              </div>
-            </div>
-            <div
-              style={{
-                flex: 1,
-                overflow: 'auto',
-                padding: '12px 16px',
-                fontFamily: 'var(--font-mono, ui-monospace, monospace)',
-                fontSize: 12,
-                lineHeight: 1.6,
-                color: 'var(--text-2)',
-                background: 'var(--bg)',
-              }}
-              ref={(el) => { if (el) el.scrollTop = el.scrollHeight; }}
-            >
-              {npmInstallLogs.length === 0 ? (
-                <span style={{ color: 'var(--text-4)', fontStyle: 'italic' }}>Waiting for output...</span>
-              ) : (
-                <Ansi>{npmInstallLogs.join('\n')}</Ansi>
-              )}
-              <div ref={(el) => el?.scrollIntoView({ block: 'end' })} />
-            </div>
-          </div>
-        ) : (
-          <FileWorkspace
-            projectId={project.id}
+        <FileWorkspace
+          projectId={project.id}
+          npmInstallLogs={npmInstallLogs}
             devServerUrl={projectDetail.project?.devServerUrl ?? project.devServerUrl}
             npmInstallStatus={npmInstallStatus}
             npmInstallMessage={npmInstallMessage}
@@ -5842,7 +5794,6 @@ export function ProjectView({
               void handleSend(text, [], []);
             }}
           />
-        )}
       </div>
       {contextPluginDetails ? (
         <PluginDetailsModal

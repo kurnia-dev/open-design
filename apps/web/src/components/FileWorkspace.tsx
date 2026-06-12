@@ -77,6 +77,7 @@ import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { Toast } from './Toast';
+import { ProjectPreparationPanel } from './ProjectPreparationPanel';
 import { ProjectGitProvider } from '../providers/ProjectGitProvider';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
@@ -222,6 +223,7 @@ interface Props {
   focusQuestionsRequest?: { nonce: number } | null;
   npmInstallStatus?: 'idle' | 'running' | 'completed' | 'failed';
   npmInstallMessage?: string;
+  npmInstallLogs?: string[];
 }
 
 interface SketchState {
@@ -436,6 +438,7 @@ export function FileWorkspace({
   focusQuestionsRequest = null,
   npmInstallStatus = 'idle',
   npmInstallMessage = '',
+  npmInstallLogs = [],
   devServerUrl,
 }: Props) {
   const t = useT();
@@ -2222,23 +2225,6 @@ export function FileWorkspace({
         />
       ) : null}
       <div className="ws-body">
-        {npmInstallStatus === 'running' ? (
-          <div className="ds-project-warning-card" style={{ margin: '8px 20px', gap: '12px' }}>
-            <Spinner size={16} />
-            <span>
-              <strong>Installing dependencies</strong>
-              <small>{npmInstallMessage || 'Dependencies are being installed in the background. Dev previews may be incomplete until this finishes.'}</small>
-            </span>
-          </div>
-        ) : npmInstallStatus === 'failed' ? (
-          <div className="ds-project-warning-card" style={{ margin: '8px 20px', gap: '12px', borderLeft: '3px solid var(--red)' }}>
-            <Icon name="alert-triangle" size={16} style={{ color: 'var(--red)' }} />
-            <span>
-              <strong>Installation failed</strong>
-              <small>{npmInstallMessage || 'Background dependency installation failed. Try running pnpm install manually in the terminal.'}</small>
-            </span>
-          </div>
-        ) : null}
         {/* Banner moved into DesignFilesPanel for the Design Files tab so
             single-click preview (which keeps activeTab on DESIGN_FILES_TAB)
             no longer leaves a stale banner mounted above the preview.
@@ -2313,24 +2299,33 @@ export function FileWorkspace({
             githubConnected={githubAuth?.connected}
           />
         ) : activeTab === DEV_SERVER_PREVIEW_TAB && activeDevServerUrl ? (
-          <FileViewer
-            projectId={projectId}
-            projectKind={projectKind}
-            file={devPreviewFile}
-            devServerUrl={activeDevServerUrl}
-            devServerReady={devServerReady}
-            liveHtml=""
-            isDeck={false}
-            filesRefreshKey={filesRefreshKey}
-            commentQueueOnSend={commentQueueOnSend}
-            commentSendDisabled={commentSendDisabled}
-            previewComments={previewComments}
-            onSavePreviewComment={onSavePreviewComment}
-            onRemovePreviewComment={onRemovePreviewComment}
-            onSendBoardCommentAttachments={onSendBoardCommentAttachments}
-            commentPortalId={commentPortalId}
-            onCommentModeChange={onCommentModeChange}
-          />
+          npmInstallStatus === 'running' || npmInstallStatus === 'failed' || devServerReady === false ? (
+            <ProjectPreparationPanel
+              npmInstallStatus={npmInstallStatus}
+              npmInstallMessage={npmInstallMessage}
+              npmInstallLogs={npmInstallLogs}
+              devServerReady={devServerReady}
+            />
+          ) : (
+            <FileViewer
+              projectId={projectId}
+              projectKind={projectKind}
+              file={devPreviewFile}
+              devServerUrl={activeDevServerUrl}
+              devServerReady={devServerReady}
+              liveHtml=""
+              isDeck={false}
+              filesRefreshKey={filesRefreshKey}
+              commentQueueOnSend={commentQueueOnSend}
+              commentSendDisabled={commentSendDisabled}
+              previewComments={previewComments}
+              onSavePreviewComment={onSavePreviewComment}
+              onRemovePreviewComment={onRemovePreviewComment}
+              onSendBoardCommentAttachments={onSendBoardCommentAttachments}
+              commentPortalId={commentPortalId}
+              onCommentModeChange={onCommentModeChange}
+            />
+          )
         )
           : activeTab === GIT_TAB ? (
             <GitWorkspacePanel

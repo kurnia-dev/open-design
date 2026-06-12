@@ -35,6 +35,8 @@ import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 import { callLlmOnce } from './memory-llm.js';
 import { getGitHubToken, setGitHubToken, clearGitHubToken, createGitHubRepository } from './github-tokens.js';
 
+const GITHUB_OAUTH_CLIENT_ID = 'Ov23liHk43HwCQdYerkO';
+
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> { }
 
@@ -3418,8 +3420,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const authorEmail = githubAuth.username ? `${githubAuth.username}@users.noreply.github.com` : 'user@example.com';
 
       const runGit = (args: string[]) => new Promise((resolve, reject) => {
-        const child = spawn('git', args, { 
-          cwd: dir, 
+        const child = spawn('git', args, {
+          cwd: dir,
           stdio: 'ignore',
           env: {
             ...process.env,
@@ -3475,7 +3477,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const headerToken = req.headers['x-github-token'];
       const headerAccessToken = typeof headerToken === 'string' && headerToken.trim() ? headerToken.trim() : null;
       const tokenObj = await getGitHubToken(dataDir);
-      
+
       const accessToken = headerAccessToken || tokenObj?.accessToken;
       if (!accessToken) {
         return res.json({ connected: false });
@@ -3506,7 +3508,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       console.log('GitHub Profile Response:', profile);
       const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
       const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
-      
+
       const updatedToken = {
         accessToken,
         username: profile.login,
@@ -3517,7 +3519,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!headerAccessToken) {
         await setGitHubToken(dataDir, updatedToken);
       }
-      
+
       res.json({
         connected: true,
         username: profile.login,
@@ -3716,11 +3718,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!profileResp.ok) {
         return sendApiError(res, profileResp.status, 'BAD_REQUEST', `GitHub token validation failed: ${profileResp.statusText}`);
       }
-      
+
       const profile = await profileResp.json() as any;
       const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
       const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
-      
+
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const storedToken = {
         accessToken,
@@ -3730,7 +3732,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         savedAt: Date.now()
       };
       await setGitHubToken(dataDir, storedToken);
-      
+
       res.json({
         connected: true,
         username: profile.login,
@@ -3743,7 +3745,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  
+
   app.post('/api/github/device/start', async (req, res) => {
     try {
       const resp = await fetch('https://github.com/login/device/code', {
@@ -3753,8 +3755,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          client_id: 'Iv23lim64Zye3mXvzg5O',
-          scope: 'repo'
+          client_id: GITHUB_OAUTH_CLIENT_ID,
+          scope: 'repo read:org'
         })
       });
       if (!resp.ok) {
@@ -3781,7 +3783,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          client_id: 'Iv23lim64Zye3mXvzg5O',
+          client_id: GITHUB_OAUTH_CLIENT_ID,
           device_code: deviceCode,
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code'
         })
@@ -3937,7 +3939,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       try {
         await execGit(['remote', 'get-url', 'origin']);
         hasOrigin = true;
-      } catch {}
+      } catch { }
 
       if (hasOrigin) {
         await execGit(['remote', 'set-url', 'origin', remoteUrl.trim()]);
@@ -3982,7 +3984,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const tokenObj = await getGitHubToken(dataDir);
-      
+
       let pushUrl = remoteUrlRaw.trim();
       if (tokenObj && pushUrl.includes('github.com')) {
         pushUrl = getAuthenticatedGitUrl(pushUrl, tokenObj.accessToken);
@@ -4026,7 +4028,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const tokenObj = await getGitHubToken(dataDir);
-      
+
       let pullUrl = remoteUrlRaw.trim();
       if (tokenObj && pullUrl.includes('github.com')) {
         pullUrl = getAuthenticatedGitUrl(pullUrl, tokenObj.accessToken);
@@ -4070,7 +4072,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const tokenObj = await getGitHubToken(dataDir);
-      
+
       let fetchUrl = remoteUrlRaw.trim();
       if (tokenObj && fetchUrl.includes('github.com')) {
         fetchUrl = getAuthenticatedGitUrl(fetchUrl, tokenObj.accessToken);

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../Icon';
 import { Spinner } from '../Loading';
-import { setProjectGitRemote } from '../../providers/registry';
+import { createGitHubRepo, setProjectGitRemote } from '../../providers/registry';
 import { GitHubRepoSelect } from '../GitHubRepoSelect';
 import { GitHubRepoCreateForm, type GitHubRepoCreateData } from '../GitHubRepoCreateForm';
 import { useProjectGit } from '../../providers/ProjectGitProvider';
@@ -25,7 +25,7 @@ export function GitHubIntegrationMenu({
   onOpenGitHubSettings,
   onClose,
   onRemoteChanged,
-}: Props) { 
+}: Props) {
   const { remoteUrl, refreshGitState, setRemoteUrlState } = useProjectGit();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -186,17 +186,23 @@ export function GitHubIntegrationMenu({
                   className={styles.connectBtn}
                   disabled={!createData.owner || !createData.name || loading}
                   onClick={() => {
-                    const url = `https://github.com/${createData.owner}/${createData.name}.git`;
                     void (async () => {
                       try {
                         setLoading(true);
+                        const repo = await createGitHubRepo(
+                          createData.name,
+                          createData.private,
+                          createData.owner,
+                          createData.ownerType
+                        );
+                        const url = repo.cloneUrl;
                         await setProjectGitRemote(projectId, url);
                         setRemoteUrlState(url);
                         setShowRemoteForm(false);
                         await refreshGitState();
                         onRemoteChanged?.();
                       } catch (err: any) {
-                        setError(err?.message || 'Failed to set remote URL');
+                        setError(err?.message || 'Failed to create repository on GitHub');
                       } finally {
                         setLoading(false);
                       }

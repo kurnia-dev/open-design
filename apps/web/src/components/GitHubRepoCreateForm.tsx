@@ -1,6 +1,7 @@
 import type { GitHubOwnerItem } from '@open-design/contracts';
 import { Check, ChevronDown, Globe, Lock, Search } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useI18n } from '../i18n';
 import { fetchGitHubAuthStatus, fetchGitHubOwners, checkGitHubRepoAvailability } from '../providers/registry';
 import styles from './GitHubRepoCreateForm.module.css';
@@ -32,7 +33,10 @@ export function GitHubRepoCreateForm({
   const [ownersOpen, setOwnersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const ownersContainerRef = useRef<HTMLDivElement>(null);
+  const ownerTriggerRef = useRef<HTMLButtonElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -76,10 +80,10 @@ export function GitHubRepoCreateForm({
   // Handle click outside of owner dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        ownersContainerRef.current &&
-        !ownersContainerRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+      const insideContainer = ownersContainerRef.current?.contains(target);
+      const insideDropdown = dropdownRef.current?.contains(target);
+      if (!insideContainer && !insideDropdown) {
         setOwnersOpen(false);
       }
     }
@@ -93,6 +97,23 @@ export function GitHubRepoCreateForm({
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [ownersOpen]);
+
+  // Compute dropdown position from the trigger button
+  useLayoutEffect(() => {
+    if (!ownersOpen || !ownerTriggerRef.current) return;
+    function update() {
+      if (!ownerTriggerRef.current) return;
+      const r = ownerTriggerRef.current.getBoundingClientRect();
+      setDropdownPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 200) });
+    }
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
     };
   }, [ownersOpen]);
 
@@ -159,6 +180,7 @@ export function GitHubRepoCreateForm({
           <div className={styles.fieldGroup} ref={ownersContainerRef}>
             <span className={styles.fieldLabel}>{t('github.repoCreate.ownerLabel')}</span>
             <button
+              ref={ownerTriggerRef}
               type="button"
               className={styles.ownerTrigger}
               onClick={() => !disabled && setOwnersOpen(!ownersOpen)}
@@ -179,8 +201,13 @@ export function GitHubRepoCreateForm({
               <ChevronDown size={14} className={styles.chevron} />
             </button>
 
-            {ownersOpen && (
-              <div className={styles.ownersDropdown}>
+            {ownersOpen && dropdownPos && createPortal(
+              <div
+                ref={dropdownRef}
+                className={styles.ownersDropdown}
+                style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, minWidth: dropdownPos.width, zIndex: 99999 }}
+                data-floating-menu="true"
+              >
                 <div className={styles.dropdownHeader}>{t('github.repoCreate.chooseOwner')}</div>
                 <div className={styles.searchBox}>
                   <Search size={14} className={styles.searchIcon} />
@@ -225,9 +252,11 @@ export function GitHubRepoCreateForm({
                     <div className={styles.empty}>{t('github.repoCreate.noOwners')}</div>
                   )}
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
+
 
           <span className={styles.divider}>/</span>
 

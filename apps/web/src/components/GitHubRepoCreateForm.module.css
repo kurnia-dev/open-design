@@ -147,20 +147,18 @@
 }
 
 .ownersDropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  width: 300px;
+  width: 240px;
   background: var(--bg-panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
-  z-index: 9999;
+  z-index: 99999;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: od-popover-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
+
 
 .dropdownHeader {
   font-size: 12px;

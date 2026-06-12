@@ -1014,7 +1014,7 @@ function GitImportModal({
           <div style={{ padding: '12px', background: 'var(--bg-muted)', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ color: 'var(--text-soft)' }}>
               <Icon name="github" size={14} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-              GitHub is not connected.
+              {t('github.notConnected')}
             </span>
             <button
               type="button"
@@ -1024,7 +1024,7 @@ function GitImportModal({
                 onOpenSettings?.('github');
               }}
             >
-              Connect
+              {t('github.connect')}
             </button>
           </div>
         ) : null}
@@ -1041,7 +1041,7 @@ function GitImportModal({
                 style={{ fontSize: '11px', padding: '2px 6px', minHeight: 'auto' }}
                 onClick={() => setShowManualInput(!showManualInput)}
               >
-                {showManualInput ? 'Pick repository' : 'Paste URL instead'}
+                {showManualInput ? t('github.pickRepository') : t('github.pasteUrlInstead')}
               </button>
             )}
           </div>
@@ -1061,10 +1061,10 @@ function GitImportModal({
             <GitHubRepoSelect
               value={importUrl}
               onChange={setImportUrl}
-              placeholder="Select a repository"
+              placeholder={t('github.repoSelect.placeholder')}
               disabled={importing}
               menuClassName={styles.selectMenu}
-              ariaLabel="Select a repository"
+              ariaLabel={t('github.repoSelect.placeholder')}
             />
           )}
         </div>
@@ -1083,7 +1083,7 @@ function GitImportModal({
             <Icon name="spinner" size={16} className="spin" style={{ color: 'var(--primary)', flexShrink: 0 }} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Importing...
+                {t('github.importing')}
               </span>
               <span style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 500 }}>
                 {currentStage}

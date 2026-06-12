@@ -46,6 +46,8 @@ export interface GitHubRepoItem {
   fullName: string;
   cloneUrl: string;
   private: boolean;
+  fork?: boolean;
+  description?: string | null;
 }
 
 export type GitHubReposResponse = GitHubRepoItem[];

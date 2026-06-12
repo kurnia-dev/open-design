@@ -3210,4 +3210,16 @@ export interface Dict {
   'diagnostics.exporting': string;
   'diagnostics.exportSuccess': string;
   'diagnostics.exportFailed': string;
+  'github.repoSelect.placeholder': string;
+  'github.repoSelect.loading': string;
+  'github.repoSelect.noReposFound': string;
+  'github.repoSelect.noDescription': string;
+  'github.repoSelect.otherManual': string;
+  'github.repoSelect.otherManualDesc': string;
+  'github.repoSelect.searchPlaceholder': string;
+  'github.notConnected': string;
+  'github.connect': string;
+  'github.pickRepository': string;
+  'github.pasteUrlInstead': string;
+  'github.importing': string;
 }

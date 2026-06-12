@@ -3516,6 +3516,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         fullName: repo.full_name,
         cloneUrl: repo.clone_url,
         private: repo.private,
+        fork: repo.fork,
+        description: repo.description,
       }));
 
       res.json(repos);

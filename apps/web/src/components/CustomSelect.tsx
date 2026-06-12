@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 export interface CustomSelectOption {
   value: string;
   label: string;
+  render?: React.ReactNode;
   disabled?: boolean;
 }
 
@@ -399,7 +400,7 @@ function SelectOptionButton({
       onMouseEnter={() => onActive(option.value)}
       onClick={() => onChoose(option.value)}
     >
-      <span className="od-select-option-label">{option.label}</span>
+      <span className="od-select-option-label">{option.render ?? option.label}</span>
       <span className="od-select-option-check" aria-hidden>
         <Icon name="check" size={13} />
       </span>

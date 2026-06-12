@@ -787,6 +787,56 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const before = await listAllDesignSystems();
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
+
+      const wantsStream = req.headers.accept === 'text/event-stream' || body.stream === true;
+
+      if (wantsStream) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
+
+        const onProgress = (stage: string) => {
+          res.write(`event: progress\ndata: ${JSON.stringify({ stage })}\n\n`);
+        };
+
+        try {
+          const result = await importGitDesignSystemProject(
+            gitUrl,
+            path.join(PROJECT_ROOT, '.tmp'),
+            USER_DESIGN_SYSTEMS_DIR,
+            {
+              ...(typeof body.name === 'string' ? { name: body.name } : {}),
+              ...(typeof body.branch === 'string' ? { branch: body.branch } : {}),
+              ...(importMode ? { importMode } : {}),
+              ...(craftApplies ? { craftApplies } : {}),
+              reservedIds: designSystemDirIdsFromCatalog(before),
+              projectsRoot: PROJECTS_DIR,
+              onProgress,
+            },
+          );
+          const systems = await listAllDesignSystems();
+          const designSystem = findUserDesignSystemInCatalog(systems, result.id);
+          if (!designSystem) {
+            throw new LocalDesignSystemImportError(
+              'INTERNAL_ERROR',
+              `imported Git design system was not found in catalog: ${result.dir}`,
+            );
+          }
+          const successData = await importedDesignSystemResponse(designSystem);
+          res.write(`event: done\ndata: ${JSON.stringify(successData)}\n\n`);
+        } catch (err: any) {
+          console.error('[static-resource] git import failed:', err);
+          const message = err instanceof LocalDesignSystemImportError ? err.message : String(err);
+          res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
+        } finally {
+          res.end();
+        }
+        return;
+      }
+
       const result = await importGitDesignSystemProject(
         gitUrl,
         path.join(PROJECT_ROOT, '.tmp'),

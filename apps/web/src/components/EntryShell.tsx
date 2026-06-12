@@ -93,6 +93,7 @@ import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
+import { ProjectGitProvider } from '../providers/ProjectGitProvider';
 import {
   EntrySettingsMenu,
   type EntrySettingsSection,
@@ -817,17 +818,19 @@ export function EntryShell({
                   <header className="entry-section__head">
                     <h1 className="entry-section__title">{t('entry.navDesignSystems')}</h1>
                   </header>
-                  <DesignSystemsTab
-                    systems={designSystems}
-                    templates={templates}
-                    selectedId={defaultDesignSystemId}
-                    onSelect={onChangeDefaultDesignSystem}
-                    onCreate={onCreateDesignSystem}
-                    onOpenSystem={onOpenDesignSystem}
-                    onSystemsRefresh={onDesignSystemsRefresh}
-                    onPreview={(id) => setPreviewSystemId(id)}
-                    onOpenSettings={onOpenSettings}
-                  />
+                  <ProjectGitProvider>
+                    <DesignSystemsTab
+                      systems={designSystems}
+                      templates={templates}
+                      selectedId={defaultDesignSystemId}
+                      onSelect={onChangeDefaultDesignSystem}
+                      onCreate={onCreateDesignSystem}
+                      onOpenSystem={onOpenDesignSystem}
+                      onSystemsRefresh={onDesignSystemsRefresh}
+                      onPreview={(id) => setPreviewSystemId(id)}
+                      onOpenSettings={onOpenSettings}
+                    />
+                  </ProjectGitProvider>
                 </div>
               )}
             </div>

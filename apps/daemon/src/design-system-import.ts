@@ -32,6 +32,7 @@ export type LocalDesignSystemImportOptions = {
   importMode?: 'normalized' | 'hybrid' | 'verbatim';
   craftApplies?: string[];
   projectsRoot?: string | undefined;
+  onProgress?: ((stage: string) => void) | undefined;
 };
 
 export type DesignSystemProjectSource =
@@ -140,6 +141,7 @@ export async function importLocalDesignSystemProject(
     throw new LocalDesignSystemImportError('BAD_REQUEST', 'local project path must be a directory');
   }
 
+  options.onProgress?.('Scanning project files...');
   const scan = await scanProject(sourceRoot);
   const isGitProject =
     options.source?.type === 'github' ||
@@ -217,6 +219,7 @@ export async function importLocalDesignSystemProject(
     'components.manifest.json',
     'manifest.json',
   ];
+  options.onProgress?.('Extracting design tokens & compiling CSS...');
   const designMd = renderDesignMd(id, displayName, scan);
   const tokenContract = buildDesignTokenContract({ sourceTokens: scan.cssVariables, generatedAt: now });
   const tokensCss = tokenContract.tokensCss;
@@ -231,6 +234,7 @@ export async function importLocalDesignSystemProject(
     tokensCss,
   });
 
+  options.onProgress?.('Generating design system configuration...');
   await writeFile(path.join(outDir, 'USAGE.md'), renderUsageMd(displayName, scan), 'utf8');
   await writeFile(path.join(outDir, 'DESIGN.md'), designMd, 'utf8');
   await writeFile(path.join(outDir, 'tokens.css'), tokensCss, 'utf8');
@@ -257,6 +261,7 @@ export async function importLocalDesignSystemProject(
     'utf8',
   );
 
+  options.onProgress?.('Finalizing import...');
   const copiedAssets = await copyAssets(scan.assets, outDir);
   const copiedFonts = await copyFonts(scan.fonts, outDir);
   files.push(...copiedAssets);

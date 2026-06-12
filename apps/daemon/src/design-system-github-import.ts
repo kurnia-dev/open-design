@@ -14,7 +14,13 @@ const execFileAsync = promisify(execFile);
 
 export type GitHubDesignSystemImportOptions = Pick<
   LocalDesignSystemImportOptions,
-  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds' | 'projectsRoot'
+  | 'craftApplies'
+  | 'importMode'
+  | 'name'
+  | 'now'
+  | 'reservedIds'
+  | 'projectsRoot'
+  | 'onProgress'
 > & {
   branch?: string;
   gitBin?: string;
@@ -58,6 +64,7 @@ export async function importGitHubDesignSystemProject(
 
 
   try {
+    options.onProgress?.('Cloning Git repository...');
     await execGit(gitBin, cloneArgs, undefined, 120_000);
     const [detectedBranch, commit] = await Promise.all([
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),
@@ -72,6 +79,7 @@ export async function importGitHubDesignSystemProject(
       ...(options.importMode ? { importMode: options.importMode } : {}),
       ...(options.craftApplies ? { craftApplies: options.craftApplies } : {}),
       projectsRoot: options.projectsRoot,
+      onProgress: options.onProgress,
       source: {
         type: 'github',
         url: parsed.cloneUrl,
@@ -94,7 +102,13 @@ export async function importGitHubDesignSystemProject(
 
 export type GitDesignSystemImportOptions = Pick<
   LocalDesignSystemImportOptions,
-  'craftApplies' | 'importMode' | 'name' | 'now' | 'reservedIds' | 'projectsRoot'
+  | 'craftApplies'
+  | 'importMode'
+  | 'name'
+  | 'now'
+  | 'reservedIds'
+  | 'projectsRoot'
+  | 'onProgress'
 > & {
   branch?: string;
   gitBin?: string;
@@ -139,6 +153,7 @@ export async function importGitDesignSystemProject(
   cloneArgs.push(parsed.cloneUrl, cloneDir);
 
   try {
+    options.onProgress?.('Cloning Git repository...');
     await execGit(gitBin, cloneArgs, undefined, 120_000);
     const [detectedBranch, commit] = await Promise.all([
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),
@@ -153,6 +168,7 @@ export async function importGitDesignSystemProject(
       ...(options.importMode ? { importMode: options.importMode } : {}),
       ...(options.craftApplies ? { craftApplies: options.craftApplies } : {}),
       projectsRoot: options.projectsRoot,
+      onProgress: options.onProgress,
       source: {
         type: 'git',
         url: parsed.cloneUrl,

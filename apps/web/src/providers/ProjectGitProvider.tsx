@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { fetchProjectGitRemote, fetchProjectGitSyncStatus } from './registry';
+import { fetchProjectGitRemote, fetchProjectGitSyncStatus, fetchGitHubAuthStatus } from './registry';
+import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 
 export interface SyncStatus {
   ahead: number;
@@ -12,6 +13,7 @@ interface ProjectGitContextValue {
   remoteUrl: string | null;
   syncStatus: SyncStatus | null;
   isLoading: boolean;
+  githubAuth: GitHubAuthStatusResponse | null;
   refreshGitState: () => Promise<void>;
   setRemoteUrlState: (url: string | null) => void;
 }
@@ -23,24 +25,33 @@ export function ProjectGitProvider({
   children,
   filesRefreshKey = 0,
 }: {
-  projectId: string;
+  projectId?: string;
   children: ReactNode;
   filesRefreshKey?: number;
 }) {
   const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [githubAuth, setGitHubAuth] = useState<GitHubAuthStatusResponse | null>(null);
 
   const refreshGitState = useCallback(async () => {
     setIsLoading(true);
     try {
-      const remote = await fetchProjectGitRemote(projectId);
-      setRemoteUrl(remote.remoteUrl);
-      if (remote.remoteUrl) {
-        const sync = await fetchProjectGitSyncStatus(projectId);
-        setSyncStatus(sync);
+      const auth = await fetchGitHubAuthStatus().catch(() => ({ connected: false }));
+      setGitHubAuth(auth);
+
+      if (projectId) {
+        const remote = await fetchProjectGitRemote(projectId);
+        setRemoteUrl(remote.remoteUrl);
+        if (remote.remoteUrl) {
+          const sync = await fetchProjectGitSyncStatus(projectId);
+          setSyncStatus(sync);
+        } else {
+          setSyncStatus({ ahead: 0, behind: 0, status: 'no-remote' });
+        }
       } else {
-        setSyncStatus({ ahead: 0, behind: 0, status: 'no-remote' });
+        setRemoteUrl(null);
+        setSyncStatus(null);
       }
     } catch (err) {
       console.error('Failed to load GitHub / Sync state', err);
@@ -59,6 +70,7 @@ export function ProjectGitProvider({
         remoteUrl,
         syncStatus,
         isLoading,
+        githubAuth,
         refreshGitState,
         setRemoteUrlState: setRemoteUrl,
       }}

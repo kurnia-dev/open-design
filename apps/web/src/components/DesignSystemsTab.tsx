@@ -1,35 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@open-design/components';
-import { useAnalytics } from '../analytics/provider';
-import {
-  trackDesignSystemsTemplateCardClick,
-  trackDesignSystemsTopClick,
-  trackDesignSystemStatusResult,
-  trackPageView,
-} from '../analytics/events';
 import type {
   TrackingDesignSystemStatusAction,
   TrackingDesignSystemStatusValue,
 } from '@open-design/contracts/analytics';
-import type { GitHubAuthStatusResponse, GitHubRepoItem } from '@open-design/contracts';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  trackDesignSystemStatusResult,
+  trackDesignSystemsTemplateCardClick,
+  trackDesignSystemsTopClick,
+  trackPageView,
+} from '../analytics/events';
+import { useAnalytics } from '../analytics/provider';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
 } from '../i18n/content';
+import { useProjectGit } from '../providers/ProjectGitProvider';
 import {
   deleteDesignSystemDraft,
   fetchDesignSystemShowcase,
-  importGitDesignSystem,
-  updateDesignSystemDraft,
-  fetchGitHubAuthStatus,
-  fetchGitHubRepos,
+  importGitDesignSystemStream,
+  updateDesignSystemDraft
 } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import { Icon } from './Icon';
-import { GitHubRepoSelect } from './GitHubRepoSelect';
-import styles from './DesignSystemsTab.module.css';
 import type { DesignSystemSummary, ProjectTemplate, Surface } from '../types';
+import styles from './DesignSystemsTab.module.css';
+import { GitHubRepoSelect } from './GitHubRepoSelect';
+import { Icon } from './Icon';
 
 interface Props {
   systems: DesignSystemSummary[];
@@ -149,53 +147,6 @@ export function DesignSystemsTab({
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
 
   const [importOpen, setImportOpen] = useState(false);
-  const [importUrl, setImportUrl] = useState('');
-  const [importMode, setImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
-  const [craftApplies, setCraftApplies] = useState<string[]>([]);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-
-  const [githubAuth, setGitHubAuth] = useState<GitHubAuthStatusResponse | null>(null);
-  const [showManualInput, setShowManualInput] = useState(false);
-
-  useEffect(() => {
-    if (importOpen) {
-      fetchGitHubAuthStatus()
-        .then(auth => setGitHubAuth(auth))
-        .catch(() => setShowManualInput(true));
-    }
-  }, [importOpen]);
-
-
-
-  async function handleGitImport(e: React.FormEvent) {
-    e.preventDefault();
-    const targetUrl = importUrl.trim();
-    if (!targetUrl || importing) return;
-    setImporting(true);
-    setImportError(null);
-    try {
-      const result = await importGitDesignSystem({
-        gitUrl: targetUrl,
-        importMode,
-        craftApplies,
-      });
-
-      debugger;
-      if ('error' in result) {
-        setImportError(result.error.message);
-      } else {
-        setImportUrl('');
-        setImportOpen(false);
-        setCraftApplies([]);
-        await onSystemsRefresh?.();
-      }
-    } catch (err: any) {
-      setImportError(err.message || 'Import failed');
-    } finally {
-      setImporting(false);
-    }
-  }
   const [category, setCategory] = useState<string>('All');
   // Cache fetched showcase HTML across re-renders so cards never re-flicker
   // when the user filters / scrolls back. null = "in flight"; undefined =
@@ -799,100 +750,12 @@ export function DesignSystemsTab({
         />
       ) : null}
 
-      {importOpen ? (
-        <div className="modal-backdrop" onClick={() => { if (!importing) setImportOpen(false); }}>
-          <form
-            className="modal"
-            style={{ maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleGitImport}
-          >
-            <h2 style={{ margin: 0, fontSize: '18px' }}>{t('dsManager.importGitTitle')}</h2>
-
-            {!githubAuth?.connected ? (
-              <div style={{ padding: '12px', background: 'var(--bg-muted)', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-soft)' }}>
-                  <Icon name="github" size={14} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-                  GitHub is not connected.
-                </span>
-                <button
-                  type="button"
-                  className="ghost compact"
-                  onClick={() => {
-                    setImportOpen(false);
-                    onOpenSettings?.('github');
-                  }}
-                >
-                  Connect
-                </button>
-              </div>
-            ) : null}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  {t('settings.designSystemsGitUrl')}
-                </label>
-                {githubAuth?.connected && (
-                  <button
-                    type="button"
-                    className="ghost compact"
-                    style={{ fontSize: '11px', padding: '2px 6px', minHeight: 'auto' }}
-                    onClick={() => setShowManualInput(!showManualInput)}
-                  >
-                    {showManualInput ? 'Pick repository' : 'Paste URL instead'}
-                  </button>
-                )}
-              </div>
-              
-              {showManualInput || !githubAuth?.connected ? (
-                <input
-                  type="text"
-                  className="library-import-input"
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
-                  placeholder="https://example.com/owner/repo.git"
-                  value={importUrl}
-                  autoFocus
-                  disabled={importing}
-                  onChange={(e) => setImportUrl(e.target.value)}
-                />
-              ) : (
-                <GitHubRepoSelect
-                  value={importUrl}
-                  onChange={setImportUrl}
-                  placeholder="Select a repository"
-                  disabled={importing}
-                  menuClassName={styles.selectMenu}
-                  ariaLabel="Select a repository"
-                />
-              )}
-            </div>
-
-            {importError ? (
-              <p className="library-install-error" style={{ margin: 0, color: 'var(--danger)', fontSize: '13px' }}>
-                {importError}
-              </p>
-            ) : null}
-
-            <div className="row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
-              <button
-                type="button"
-                disabled={importing}
-                onClick={() => setImportOpen(false)}
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                type="submit"
-                className="primary"
-                disabled={importing || !importUrl.trim()}
-              >
-                {importing ? t('settings.libraryLoading') : t('dsManager.importGitAction')}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <GitImportModal
+        isOpen={importOpen}
+        onClose={() => setImportOpen(false)}
+        onSystemsRefresh={onSystemsRefresh}
+        onOpenSettings={onOpenSettings}
+      />
     </div>
   );
 }
@@ -1054,6 +917,204 @@ function DesignSystemCard({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function GitImportModal({
+  isOpen,
+  onClose,
+  onSystemsRefresh,
+  onOpenSettings,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSystemsRefresh?: () => Promise<void> | void;
+  onOpenSettings?: (section?: any) => void;
+}) {
+  const { t } = useI18n();
+  const [importUrl, setImportUrl] = useState('');
+  const [importMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
+  const [craftApplies, setCraftApplies] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [currentStage, setCurrentStage] = useState<string | null>(null);
+
+  const { githubAuth, refreshGitState } = useProjectGit();
+  const [showManualInput, setShowManualInput] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      void refreshGitState();
+
+      // Reset states
+      setImportUrl('');
+      setImportError(null);
+      setCurrentStage(null);
+      setImporting(false);
+    }
+  }, [isOpen, refreshGitState]);
+
+  useEffect(() => {
+    if (isOpen && githubAuth && !githubAuth.connected) {
+      setShowManualInput(true);
+    }
+  }, [isOpen, githubAuth]);
+
+  if (!isOpen) return null;
+
+  async function handleGitImport(e: React.FormEvent) {
+    e.preventDefault();
+    const targetUrl = importUrl.trim();
+    if (!targetUrl || importing) return;
+    setImporting(true);
+    setImportError(null);
+    setCurrentStage('Initializing import...');
+    try {
+      const result = await importGitDesignSystemStream(
+        {
+          gitUrl: targetUrl,
+          importMode,
+          craftApplies,
+        },
+        (stage) => {
+          setCurrentStage(stage);
+        }
+      );
+
+      if (result && 'error' in result) {
+        setImportError(result.error.message);
+        setCurrentStage(null);
+      } else {
+        setImportUrl('');
+        setCraftApplies([]);
+        setCurrentStage(null);
+        await onSystemsRefresh?.();
+        onClose();
+      }
+    } catch (err: any) {
+      setImportError(err.message || 'Import failed');
+      setCurrentStage(null);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => { if (!importing) onClose(); }}>
+      <form
+        className="modal"
+        style={{ maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleGitImport}
+      >
+        <h2 style={{ margin: 0, fontSize: '18px' }}>{t('dsManager.importGitTitle')}</h2>
+
+        {!githubAuth?.connected ? (
+          <div style={{ padding: '12px', background: 'var(--bg-muted)', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ color: 'var(--text-soft)' }}>
+              <Icon name="github" size={14} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+              GitHub is not connected.
+            </span>
+            <button
+              type="button"
+              className="ghost compact"
+              onClick={() => {
+                onClose();
+                onOpenSettings?.('github');
+              }}
+            >
+              Connect
+            </button>
+          </div>
+        ) : null}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)' }}>
+              {t('settings.designSystemsGitUrl')}
+            </label>
+            {githubAuth?.connected && (
+              <button
+                type="button"
+                className="ghost compact"
+                style={{ fontSize: '11px', padding: '2px 6px', minHeight: 'auto' }}
+                onClick={() => setShowManualInput(!showManualInput)}
+              >
+                {showManualInput ? 'Pick repository' : 'Paste URL instead'}
+              </button>
+            )}
+          </div>
+
+          {showManualInput || !githubAuth?.connected ? (
+            <input
+              type="text"
+              className="library-import-input"
+              style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)' }}
+              placeholder="https://example.com/owner/repo.git"
+              value={importUrl}
+              autoFocus
+              disabled={importing}
+              onChange={(e) => setImportUrl(e.target.value)}
+            />
+          ) : (
+            <GitHubRepoSelect
+              value={importUrl}
+              onChange={setImportUrl}
+              placeholder="Select a repository"
+              disabled={importing}
+              menuClassName={styles.selectMenu}
+              ariaLabel="Select a repository"
+            />
+          )}
+        </div>
+
+        {importing && currentStage ? (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '16px',
+            background: 'var(--bg-muted)',
+            borderRadius: '8px',
+            border: '1px solid var(--border)',
+            marginTop: '8px',
+          }}>
+            <Icon name="spinner" size={16} className="spin" style={{ color: 'var(--primary)', flexShrink: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-soft)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Importing...
+              </span>
+              <span style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 500 }}>
+                {currentStage}
+              </span>
+            </div>
+          </div>
+        ) : null}
+
+        {importError ? (
+          <p className="library-install-error" style={{ margin: 0, color: 'var(--danger)', fontSize: '13px' }}>
+            {importError}
+          </p>
+        ) : null}
+
+        <div className="row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+          <button
+            type="button"
+            disabled={importing}
+            onClick={onClose}
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="submit"
+            className="primary"
+            disabled={importing || !importUrl.trim()}
+          >
+            {importing ? t('settings.libraryLoading') : t('dsManager.importGitAction')}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

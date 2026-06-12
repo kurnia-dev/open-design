@@ -784,6 +784,98 @@ export async function importGitDesignSystem(
   }
 }
 
+export async function importGitDesignSystemStream(
+  input: ImportGitDesignSystemRequest,
+  onProgress: (stage: string) => void,
+): Promise<ImportGitDesignSystemResponse | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/design-systems/import/git', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      },
+      body: JSON.stringify({ ...input, stream: true }),
+    });
+    if (!resp.ok) return { error: await readImportError(resp) };
+    if (!resp.body) return { error: { message: 'Response body is empty' } };
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let done = false;
+    let successResult: ImportGitDesignSystemResponse | null = null;
+    let errorMsg: string | null = null;
+
+    const handleEvent = (rawEvent: string) => {
+      let eventName = 'message';
+      const dataLines: string[] = [];
+      for (const line of rawEvent.split('\n')) {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+      }
+      const data = dataLines.join('\n');
+      if (eventName === 'progress' && data) {
+        try {
+          const parsed = JSON.parse(data) as { stage: string };
+          onProgress(parsed.stage);
+        } catch {
+          // ignore
+        }
+      } else if (eventName === 'done' && data) {
+        try {
+          successResult = JSON.parse(data) as ImportGitDesignSystemResponse;
+          done = true;
+        } catch (err) {
+          errorMsg = 'Failed to parse import result';
+        }
+      } else if (eventName === 'error' && data) {
+        try {
+          const parsed = JSON.parse(data) as { error: string };
+          errorMsg = parsed.error || 'Import failed';
+        } catch {
+          errorMsg = data || 'Import failed';
+        }
+        done = true;
+      }
+    };
+
+    try {
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep: number;
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          if (rawEvent.trim().length > 0) handleEvent(rawEvent);
+          if (done) break;
+        }
+      }
+      if (!done && buffer.trim().length > 0) {
+        handleEvent(buffer);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    if (errorMsg) {
+      return { error: { message: errorMsg } };
+    }
+    if (!successResult) {
+      return { error: { message: 'Import stream ended prematurely without result.' } };
+    }
+    return successResult;
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
 export async function importShadcnDesignSystem(
   input: ImportShadcnDesignSystemRequest,
 ): Promise<ImportShadcnDesignSystemResponse | { error: SkillImportError }> {

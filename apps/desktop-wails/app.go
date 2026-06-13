@@ -64,7 +64,7 @@ func (a *App) startSidecars() {
 	pnpmPath, err := exec.LookPath("pnpm")
 	if err == nil {
 		cmd := exec.Command(pnpmPath, "tools-dev", "start", "web")
-		
+
 		// Look for workspace root
 		cwd, err := os.Getwd()
 		if err == nil {
@@ -74,12 +74,12 @@ func (a *App) startSidecars() {
 				cmd.Dir = "../.."
 			}
 		}
-		
+
 		// Ensure environment path is propagated so pnpm can resolve node
 		cmd.Env = os.Environ()
-		
+
 		_ = cmd.Start()
-		
+
 		// Poll for up to 10 seconds to see if web socket becomes ready
 		for i := 0; i < 20; i++ {
 			time.Sleep(500 * time.Millisecond)
@@ -97,7 +97,7 @@ func (a *App) startSidecars() {
 			// On macOS packaged bundle, resources are at ../Resources
 			resourcesDir := filepath.Join(filepath.Dir(exePath), "../Resources")
 			daemonEntry := filepath.Join(resourcesDir, "app/prebundled/daemon/daemon-sidecar.mjs")
-			
+
 			if _, err := os.Stat(daemonEntry); err == nil {
 				daemonCmd := exec.Command(nodePath, daemonEntry)
 				_ = daemonCmd.Start()
@@ -111,9 +111,56 @@ func (a *App) startRedirectionLoop() {
 		url := a.DiscoverWebURL()
 		if url != "" {
 			wailsRuntime.WindowExecJS(a.ctx, fmt.Sprintf("window.location.href = '%s';", url))
+			if goRuntime.GOOS == "darwin" {
+				go a.injectChromeCSSLoop()
+			}
 			break
 		}
 		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func (a *App) injectChromeCSSLoop() {
+	css := `
+  .app-chrome-header {
+    --app-chrome-traffic-space: 70px !important;
+    --app-chrome-traffic-margin: 8px !important;
+    -webkit-app-region: drag;
+  }
+  .app-chrome-traffic-space {
+    flex: 0 0 80px !important;
+    width: 80px !important;
+  }
+  .app-chrome-header button,
+  .app-chrome-header a,
+  .app-chrome-header [role="button"],
+  .app-chrome-header [contenteditable],
+  .app-chrome-actions,
+  .app-chrome-actions *,
+  .avatar-popover,
+  .avatar-popover *,
+  .inline-switcher__popover,
+  .inline-switcher__popover *,
+  .workspace-tabs-popover,
+  .workspace-tabs-popover * {
+    -webkit-app-region: no-drag;
+  }
+  .app-chrome-drag {
+    -webkit-app-region: drag;
+  }
+`
+	js := fmt.Sprintf(`
+		if (document.head && !document.getElementById('wails-mac-chrome-css')) {
+			var style = document.createElement('style');
+			style.id = 'wails-mac-chrome-css';
+			style.innerHTML = %s;
+			document.head.appendChild(style);
+		}
+	`, "`"+css+"`")
+
+	for {
+		time.Sleep(1 * time.Second)
+		wailsRuntime.WindowExecJS(a.ctx, js)
 	}
 }
 
@@ -214,4 +261,3 @@ func (a *App) DiscoverWebURL() string {
 
 	return resp.Result.URL
 }
-

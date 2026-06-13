@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"io/fs"
+	"log"
+	"sync"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend
@@ -16,27 +18,57 @@ func main() {
 	// Create an instance of the app structure
 	app := NewApp()
 
-	// Create application with options
-	err := wails.Run(&options.App{
-		Title:  "Open Design (Wails)",
-		Width:  1280,
-		Height: 720,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	// Get sub-filesystem for frontend assets
+	frontendFS, err := fs.Sub(assets, "frontend")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create Wails v3 application
+	appInstance := application.New(application.Options{
+		Name:        "Open Design (Wails)",
+		Description: "Open Design Desktop Client",
+		Services: []application.Service{
+			application.NewService(app),
 		},
-		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 255},
-		OnStartup:        app.startup,
-		CSSDragProperty:  "-webkit-app-region",
-		CSSDragValue:     "drag",
-		Bind: []interface{}{
-			app,
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(frontendFS),
 		},
-		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHidden(),
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 	})
 
+	// Assign the app instance to our App struct
+	app.app = appInstance
+
+	// Create main window
+	windowInstance := appInstance.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  "Open Design (Wails)",
+		Width:  1280,
+		Height: 720,
+		Mac: application.MacWindow{
+			TitleBar: application.MacTitleBarHidden,
+		},
+		BackgroundColour: application.NewRGB(255, 255, 255),
+		URL:              "/",
+	})
+
+	// Assign the window instance to our App struct
+	app.window = windowInstance
+
+	// Register startup event when application has started
+	var startupOnce sync.Once
+	appInstance.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(event *application.ApplicationEvent) {
+		log.Println("[Wails] ApplicationStarted event triggered!")
+		startupOnce.Do(func() {
+			go app.startup(context.Background())
+		})
+	})
+
+	// Run the application
+	err = appInstance.Run()
 	if err != nil {
-		println("Error:", err.Error())
+		log.Fatal(err)
 	}
 }

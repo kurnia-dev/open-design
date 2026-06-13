@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.10.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "0.10.0",
+			"CompanyName": "open-design contributors",
+			"FileDescription": "Open Design Desktop Client",
+			"LegalCopyright": "(c) 2026, open-design contributors",
+			"ProductName": "Open Design",
+			"Comments": "Built with Wails v3"
+		}
+	}
+}

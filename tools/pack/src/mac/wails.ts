@@ -13,32 +13,58 @@ export async function runWailsBuilder(config: ToolPackConfig, paths: MacPaths): 
   const wailsDir = join(config.workspaceRoot, "apps", "desktop-wails");
   const identity = resolveMacInstallIdentity(config);
   
-  process.stderr.write("[tools-pack wails] Syncing wails.json identity...\n");
-  const wailsJsonPath = join(wailsDir, "wails.json");
-  const wailsJson = JSON.parse(await readFile(wailsJsonPath, "utf8"));
-  wailsJson.name = identity.productName;
-  wailsJson.outputfilename = identity.executableName;
-  if (wailsJson.info) {
-    wailsJson.info.outputFilename = identity.executableName;
+  process.stderr.write("[tools-pack wails] Syncing config.yml identity...\n");
+  const configYmlPath = join(wailsDir, "build", "config.yml");
+  let configYml = await readFile(configYmlPath, "utf8");
+  configYml = configYml.replace(/productName:\s*".*?"/, `productName: "${identity.productName}"`);
+  configYml = configYml.replace(/productIdentifier:\s*".*?"/, `productIdentifier: "${identity.appId}"`);
+  await writeFile(configYmlPath, configYml, "utf8");
+
+  const taskfilePath = join(wailsDir, "Taskfile.yml");
+  let taskfile = await readFile(taskfilePath, "utf8");
+  taskfile = taskfile.replace(/APP_NAME:\s*".*?"/, `APP_NAME: "${identity.executableName}"`);
+  await writeFile(taskfilePath, taskfile, "utf8");
+
+  process.stderr.write("[tools-pack wails] Syncing Info.plist build assets...\n");
+  try {
+    await execFileAsync("wails3", [
+      "update",
+      "build-assets",
+      "-name",
+      identity.productName,
+      "-binaryname",
+      identity.executableName,
+      "-config",
+      "config.yml",
+      "-dir",
+      ".",
+    ], {
+      cwd: join(wailsDir, "build"),
+      env: { ...process.env },
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error("Wails v3 CLI not found. Please install wails3 using `go install github.com/wailsapp/wails/v3/cmd/wails3@latest`.");
+    }
+    throw error;
   }
-  await writeFile(wailsJsonPath, JSON.stringify(wailsJson, null, 2), "utf8");
   
-  process.stderr.write("[tools-pack wails] Running wails build in apps/desktop-wails...\n");
+  process.stderr.write("[tools-pack wails] Running wails3 task package in apps/desktop-wails...\n");
   
   try {
-    await execFileAsync("wails", ["build", "-clean"], {
+    await execFileAsync("wails3", ["task", "package", `APP_NAME=${identity.executableName}`], {
       cwd: wailsDir,
       env: { ...process.env },
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error("Wails CLI not found. Please install wails using `go install github.com/wailsapp/wails/v2/cmd/wails@latest`.");
+      throw new Error("Wails v3 CLI not found. Please install wails3 using `go install github.com/wailsapp/wails/v3/cmd/wails3@latest`.");
     }
     throw error;
   }
 
-  // wails.json defines outputfilename dynamically now based on identity
-  const builtAppBundle = join(wailsDir, "build", "bin", `${identity.executableName}.app`);
+  // Wails v3 packages the app bundle under bin/
+  const builtAppBundle = join(wailsDir, "bin", `${identity.executableName}.app`);
   
   await rm(paths.appBuilderOutputRoot, { force: true, recursive: true });
   await mkdir(dirname(paths.appPath), { recursive: true });

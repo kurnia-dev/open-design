@@ -29,4 +29,4 @@ lerna-debug.log*
 
 # Generated bindings
 frontend/wailsjs/
-
+bin

@@ -63,7 +63,7 @@ export type ToolPackRoots = {
 
 export type ToolPackConfig = {
   appVersion?: string;
-  builder: ToolPackBuilder;
+  builder?: ToolPackBuilder;
   containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;

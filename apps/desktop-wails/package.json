@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wails dev",
-    "build": "wails build"
+    "dev": "wails3 task run",
+    "build": "wails3 build"
   }
 }

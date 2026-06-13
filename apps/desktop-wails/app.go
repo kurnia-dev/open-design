@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -12,12 +13,14 @@ import (
 	"strings"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // App struct
 type App struct {
-	ctx context.Context
+	ctx    context.Context
+	app    *application.App
+	window *application.WebviewWindow
 }
 
 // NewApp creates a new App struct instance
@@ -28,15 +31,19 @@ func NewApp() *App {
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
+	log.Println("[Wails] App.startup called!")
 	a.ctx = ctx
 
 	// Start Next.js and daemon sidecars if they are not running yet
+	log.Println("[Wails] Starting sidecars...")
 	a.startSidecars()
+	log.Println("[Wails] Sidecars started or discovered.")
 
 	// Check screen dimensions. If the primary monitor is smaller than 1280x720,
 	// automatically maximize the window to ensure it fits and is fully usable.
-	screens, err := wailsRuntime.ScreenGetAll(ctx)
-	if err == nil && len(screens) > 0 {
+	screens := a.app.Screen.GetAll()
+	log.Printf("[Wails] Found %d screens", len(screens))
+	if len(screens) > 0 {
 		primaryScreen := screens[0]
 		for _, s := range screens {
 			if s.IsPrimary {
@@ -45,11 +52,13 @@ func (a *App) startup(ctx context.Context) {
 			}
 		}
 
-		if primaryScreen.Width < 1280 || primaryScreen.Height < 720 {
-			wailsRuntime.WindowMaximise(ctx)
+		if primaryScreen.Size.Width < 1280 || primaryScreen.Size.Height < 720 {
+			log.Println("[Wails] Screen too small, maximizing window")
+			a.window.Maximise()
 		}
 	}
 
+	log.Println("[Wails] Starting redirection loop...")
 	go a.startRedirectionLoop()
 }
 
@@ -107,15 +116,21 @@ func (a *App) startSidecars() {
 }
 
 func (a *App) startRedirectionLoop() {
+	log.Println("[Wails] startRedirectionLoop entered")
 	for {
 		url := a.DiscoverWebURL()
 		if url != "" {
-			wailsRuntime.WindowExecJS(a.ctx, fmt.Sprintf("window.location.href = '%s';", url))
+			log.Printf("[Wails] Redirection URL discovered: %s", url)
+			log.Println("[Wails] Setting window URL using SetURL...")
+			a.window.SetURL(url)
+			log.Println("[Wails] SetURL called successfully.")
 			if goRuntime.GOOS == "darwin" {
+				log.Println("[Wails] Starting injectChromeCSSLoop...")
 				go a.injectChromeCSSLoop()
 			}
 			break
 		}
+		log.Println("[Wails] Redirection URL not discovered yet, retrying...")
 		time.Sleep(500 * time.Millisecond)
 	}
 }
@@ -160,7 +175,7 @@ func (a *App) injectChromeCSSLoop() {
 
 	for {
 		time.Sleep(1 * time.Second)
-		wailsRuntime.WindowExecJS(a.ctx, js)
+		a.window.ExecJS(js)
 	}
 }
 
@@ -173,15 +188,6 @@ func (a *App) Greet(name string) string {
 }
 
 // SystemInfo represents some system metadata
-type SystemInfo struct {
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	GoVersion   string `json:"goVersion"`
-	NumCPU      int    `json:"numCpu"`
-	BackendType string `json:"backendType"`
-}
-
-// GetSystemInfo returns basic system statistics to the frontend
 func (a *App) GetSystemInfo() SystemInfo {
 	return SystemInfo{
 		OS:          goRuntime.GOOS,
@@ -190,6 +196,14 @@ func (a *App) GetSystemInfo() SystemInfo {
 		NumCPU:      goRuntime.NumCPU(),
 		BackendType: "Wails (Go Backend)",
 	}
+}
+
+type SystemInfo struct {
+	OS          string `json:"os"`
+	Arch        string `json:"arch"`
+	GoVersion   string `json:"goVersion"`
+	NumCPU      int    `json:"numCpu"`
+	BackendType string `json:"backendType"`
 }
 
 // DiscoverWebURL attempts to discover the Next.js web URL over the sidecar IPC socket
@@ -225,6 +239,8 @@ func (a *App) DiscoverWebURL() string {
 	var conn net.Conn
 	var err error
 
+	log.Printf("[Wails] DiscoverWebURL: namespace=%s, socketPath=%s", namespace, socketPath)
+
 	if goRuntime.GOOS == "windows" {
 		// On Windows, named pipes can be dialed with pipe network type
 		conn, err = net.DialTimeout("pipe", socketPath, 1*time.Second)
@@ -233,6 +249,7 @@ func (a *App) DiscoverWebURL() string {
 	}
 
 	if err != nil {
+		log.Printf("[Wails] DiscoverWebURL connection error: %v", err)
 		return ""
 	}
 	defer conn.Close()
@@ -242,6 +259,7 @@ func (a *App) DiscoverWebURL() string {
 	reqBytes, _ := json.Marshal(req)
 	_, err = conn.Write(append(reqBytes, '\n'))
 	if err != nil {
+		log.Printf("[Wails] DiscoverWebURL socket write error: %v", err)
 		return ""
 	}
 
@@ -255,9 +273,15 @@ func (a *App) DiscoverWebURL() string {
 	}
 
 	err = decoder.Decode(&resp)
-	if err != nil || !resp.Ok {
+	if err != nil {
+		log.Printf("[Wails] DiscoverWebURL socket decode error: %v", err)
+		return ""
+	}
+	if !resp.Ok {
+		log.Printf("[Wails] DiscoverWebURL socket response not OK: %+v", resp)
 		return ""
 	}
 
+	log.Printf("[Wails] DiscoverWebURL successfully decoded URL: %s", resp.Result.URL)
 	return resp.Result.URL
 }

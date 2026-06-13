@@ -2505,6 +2505,14 @@ export async function checkGitHubRepoAvailability(owner: string, repo: string): 
   return (await resp.json()) as GitHubRepoCheckResponse;
 }
 
+export async function fetchGitHubRepoInfo(owner: string, repo: string): Promise<GitHubRepoItem> {
+  const resp = await fetch(`/api/github/repo-info?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch repo info (${resp.status})`);
+  }
+  return (await resp.json()) as GitHubRepoItem;
+}
+
 export async function createGitHubRepo(
   name: string,
   isPrivate: boolean,

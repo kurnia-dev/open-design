@@ -3673,6 +3673,51 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
+  app.get('/api/github/repo-info', async (req, res) => {
+    try {
+      const dataDir = ctx.paths.RUNTIME_DATA_DIR;
+      const headerToken = req.headers['x-github-token'];
+      const accessToken = typeof headerToken === 'string' && headerToken.trim()
+        ? headerToken.trim()
+        : (await getGitHubToken(dataDir))?.accessToken;
+
+      if (!accessToken) {
+        return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
+      }
+
+      const { owner, repo } = req.query;
+      if (!owner || !repo || typeof owner !== 'string' || typeof repo !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'Missing owner or repo parameter');
+      }
+
+      const repoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'Open-Design-Daemon'
+        },
+      });
+
+      if (!repoResp.ok) {
+        return sendApiError(res, repoResp.status, 'BAD_REQUEST', `Failed to fetch repo: ${repoResp.statusText}`);
+      }
+
+      const r = await repoResp.json() as any;
+      res.json({
+        fullName: r.full_name,
+        cloneUrl: r.clone_url,
+        private: r.private,
+        fork: r.fork,
+        description: r.description,
+      });
+    } catch (err: any) {
+      console.error('[project-routes] GET /api/github/repo-info error:', err);
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
+    }
+  });
+
+
   app.post('/api/github/repos', async (req, res) => {
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;

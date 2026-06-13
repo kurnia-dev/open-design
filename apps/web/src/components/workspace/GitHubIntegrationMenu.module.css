@@ -204,3 +204,54 @@
 .modeToggleBtn:hover {
   color: var(--accent);
 }
+
+.repoDetailsCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+
+.loadingWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  width: 100%;
+}
+
+.repoIcon {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.textWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.repoName {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.repoDesc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-soft);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}

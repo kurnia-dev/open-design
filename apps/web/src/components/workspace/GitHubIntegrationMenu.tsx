@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../Icon';
 import { Spinner } from '../Loading';
-import { createGitHubRepo, setProjectGitRemote } from '../../providers/registry';
+import { createGitHubRepo, fetchGitHubRepoInfo, setProjectGitRemote } from '../../providers/registry';
 import { GitHubRepoSelect } from '../GitHubRepoSelect';
 import { GitHubRepoCreateForm, type GitHubRepoCreateData } from '../GitHubRepoCreateForm';
 import { useProjectGit } from '../../providers/ProjectGitProvider';
+import { useI18n } from '../../i18n';
+import { Lock, GitFork, BookMarked } from 'lucide-react';
 import type { GitHubAuthStatusResponse } from '@open-design/contracts';
 import styles from './GitHubIntegrationMenu.module.css';
 
@@ -26,6 +28,7 @@ export function GitHubIntegrationMenu({
   onClose,
   onRemoteChanged,
 }: Props) {
+  const { t } = useI18n();
   const { remoteUrl, refreshGitState, setRemoteUrlState } = useProjectGit();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -41,11 +44,49 @@ export function GitHubIntegrationMenu({
     name: '',
     private: true,
   });
+  const [repoInfo, setRepoInfo] = useState<{ fullName: string; private: boolean; fork?: boolean; description?: string | null } | null>(null);
+  const [loadingRepoInfo, setLoadingRepoInfo] = useState(false);
 
   useEffect(() => {
-    if (remoteUrl) setNewRemoteUrl(remoteUrl);
+    if (remoteUrl) setNewRemoteUrl(cleanGitUrl(remoteUrl));
     setLoading(false);
   }, [remoteUrl]);
+
+  useEffect(() => {
+    if (!remoteUrl) {
+      setRepoInfo(null);
+      return;
+    }
+    const parsed = parseGitHubUrl(remoteUrl);
+    if (!parsed) {
+      setRepoInfo(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingRepoInfo(true);
+    fetchGitHubRepoInfo(parsed.owner, parsed.repo)
+      .then((info) => {
+        if (!cancelled) setRepoInfo(info);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch repository info:', err);
+        if (!cancelled) {
+          setRepoInfo({
+            fullName: `${parsed.owner}/${parsed.repo}`,
+            private: true,
+            description: null,
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRepoInfo(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [remoteUrl, githubAuth]);
 
   // Reset error on any user interaction/input
   useEffect(() => {
@@ -267,12 +308,56 @@ export function GitHubIntegrationMenu({
             </form>
           )
         ) : (
-          <span className={styles.remoteUrl}>
-            {loading ? <Spinner size={12} /> : remoteUrl || 'No remote configured'}
-          </span>
+          <div className={styles.repoDetailsCard}>
+            {loading || loadingRepoInfo ? (
+              <div className={styles.loadingWrapper}>
+                <Spinner size={12} />
+              </div>
+            ) : remoteUrl ? (
+              repoInfo ? (
+                <>
+                  <div className={styles.repoIcon}>
+                    {(() => {
+                      const RepoIcon = repoInfo.private ? Lock : repoInfo.fork ? GitFork : BookMarked;
+                      return <RepoIcon size={16} strokeWidth={2} />;
+                    })()}
+                  </div>
+                  <div className={styles.textWrapper}>
+                    <span className={styles.repoName}>
+                      {repoInfo.fullName}
+                    </span>
+                    <span className={styles.repoDesc}>
+                      {repoInfo.description || t('github.repoSelect.noDescription')}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <span className={styles.remoteUrl}>{cleanGitUrl(remoteUrl)}</span>
+              )
+            ) : (
+              <span className={styles.remoteUrl}>No remote configured</span>
+            )}
+          </div>
         )}
       </div>
     </div>,
     document.body
   );
+}
+
+function cleanGitUrl(url: string | null): string {
+  if (!url) return '';
+  return url.replace(/^(https?:\/\/)[^@/]+@/, '$1');
+}
+
+function parseGitHubUrl(url: string | null): { owner: string; repo: string } | null {
+  if (!url) return null;
+  const httpsMatch = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);
+  const sshMatch = /git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);
+  if (httpsMatch) {
+    return { owner: httpsMatch[1]!, repo: httpsMatch[2]! };
+  } else if (sshMatch) {
+    return { owner: sshMatch[1]!, repo: sshMatch[2]! };
+  }
+  return null;
 }

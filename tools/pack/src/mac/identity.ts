@@ -52,7 +52,7 @@ function appIdForChannel(channel: ReleaseChannelIdentity): string {
   return "io.open-design.desktop";
 }
 
-export function resolveMacInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "appVersion">): MacInstallIdentity {
+export function resolveMacInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "appVersion" | "builder">): MacInstallIdentity {
   const namespaceToken = sanitizeNamespace(config.namespace);
   const channel = channelFromVersion(config.appVersion) ?? channelFromNamespace(config.namespace);
   const channelIdentity = channel == null

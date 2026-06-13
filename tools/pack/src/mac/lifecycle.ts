@@ -486,6 +486,24 @@ async function detachMount(mountPoint: string): Promise<boolean> {
 export async function installPackedMacDmg(config: ToolPackConfig): Promise<MacInstallResult> {
   const paths = resolveMacPaths(config);
   const identity = resolveMacInstallIdentity(config);
+
+  if (config.builder === "wails") {
+    if (!(await pathExists(paths.appPath))) {
+      throw new Error(`no mac app found at ${paths.appPath}; run tools-pack mac build --builder wails first`);
+    }
+    await rm(paths.installedAppPath, { force: true, recursive: true });
+    await mkdir(paths.installApplicationsRoot, { recursive: true });
+    await execFileAsync("ditto", [paths.appPath, paths.installedAppPath]);
+    await clearQuarantine(paths.installedAppPath);
+    return {
+      detached: false,
+      dmgPath: "",
+      installedAppPath: paths.installedAppPath,
+      mountPoint: "",
+      namespace: config.namespace,
+    };
+  }
+
   if (!(await pathExists(paths.dmgPath))) {
     throw new Error(`no mac dmg found at ${paths.dmgPath}; run tools-pack mac build --to all first`);
   }

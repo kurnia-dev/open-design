@@ -70,6 +70,10 @@ export async function finalizeMacArtifacts(
   let latestMacYmlPath: string | null = null;
   let zipPath: string | null = null;
 
+  if (config.builder === "wails") {
+    return { dmgPath, latestMacYmlPath, zipPath };
+  }
+
   if (config.to === "dmg" || config.to === "all") {
     dmgPath = await moveBuilderArtifact({
       destinationPath: paths.dmgPath,

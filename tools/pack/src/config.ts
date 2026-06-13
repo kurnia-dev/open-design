@@ -15,6 +15,7 @@ export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
+export type ToolPackBuilder = "electron" | "wails";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "local";
@@ -22,6 +23,7 @@ type ToolPackPrereleaseChannel = "beta" | "nightly" | "preview";
 
 export type ToolPackCliOptions = {
   appVersion?: string;
+  builder?: string;
   cacheDir?: string;
   containerized?: boolean;
   dir?: string;
@@ -61,6 +63,7 @@ export type ToolPackRoots = {
 
 export type ToolPackConfig = {
   appVersion?: string;
+  builder: ToolPackBuilder;
   containerized: boolean;
   electronBuilderCliPath: string;
   electronDistPath: string;
@@ -129,6 +132,12 @@ function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | 
   if (platform === "win" && (value === "all" || value === "dir" || value === "nsis" || value === "zip")) return value;
   if (platform === "linux" && (value === "all" || value === "appimage" || value === "dir")) return value;
   throw new Error(`unsupported ${platform} --to target: ${value}`);
+}
+
+function resolveToolPackBuilder(value: string | undefined): ToolPackBuilder {
+  if (value == null || value.length === 0) return "electron";
+  if (value === "electron" || value === "wails") return value;
+  throw new Error(`unsupported --builder: ${value}`);
 }
 
 function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCompression {
@@ -306,6 +315,7 @@ export function resolveToolPackConfig(
 
   return {
     appVersion,
+    builder: resolveToolPackBuilder(options.builder),
     containerized: options.containerized === true,
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),

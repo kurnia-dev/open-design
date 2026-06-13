@@ -4,6 +4,7 @@ import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from ".
 import { seedPackagedAppConfig } from "./app-config.js";
 import { finalizeMacArtifacts } from "./artifacts.js";
 import { resolveElectronBuilderTargets, runElectronBuilder } from "./builder.js";
+import { runWailsBuilder } from "./wails.js";
 import { clearQuarantine } from "./fs.js";
 import { createMacLauncherPayloadArchive } from "./payload.js";
 import { resolveMacPaths } from "./paths.js";
@@ -20,7 +21,8 @@ function logMacBuildProgress(message: string, fields: Record<string, unknown> = 
 
 export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
   const paths = resolveMacPaths(config);
-  const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
+  const isWails = config.builder === "wails";
+  const targets = isWails ? [] : resolveElectronBuilderTargets(config.to as MacBuildOutput);
   const cache = new ToolPackCache(config.roots.cacheRoot);
   const timings: MacPackTiming[] = [];
   const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
@@ -56,7 +58,11 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     await writeAssembledApp(config, paths, tarballs);
   });
   await runPhase("electron-builder", async () => {
-    await runElectronBuilder(config, paths, targets);
+    if (isWails) {
+      await runWailsBuilder(config, paths);
+    } else {
+      await runElectronBuilder(config, paths, targets);
+    }
   });
   await runPhase("quarantine", async () => {
     await clearQuarantine(paths.appPath);

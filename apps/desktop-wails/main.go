@@ -44,11 +44,13 @@ func main() {
 
 	// Create main window
 	windowInstance := appInstance.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "Open Design (Wails)",
+		Title:  "Open Design",
 		Width:  1280,
 		Height: 720,
 		Mac: application.MacWindow{
-			TitleBar: application.MacTitleBarHidden,
+			InvisibleTitleBarHeight: 34,
+			Backdrop:                application.MacBackdropTranslucent,
+			TitleBar:                application.MacTitleBarHidden,
 		},
 		BackgroundColour: application.NewRGB(255, 255, 255),
 		URL:              "/",

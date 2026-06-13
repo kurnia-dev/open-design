@@ -570,6 +570,34 @@
   gap: 12px;
   flex-shrink: 0;
 }
+/* Wails macOS shell: reserve space for the native traffic-light controls
+   that sit in the hidden title bar (InvisibleTitleBarHeight: 34). */
+:root.is-wails-mac .app-chrome-header {
+  --app-chrome-traffic-space: 70px;
+  --app-chrome-traffic-margin: 8px;
+  -webkit-app-region: drag;
+}
+:root.is-wails-mac .app-chrome-traffic-space {
+  flex: 0 0 80px;
+  width: 80px;
+}
+:root.is-wails-mac .app-chrome-header button,
+:root.is-wails-mac .app-chrome-header a,
+:root.is-wails-mac .app-chrome-header [role="button"],
+:root.is-wails-mac .app-chrome-header [contenteditable],
+:root.is-wails-mac .app-chrome-actions,
+:root.is-wails-mac .app-chrome-actions *,
+:root.is-wails-mac .avatar-popover,
+:root.is-wails-mac .avatar-popover *,
+:root.is-wails-mac .inline-switcher__popover,
+:root.is-wails-mac .inline-switcher__popover *,
+:root.is-wails-mac .workspace-tabs-popover,
+:root.is-wails-mac .workspace-tabs-popover * {
+  -webkit-app-region: no-drag;
+}
+:root.is-wails-mac .app-chrome-drag {
+  -webkit-app-region: drag;
+}
 .app-chrome-traffic-space {
   width: var(--app-chrome-traffic-space);
   flex: 0 0 var(--app-chrome-traffic-space);

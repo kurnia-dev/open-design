@@ -124,58 +124,10 @@ func (a *App) startRedirectionLoop() {
 			log.Println("[Wails] Setting window URL using SetURL...")
 			a.window.SetURL(url)
 			log.Println("[Wails] SetURL called successfully.")
-			if goRuntime.GOOS == "darwin" {
-				log.Println("[Wails] Starting injectChromeCSSLoop...")
-				go a.injectChromeCSSLoop()
-			}
 			break
 		}
 		log.Println("[Wails] Redirection URL not discovered yet, retrying...")
 		time.Sleep(500 * time.Millisecond)
-	}
-}
-
-func (a *App) injectChromeCSSLoop() {
-	css := `
-  .app-chrome-header {
-    --app-chrome-traffic-space: 70px !important;
-    --app-chrome-traffic-margin: 8px !important;
-    -webkit-app-region: drag;
-  }
-  .app-chrome-traffic-space {
-    flex: 0 0 80px !important;
-    width: 80px !important;
-  }
-  .app-chrome-header button,
-  .app-chrome-header a,
-  .app-chrome-header [role="button"],
-  .app-chrome-header [contenteditable],
-  .app-chrome-actions,
-  .app-chrome-actions *,
-  .avatar-popover,
-  .avatar-popover *,
-  .inline-switcher__popover,
-  .inline-switcher__popover *,
-  .workspace-tabs-popover,
-  .workspace-tabs-popover * {
-    -webkit-app-region: no-drag;
-  }
-  .app-chrome-drag {
-    -webkit-app-region: drag;
-  }
-`
-	js := fmt.Sprintf(`
-		if (document.head && !document.getElementById('wails-mac-chrome-css')) {
-			var style = document.createElement('style');
-			style.id = 'wails-mac-chrome-css';
-			style.innerHTML = %s;
-			document.head.appendChild(style);
-		}
-	`, "`"+css+"`")
-
-	for {
-		time.Sleep(1 * time.Second)
-		a.window.ExecJS(js)
 	}
 }
 

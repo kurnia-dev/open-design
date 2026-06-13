@@ -80,7 +80,7 @@ import {
   syncMediaProvidersToDaemon,
 } from './state/config';
 import { applyAppearanceToDocument } from './state/appearance';
-import { isMacPlatform } from './utils/platform';
+import { isMacPlatform, isWailsShell } from './utils/platform';
 import {
   createProject,
   createPluginShareProject,
@@ -315,6 +315,14 @@ function AppInner() {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-od-app-mounted', '1');
     }
+  }, []);
+  // Apply Wails macOS shell class so CSS can reserve traffic-light space
+  // without needing JavaScript CSS injection. useLayoutEffect fires before
+  // paint so the header never flashes with wrong spacing.
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') return;
+    const isWailsMac = isWailsShell() && isMacPlatform();
+    document.documentElement.classList.toggle('is-wails-mac', isWailsMac);
   }, []);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);

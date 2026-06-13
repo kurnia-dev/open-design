@@ -30,3 +30,8 @@ lerna-debug.log*
 # Generated bindings
 frontend/wailsjs/
 bin
+
+# Unused Wails platform build assets
+build/linux/
+build/ios/
+build/android/

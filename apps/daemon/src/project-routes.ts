@@ -2133,8 +2133,13 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const projectMetadata = watchProject?.metadata;
       const kind = projectMetadata?.kind;
       if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
-        const currentStatus = npmInstallStatuses.get(req.params.id);
         const hasActiveProc = activeInstallProcesses.has(req.params.id);
+        if (!hasActiveProc) {
+          npmInstallStatuses.delete(req.params.id);
+          npmInstallMessages.delete(req.params.id);
+          npmInstallLogs.delete(req.params.id);
+        }
+        const currentStatus = npmInstallStatuses.get(req.params.id);
         if (currentStatus !== 'completed' && !hasActiveProc) {
           const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, watchProject, resolveProjectDir);
           installDependencies(req.params.id, resolvedDir, activeProjectEventSinks);

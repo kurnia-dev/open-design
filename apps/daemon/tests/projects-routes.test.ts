@@ -1276,9 +1276,9 @@ describe('project locations routes', () => {
 
     const npmrcPath = path.join(projectDir, '.npmrc');
     const npmrcContent = await readFile(npmrcPath, 'utf8');
-    expect(npmrcContent).toContain('registry=http://localhost:4873/');
-    expect(npmrcContent).toContain('@mystaline:registry=http://localhost:4873/');
-    expect(npmrcContent).toContain('//localhost:4873/:_authToken="dummy-token"');
+    expect(npmrcContent).toContain('registry=http://127.0.0.1:4873/');
+    expect(npmrcContent).toContain('@mystaline:registry=http://127.0.0.1:4873/');
+    expect(npmrcContent).toContain('//127.0.0.1:4873/:_authToken="dummy-token"');
   });
 
   it('creates project with dependencies mapped to "link:..." and no .npmrc when design system is published but has no npmPackages', async () => {

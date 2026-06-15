@@ -3505,7 +3505,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         });
       }
       const profile = await profileResp.json() as any;
-      console.log('GitHub Profile Response:', profile);
       const scopesHeader = profileResp.headers.get('x-oauth-scopes') || '';
       const scopes = scopesHeader ? scopesHeader.split(',').map(s => s.trim()) : [];
 

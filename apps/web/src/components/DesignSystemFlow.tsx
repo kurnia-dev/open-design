@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Button, Textarea } from '@open-design/components';
-import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
+import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse, GitHubAuthStatusResponse } from '@open-design/contracts';
 import { streamViaDaemon } from '../providers/daemon';
 import {
   connectConnector,
@@ -20,8 +20,10 @@ import {
   updateDesignSystemDraft,
   uploadProjectFile,
   writeProjectTextFile,
+  fetchGitHubAuthStatus,
 } from '../providers/registry';
 import { GitHubRepoCreateForm, type GitHubRepoCreateData } from './GitHubRepoCreateForm';
+import { GitHubRepoSelect } from './GitHubRepoSelect';
 import {
   createConversation,
   getProject,
@@ -129,6 +131,7 @@ interface CreationProps {
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
   onOpenConnectorsTab?: () => void;
+  onOpenSettings?: (section?: any) => void;
   chrome?: 'standalone' | 'embedded';
   // Intent signal: user clicked Generate. Fires before any async work,
   // so a wrapper (OnboardingView) can emit the `generate` ui_click row
@@ -300,10 +303,12 @@ export function DesignSystemCreationFlow({
   onSystemsRefresh,
   config,
   onOpenConnectorsTab,
+  onOpenSettings,
   chrome = 'standalone',
   onBeforeGenerate,
   onGenerateSettled,
 }: CreationProps) {
+  const { t } = useI18n();
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
   const [error, setError] = useState<string | null>(null);
@@ -314,6 +319,21 @@ export function DesignSystemCreationFlow({
     private: true,
   });
   const [generationStarting, setGenerationStarting] = useState(false);
+  const [githubAuth, setGitHubAuth] = useState<GitHubAuthStatusResponse | null>(null);
+  const [showManualInput, setShowManualInput] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchGitHubAuthStatus().then(auth => {
+      if (!cancelled) {
+        setGitHubAuth(auth);
+        if (!auth.connected) {
+          setShowManualInput(true);
+        }
+      }
+    }).catch(() => { });
+    return () => { cancelled = true; };
+  }, []);
   const [sourceProcessingCount, setSourceProcessingCount] = useState(0);
   const composioConfigured = isComposioConfigured(config?.composio);
   const [githubConnector, setGithubConnector] = useState<ConnectorDetail | null>(null);
@@ -776,51 +796,83 @@ export function DesignSystemCreationFlow({
           <div className="ds-resource-card">
             <div className="ds-resource-row">
               <strong>GitHub repo</strong>
-              <div className="ds-resource-inline">
-                <input
-                  value={state.githubUrl}
-                  onChange={(event) => setState((curr) => ({ ...curr, githubUrl: event.target.value }))}
-                  placeholder="https://github.com/owner/repo"
-                />
-                <button
-                  type="button"
-                  className="ghost"
-                  disabled={!state.githubUrl.trim()}
-                  onClick={handleAddGithubUrl}
-                >
-                  Add
-                </button>
-              </div>
-              {state.githubUrls.length > 0 ? (
-                <div className="ds-github-url-list" aria-label="Added GitHub repositories">
-                  {state.githubUrls.map((url) => (
-                    <span key={url}>
-                      <Icon name="github" />
-                      {githubRepoLabel(url)}
-                      <button
-                        type="button"
-                        aria-label={`Remove ${githubRepoLabel(url)}`}
-                        onClick={() => handleRemoveGithubUrl(url)}
-                      >
-                        x
-                      </button>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {!githubAuth?.connected ? (
+                  <div style={{ padding: '12px', background: 'var(--bg-muted)', borderRadius: '6px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ color: 'var(--text-soft)' }}>
+                      <Icon name="github" size={14} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+                      {t('github.notConnected')}
                     </span>
-                  ))}
+                    <button
+                      type="button"
+                      className="ghost compact"
+                      onClick={() => {
+                        onOpenSettings?.('github');
+                      }}
+                    >
+                      {t('github.connect')}
+                    </button>
+                  </div>
+                ) : null}
+
+                {githubAuth?.connected && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="ghost compact"
+                      style={{ fontSize: '11px', padding: '2px 6px', minHeight: 'auto' }}
+                      onClick={() => setShowManualInput(!showManualInput)}
+                    >
+                      {showManualInput ? t('github.pickRepository') : t('github.pasteUrlInstead')}
+                    </button>
+                  </div>
+                )}
+
+                <div className="ds-resource-inline">
+                  {showManualInput || !githubAuth?.connected ? (
+                    <input
+                      type="text"
+                      value={state.githubUrl}
+                      onChange={(event) => setState((curr) => ({ ...curr, githubUrl: event.target.value }))}
+                      placeholder="https://github.com/owner/repo"
+                    />
+                  ) : (
+                    <GitHubRepoSelect
+                      value={state.githubUrl}
+                      onChange={(val) => setState((curr) => ({ ...curr, githubUrl: val }))}
+                      placeholder={t('github.repoSelect.placeholder')}
+                      ariaLabel={t('github.repoSelect.placeholder')}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={!state.githubUrl.trim()}
+                    onClick={handleAddGithubUrl}
+                  >
+                    Add
+                  </button>
                 </div>
-              ) : null}
-              <GitHubRepositoryAccessPanel
-                composioConfigured={composioConfigured}
-                connector={githubConnector}
-                loading={githubConnectorLoading}
-                action={githubConnectorAction}
-                authorizationPending={githubAuthorizationPending}
-                authorizationUrl={githubAuthorizationUrl}
-                error={githubConnectorError}
-                onOpenConnectorsTab={onOpenConnectorsTab}
-                onConnect={() => void handleConnectGithub()}
-                onOpenAuthorization={() => openConnectorAuthorizationUrl(githubAuthorizationUrl)}
-                onDisconnect={() => void handleDisconnectGithub()}
-              />
+
+                {state.githubUrls.length > 0 ? (
+                  <div className="ds-github-url-list" aria-label="Added GitHub repositories" style={{ marginTop: '8px' }}>
+                    {state.githubUrls.map((url) => (
+                      <span key={url}>
+                        <Icon name="github" />
+                        {githubRepoLabel(url)}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${githubRepoLabel(url)}`}
+                          onClick={() => handleRemoveGithubUrl(url)}
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <DropZone
               label="Link local code"

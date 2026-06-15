@@ -19,7 +19,7 @@ import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
 } from '../design-system-import.js';
-import { importGitHubDesignSystemProject, importGitDesignSystemProject } from '../design-system-github-import.js';
+import { importGitHubDesignSystemProject, parseGitHubRepoUrl } from '../design-system-github-import.js';
 import { importShadcnDesignSystemProject } from '../design-system-shadcn-import.js';
 import { getGitHubToken } from '../github-tokens.js';
 
@@ -751,6 +751,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(craftApplies ? { craftApplies } : {}),
           reservedIds: designSystemDirIdsFromCatalog(before),
           projectsRoot: PROJECTS_DIR,
+          isReferenceOnly: true,
           ...(tokenObj?.accessToken ? { githubToken: tokenObj.accessToken } : {}),
         },
       );
@@ -788,6 +789,16 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const importMode = normalizeDesignSystemImportMode(body.importMode);
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
 
+      const isGitHub = (() => {
+        try {
+          parseGitHubRepoUrl(gitUrl);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+
+      const tokenObj = isGitHub ? await getGitHubToken(RUNTIME_DATA_DIR) : null;
       const wantsStream = req.headers.accept === 'text/event-stream' || body.stream === true;
 
       if (wantsStream) {
@@ -803,7 +814,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         };
 
         try {
-          const result = await importGitDesignSystemProject(
+          const result = await importGitHubDesignSystemProject(
             gitUrl,
             path.join(PROJECT_ROOT, '.tmp'),
             USER_DESIGN_SYSTEMS_DIR,
@@ -815,6 +826,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
               reservedIds: designSystemDirIdsFromCatalog(before),
               projectsRoot: PROJECTS_DIR,
               onProgress,
+              isReferenceOnly: false,
+              ...(tokenObj?.accessToken ? { githubToken: tokenObj.accessToken } : {}),
             },
           );
           const systems = await listAllDesignSystems();
@@ -837,7 +850,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         return;
       }
 
-      const result = await importGitDesignSystemProject(
+      const result = await importGitHubDesignSystemProject(
         gitUrl,
         path.join(PROJECT_ROOT, '.tmp'),
         USER_DESIGN_SYSTEMS_DIR,
@@ -848,6 +861,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(craftApplies ? { craftApplies } : {}),
           reservedIds: designSystemDirIdsFromCatalog(before),
           projectsRoot: PROJECTS_DIR,
+          isReferenceOnly: false,
+          ...(tokenObj?.accessToken ? { githubToken: tokenObj.accessToken } : {}),
         },
       );
       const systems = await listAllDesignSystems();

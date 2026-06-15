@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   importGitHubDesignSystemProject,
   parseGitHubRepoUrl,
+  parseGitRepoUrl,
 } from '../src/design-system-github-import.js';
 
 describe('parseGitHubRepoUrl', () => {
@@ -32,11 +33,21 @@ describe('parseGitHubRepoUrl', () => {
   });
 });
 
+describe('parseGitRepoUrl', () => {
+  it('parses repo name and clone url', () => {
+    expect(parseGitRepoUrl('https://example.com/org/my-style-kit.git')).toEqual({
+      cloneUrl: 'https://example.com/org/my-style-kit.git',
+      repo: 'my-style-kit',
+    });
+  });
+});
+
 describe('importGitHubDesignSystemProject', () => {
   let tempRoot: string;
   let fixtureRoot: string;
   let tmpRoot: string;
   let userDesignSystemsRoot: string;
+  let projectsRoot: string;
   let fakeGit: string;
 
   beforeEach(() => {
@@ -44,6 +55,7 @@ describe('importGitHubDesignSystemProject', () => {
     fixtureRoot = path.join(tempRoot, 'fixture-repo');
     tmpRoot = path.join(tempRoot, '.tmp');
     userDesignSystemsRoot = path.join(tempRoot, 'user-design-systems');
+    projectsRoot = path.join(tempRoot, 'projects');
     fs.mkdirSync(path.join(fixtureRoot, 'src', 'components'), { recursive: true });
     fs.mkdirSync(path.join(fixtureRoot, 'src', 'styles'), { recursive: true });
     fs.writeFileSync(
@@ -101,6 +113,7 @@ exit 1
         now: new Date('2026-05-18T10:00:00.000Z'),
         importMode: 'normalized',
         craftApplies: ['color'],
+        isReferenceOnly: true,
       },
     );
 
@@ -145,6 +158,35 @@ exit 1
     expect(fs.existsSync(path.join(result.dir, 'source', 'snippets', 'card.tsx'))).toBe(true);
   });
 
+  it('clones a generic Git URL and imports through the local project format', async () => {
+    const result = await importGitHubDesignSystemProject(
+      'https://example.com/org/my-style-kit.git',
+      tmpRoot,
+      userDesignSystemsRoot,
+      {
+        gitBin: fakeGit,
+        now: new Date('2026-05-18T10:00:00.000Z'),
+        importMode: 'normalized',
+        craftApplies: ['color'],
+        isReferenceOnly: true,
+      },
+    );
+
+    expect(result.id).toBe('github-design-kit');
+    const manifest = JSON.parse(fs.readFileSync(path.join(result.dir, 'manifest.json'), 'utf8')) as Record<string, unknown>;
+    expect(manifest).toMatchObject({
+      schemaVersion: 'od-design-system-project/v1',
+      id: 'github-design-kit',
+      source: {
+        type: 'git',
+        url: 'https://example.com/org/my-style-kit.git',
+        branch: 'main',
+        commit: 'abc123def456',
+        importedAt: '2026-05-18T10:00:00.000Z',
+      },
+    });
+  });
+
   it('clones a public GitHub URL using githubToken options', async () => {
     const fakeGitSpyPath = path.join(tempRoot, 'git-spy.txt');
     const fakeGitSpy = path.join(tempRoot, 'fake-git-spy.sh');
@@ -184,10 +226,114 @@ exit 1
         now: new Date('2026-05-18T10:00:00.000Z'),
         importMode: 'normalized',
         craftApplies: ['color'],
+        isReferenceOnly: true,
       },
     );
 
     const spyContents = fs.readFileSync(fakeGitSpyPath, 'utf8');
     expect(spyContents).toContain('https://x-access-token:my_secret_token@github.com/acme/design-kit.git');
+  });
+
+  it('splits the repository import when isReferenceOnly is true and manifest exists', async () => {
+    // Write manifest to fixture to trigger split logic
+    fs.writeFileSync(
+      path.join(fixtureRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 'od-design-system-project/v1',
+        name: 'manifested-system',
+        files: { design: 'README.md' },
+      }),
+    );
+
+    const result = await importGitHubDesignSystemProject(
+      'https://github.com/acme/design-kit',
+      tmpRoot,
+      userDesignSystemsRoot,
+      {
+        gitBin: fakeGit,
+        now: new Date('2026-05-18T10:00:00.000Z'),
+        isReferenceOnly: true,
+        projectsRoot,
+      },
+    );
+
+    expect(result.id).toBe('manifested-system');
+    
+    // outDir should only contain README.md/manifest.json (docs)
+    expect(fs.existsSync(path.join(result.dir, 'README.md'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'package.json'))).toBe(false); // Code file excluded from outDir
+
+    // projectsRoot should contain the full repo
+    const projDir = path.join(projectsRoot, `ds-${result.id}`);
+    expect(fs.existsSync(path.join(projDir, 'package.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projDir, 'manifest.json'))).toBe(true);
+  });
+
+  it('imports the repository as-is, splitting files when manifest exists even if isReferenceOnly is false', async () => {
+    // Write manifest to fixture
+    fs.writeFileSync(
+      path.join(fixtureRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 'od-design-system-project/v1',
+        name: 'manifested-system',
+        files: { design: 'README.md' },
+      }),
+    );
+
+    const result = await importGitHubDesignSystemProject(
+      'https://github.com/acme/design-kit',
+      tmpRoot,
+      userDesignSystemsRoot,
+      {
+        gitBin: fakeGit,
+        now: new Date('2026-05-18T10:00:00.000Z'),
+        isReferenceOnly: false,
+        projectsRoot,
+      },
+    );
+
+    expect(result.id).toBe('manifested-system');
+
+    // outDir should only contain README.md/manifest.json (docs)
+    expect(fs.existsSync(path.join(result.dir, 'README.md'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'package.json'))).toBe(false); // Code file excluded from outDir
+
+    // projectsRoot should contain the full repo
+    const projDir = path.join(projectsRoot, `ds-${result.id}`);
+    expect(fs.existsSync(path.join(projDir, 'package.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projDir, 'manifest.json'))).toBe(true);
+  });
+
+  it('imports the repository fully to outDir when manifest exists but projectsRoot is not provided', async () => {
+    // Write manifest to fixture
+    fs.writeFileSync(
+      path.join(fixtureRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 'od-design-system-project/v1',
+        name: 'manifested-system',
+        files: { design: 'README.md' },
+      }),
+    );
+
+    const result = await importGitHubDesignSystemProject(
+      'https://github.com/acme/design-kit',
+      tmpRoot,
+      userDesignSystemsRoot,
+      {
+        gitBin: fakeGit,
+        now: new Date('2026-05-18T10:00:00.000Z'),
+        isReferenceOnly: false,
+        projectsRoot: undefined,
+      },
+    );
+
+    expect(result.id).toBe('manifested-system');
+
+    // outDir should contain the full repo
+    expect(fs.existsSync(path.join(result.dir, 'README.md'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'package.json'))).toBe(true);
   });
 });

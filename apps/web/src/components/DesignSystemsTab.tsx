@@ -1018,7 +1018,7 @@ function GitImportModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={() => { if (!importing) onClose(); }}>
+    <div className="modal-backdrop ds-import-from-git" onClick={() => { if (!importing) onClose(); }}>
       <form
         className="modal"
         style={{ maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', padding: '24px' }}

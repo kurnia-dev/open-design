@@ -1918,6 +1918,7 @@ function AppInner() {
         onSystemsRefresh={refreshDesignSystems}
         config={config}
         onOpenConnectorsTab={() => openSettings('composio')}
+        onOpenSettings={openSettings}
       />
     );
   } else if (route.kind === 'design-system-detail') {

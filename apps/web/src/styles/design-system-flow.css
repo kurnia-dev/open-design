@@ -43,7 +43,7 @@
   gap: 8px;
 }
 .ds-setup-actions button,
-.ds-resource-inline button,
+.ds-resource-inline > button,
 .ds-drop-zone-wrap > button,
 .ds-github-access-toggle,
 .ds-github-access-actions button {
@@ -61,7 +61,7 @@
   transition: background-color 160ms cubic-bezier(0.23, 1, 0.32, 1), border-color 160ms cubic-bezier(0.23, 1, 0.32, 1), color 160ms cubic-bezier(0.23, 1, 0.32, 1), transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .ds-setup-actions button:hover,
-.ds-resource-inline button:hover,
+.ds-resource-inline > button:hover,
 .ds-drop-zone-wrap > button:hover,
 .ds-github-access-toggle:hover,
 .ds-github-access-actions button:hover {
@@ -75,7 +75,7 @@
   color: var(--accent-contrast, #fff);
 }
 .ds-setup-actions .primary:disabled,
-.ds-resource-inline button:disabled {
+.ds-resource-inline > button:disabled {
   cursor: default;
   opacity: 0.58;
   transform: none;
@@ -158,13 +158,13 @@
   line-height: 1.6;
 }
 .ds-setup-field textarea::placeholder,
-.ds-resource-inline input::placeholder {
+.ds-resource-inline > input::placeholder {
   color: color-mix(in srgb, var(--text-muted) 62%, transparent);
 }
 .ds-setup-field textarea:focus,
 .ds-setup-field textarea:focus-visible,
-.ds-resource-inline input:focus,
-.ds-resource-inline input:focus-visible {
+.ds-resource-inline > input:focus,
+.ds-resource-inline > input:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
   outline: 0;
@@ -222,7 +222,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
 }
-.ds-resource-inline input {
+.ds-resource-inline > input {
   min-width: 0;
   min-height: 38px;
   border: 1px solid var(--border);

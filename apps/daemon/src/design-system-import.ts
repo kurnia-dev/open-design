@@ -35,6 +35,7 @@ export type LocalDesignSystemImportOptions = {
   onProgress?: ((stage: string) => void) | undefined;
 };
 
+
 export type DesignSystemProjectSource =
   | {
     type: 'local';
@@ -144,7 +145,7 @@ async function getExistingPackageName(
       if (parsed && typeof parsed === 'object' && typeof parsed.packageName === 'string') {
         return parsed.packageName;
       }
-    } catch {}
+    } catch { }
   }
 
   const pkgPath = path.join(userDesignSystemsRoot, dirId, 'package.json');
@@ -155,7 +156,7 @@ async function getExistingPackageName(
       if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
         return parsed.name;
       }
-    } catch {}
+    } catch { }
   }
 
   if (projectsRoot) {
@@ -167,17 +168,28 @@ async function getExistingPackageName(
         if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
           return parsed.name;
         }
-      } catch {}
+      } catch { }
     }
   }
   return undefined;
 }
 
-export async function importLocalDesignSystemProject(
+type ProjectSetup = {
+  sourceRoot: string;
+  scan: ProjectScan;
+  isGitProject: boolean;
+  hasManifest: boolean;
+  manifestName: string | undefined;
+  displayName: string;
+  id: string;
+  outDir: string;
+};
+
+async function validateAndScanProject(
   sourceRootInput: string,
   userDesignSystemsRoot: string,
-  options: LocalDesignSystemImportOptions = {},
-): Promise<LocalDesignSystemImportResult> {
+  options: LocalDesignSystemImportOptions,
+): Promise<ProjectSetup> {
   const sourceRoot = await realpath(sourceRootInput);
   const sourceStats = await stat(sourceRoot);
   if (!sourceStats.isDirectory()) {
@@ -229,50 +241,91 @@ export async function importLocalDesignSystemProject(
   const outDir = path.join(userDesignSystemsRoot, id);
   await mkdir(outDir, { recursive: true });
 
-  if (isGitProject && hasManifest) {
-    const entries = await readdir(sourceRoot, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isFile()) {
-        const nameLower = entry.name.toLowerCase();
-        if (nameLower === 'design.md' || nameLower === 'readme.md' || nameLower.startsWith('readme.')) {
-          await copyFile(path.join(sourceRoot, entry.name), path.join(outDir, entry.name));
-        }
+  return { sourceRoot, scan, isGitProject, hasManifest, manifestName, displayName, id, outDir };
+}
+
+async function copyProjectToProjectsRoot(
+  sourceRoot: string,
+  projectsRoot: string,
+  id: string,
+): Promise<void> {
+  const projectDestDir = path.join(projectsRoot, `ds-${id}`);
+  await mkdir(projectDestDir, { recursive: true });
+  await cp(sourceRoot, projectDestDir, { recursive: true, filter: skipNodeModules });
+}
+
+async function copySpecificFiles(
+  sourceRoot: string,
+  destDir: string,
+  files: string[],
+): Promise<void> {
+  for (const file of files) {
+    const srcFile = path.join(sourceRoot, file);
+    if (await exists(srcFile)) {
+      await copyFile(srcFile, path.join(destDir, file));
+    }
+  }
+}
+
+async function copyDocAndManifestFiles(
+  sourceRoot: string,
+  destDir: string,
+  hasManifest: boolean,
+): Promise<void> {
+  const entries = await readdir(sourceRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isFile()) {
+      const nameLower = entry.name.toLowerCase();
+      if (
+        nameLower === 'design.md' ||
+        nameLower === 'readme.md' ||
+        nameLower.startsWith('readme.') ||
+        (hasManifest && nameLower === 'manifest.json')
+      ) {
+        await copyFile(path.join(sourceRoot, entry.name), path.join(destDir, entry.name));
       }
     }
-    if (options.projectsRoot) {
-      const projectDestDir = path.join(options.projectsRoot, `ds-${id}`);
-      await mkdir(projectDestDir, { recursive: true });
-      await cp(sourceRoot, projectDestDir, { recursive: true, filter: skipNodeModules });
-    }
-  } else if (isGitProject || hasManifest) {
-    await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
   }
+}
+
+async function updateManifestIdAndSource(
+  sourceRoot: string,
+  outDir: string,
+  id: string,
+  scan: ProjectScan,
+  options: LocalDesignSystemImportOptions,
+): Promise<LocalDesignSystemImportResult> {
+  const now = options.now ?? new Date();
+  const srcManifestPath = path.join(sourceRoot, 'manifest.json');
+  const manifestPath = path.join(outDir, 'manifest.json');
+  try {
+    const content = await readFile(srcManifestPath, 'utf8');
+    const parsed = JSON.parse(content) as Record<string, any>;
+    parsed.id = id;
+    parsed.source = options.source ?? {
+      type: 'local',
+      path: sourceRoot,
+      importedAt: now.toISOString(),
+    };
+    if (scan.packageName) {
+      parsed.packageName = scan.packageName;
+    }
+    await writeFile(manifestPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  } catch (err) {
+    throw new LocalDesignSystemImportError('INTERNAL_ERROR', `failed to update manifest.json: ${String(err)}`);
+  }
+  const files = await getFileList(outDir);
+  return { id, dir: outDir, files };
+}
+
+async function generateDesignSystemArtifacts(
+  setup: ProjectSetup,
+  options: LocalDesignSystemImportOptions,
+): Promise<LocalDesignSystemImportResult> {
+  const { sourceRoot, scan, id, outDir, displayName } = setup;
   const importMode = normalizeImportMode(options.importMode);
   const craftApplies = normalizeCraftList(options.craftApplies);
   const now = options.now ?? new Date();
-
-  if (hasManifest) {
-    const srcManifestPath = path.join(sourceRoot, 'manifest.json');
-    const manifestPath = path.join(outDir, 'manifest.json');
-    try {
-      const content = await readFile(srcManifestPath, 'utf8');
-      const parsed = JSON.parse(content) as Record<string, any>;
-      parsed.id = id;
-      parsed.source = options.source ?? {
-        type: 'local',
-        path: sourceRoot,
-        importedAt: now.toISOString(),
-      };
-      if (scan.packageName) {
-        parsed.packageName = scan.packageName;
-      }
-      await writeFile(manifestPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
-    } catch (err) {
-      throw new LocalDesignSystemImportError('INTERNAL_ERROR', `failed to update manifest.json: ${String(err)}`);
-    }
-    const files = await getFileList(outDir);
-    return { id, dir: outDir, files };
-  }
 
   const files = [
     'USAGE.md',
@@ -332,6 +385,62 @@ export async function importLocalDesignSystemProject(
   files.push(...copiedAssets);
   files.push(...copiedFonts);
   return { id, dir: outDir, files };
+}
+
+export async function importLocalDesignSystemProject(
+  sourceRootInput: string,
+  userDesignSystemsRoot: string,
+  options: LocalDesignSystemImportOptions = {},
+): Promise<LocalDesignSystemImportResult> {
+  const setup = await validateAndScanProject(sourceRootInput, userDesignSystemsRoot, options);
+  const { sourceRoot, hasManifest, id, outDir } = setup;
+
+  if (!hasManifest) {
+    throw new LocalDesignSystemImportError(
+      'BAD_REQUEST',
+      'Cannot import design system project: missing manifest.json at repository root.',
+    );
+  }
+
+  if (options.projectsRoot) {
+    const filesToCopy = [
+      'DESIGN.md',
+      'design.md',
+      'README.md',
+      'readme.md',
+      'USAGE.md',
+      'usage.md',
+      'tokens.css',
+      'design-tokens.json',
+      'tailwind-v4.css',
+      'components.html',
+      'components.manifest.json',
+    ];
+    await copySpecificFiles(sourceRoot, outDir, filesToCopy);
+    await copyProjectToProjectsRoot(sourceRoot, options.projectsRoot, id);
+  } else {
+    await mkdir(outDir, { recursive: true });
+    await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
+  }
+
+  return await updateManifestIdAndSource(sourceRoot, outDir, id, setup.scan, options);
+}
+
+export async function importLocalDesignSystemProjectAsReference(
+  sourceRootInput: string,
+  userDesignSystemsRoot: string,
+  options: LocalDesignSystemImportOptions = {},
+): Promise<LocalDesignSystemImportResult> {
+  const setup = await validateAndScanProject(sourceRootInput, userDesignSystemsRoot, options);
+  const { sourceRoot, hasManifest, id, outDir } = setup;
+
+  await copyDocAndManifestFiles(sourceRoot, outDir, hasManifest);
+
+  if (options.projectsRoot) {
+    await copyProjectToProjectsRoot(sourceRoot, options.projectsRoot, id);
+  }
+
+  return await generateDesignSystemArtifacts(setup, options);
 }
 
 export class LocalDesignSystemImportError extends Error {

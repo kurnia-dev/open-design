@@ -56,12 +56,13 @@ export async function importGitHubDesignSystemProject(
   const cloneArgs = ['clone', '--depth', '1'];
   const branch = cleanBranch(options.branch);
   if (branch) cloneArgs.push('--branch', branch);
-  
+
   const cloneUrl = options.githubToken
     ? `https://x-access-token:${options.githubToken}@github.com/${parsed.owner}/${parsed.repo}.git`
     : parsed.cloneUrl;
   cloneArgs.push(cloneUrl, cloneDir);
 
+  console.log("Clone Args:", cloneArgs)
 
   try {
     options.onProgress?.('Cloning Git repository...');

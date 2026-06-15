@@ -11722,6 +11722,9 @@ export async function startServer({
         ? `\n\n${promptImagePaths.map((p) => `@${p}`).join(' ')}`
         : '',
     ].join('');
+    console.log("\n==================== FULL PROMPT SENT TO AI ====================");
+    console.log(composed);
+    console.log("================================================================\n");
     run.promptTelemetry = buildPromptStackTelemetry({
       composedPrompt: composed,
       sections: [

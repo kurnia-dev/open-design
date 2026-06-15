@@ -3291,10 +3291,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         };
       });
 
+      const mergeHeadPath = path.join(dir, '.git', 'MERGE_HEAD');
+      const rebaseMergePath = path.join(dir, '.git', 'rebase-merge');
+      const rebaseApplyPath = path.join(dir, '.git', 'rebase-apply');
+      const mergeInProgress = existsSync(mergeHeadPath) || existsSync(rebaseMergePath) || existsSync(rebaseApplyPath);
+
       res.json({
         hasChanges: files.length > 0,
         branch,
         files,
+        mergeInProgress,
       });
     } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -4091,7 +4097,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         pullUrl = getAuthenticatedGitUrl(pullUrl, tokenObj.accessToken);
       }
 
-      await execGit(['pull', pullUrl, branch]);
+      await execGit(['pull', '--no-rebase', pullUrl, branch]);
       res.json({ ok: true });
     } catch (err: any) {
       const errMsg = String(err?.message || err);
@@ -4133,6 +4139,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const branchRaw = await execGit(['branch', '--show-current']);
       const branch = branchRaw.trim() || 'main';
 
+      const getMergeInProgress = () => {
+        const mergeHeadPath = path.join(dir, '.git', 'MERGE_HEAD');
+        const rebaseMergePath = path.join(dir, '.git', 'rebase-merge');
+        const rebaseApplyPath = path.join(dir, '.git', 'rebase-apply');
+        return existsSync(mergeHeadPath) || existsSync(rebaseMergePath) || existsSync(rebaseApplyPath);
+      };
+
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const tokenObj = await getGitHubToken(dataDir);
 
@@ -4149,12 +4162,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           try {
             const countRaw = await execGit(['rev-list', '--count', 'HEAD']);
             const ahead = Number(countRaw.trim()) || 0;
-            return res.json({ ahead, behind: 0, status: ahead > 0 ? 'ahead' : 'synced' });
+            return res.json({ ahead, behind: 0, status: ahead > 0 ? 'ahead' : 'synced', mergeInProgress: getMergeInProgress() });
           } catch (e) {
-            return res.json({ ahead: 0, behind: 0, status: 'synced' });
+            return res.json({ ahead: 0, behind: 0, status: 'synced', mergeInProgress: getMergeInProgress() });
           }
         }
-        return res.json({ ahead: 0, behind: 0, status: 'error', error: errMsg });
+        return res.json({ ahead: 0, behind: 0, status: 'error', error: errMsg, mergeInProgress: getMergeInProgress() });
       }
 
       const revListOutput = await execGit(['rev-list', '--left-right', '--count', `HEAD...FETCH_HEAD`]);
@@ -4167,7 +4180,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       else if (ahead > 0) status = 'ahead';
       else if (behind > 0) status = 'behind';
 
-      res.json({ ahead, behind, status });
+      res.json({ ahead, behind, status, mergeInProgress: getMergeInProgress() });
     } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
     }

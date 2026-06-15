@@ -7,6 +7,7 @@ export interface SyncStatus {
   behind: number;
   status: 'synced' | 'ahead' | 'behind' | 'diverged' | 'no-remote' | 'error';
   error?: string;
+  mergeInProgress?: boolean;
 }
 
 interface ProjectGitContextValue {

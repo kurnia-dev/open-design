@@ -20,6 +20,7 @@ export interface GitStatusResponse {
   hasChanges: boolean;
   branch: string;
   files: GitStatusFile[];
+  mergeInProgress?: boolean;
 }
 
 export interface GitDiffResponse {
@@ -56,5 +57,6 @@ export interface GitSyncStatusResponse {
   behind: number;
   status: 'synced' | 'ahead' | 'behind' | 'diverged' | 'no-remote' | 'error';
   error?: string;
+  mergeInProgress?: boolean;
 }
 

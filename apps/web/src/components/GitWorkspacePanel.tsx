@@ -1,4 +1,4 @@
-import type { GitHubAuthStatusResponse, GitStatusFile } from '@open-design/contracts';
+import type { GitHubAuthStatusResponse, GitStatusFile, GitStatusResponse } from '@open-design/contracts';
 import { useEffect, useState } from 'react';
 import { useT } from '../i18n';
 import { useProjectGit } from '../providers/ProjectGitProvider';
@@ -55,6 +55,7 @@ export function GitWorkspacePanel({
   const [syncing, setSyncing] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [mergeInProgress, setMergeInProgress] = useState(false);
 
 
   const handleFullSync = async () => {
@@ -63,20 +64,40 @@ export function GitWorkspacePanel({
       setError(null);
       await pullProjectGit(projectId);
       await pushProjectGit(projectId);
-      await loadStatus();
-      await refreshGitState();
       onRefreshFiles?.();
     } catch (err: any) {
+      console.log("error", err.message);
       setError(err?.message || 'Sync failed');
     } finally {
+      const [statusRes] = await Promise.all([
+        loadStatus().catch(() => null),
+        refreshGitState().catch(() => { })
+      ]);
+      const hasConflictNow =
+        (statusRes && (statusRes.mergeInProgress || statusRes.files.some(f => f.indexStatus === 'U' || f.workingDirStatus === 'U'))) ||
+        !!syncStatus?.mergeInProgress;
+      if (hasConflictNow) {
+        setError(null);
+      }
       setSyncing(false);
     }
   };
 
+  const isConflicted = (f: GitStatusFile) =>
+    f.indexStatus === 'U' ||
+    f.workingDirStatus === 'U' ||
+    (f.indexStatus === 'D' && f.workingDirStatus === 'D') ||
+    (f.indexStatus === 'A' && f.workingDirStatus === 'A');
+
   // Group files
-  const stagedFiles = files.filter((f) => f.indexStatus !== ' ' && f.indexStatus !== '?');
-  const unstagedFiles = files.filter((f) => f.workingDirStatus !== ' ' && f.workingDirStatus !== '?');
-  const untrackedFiles = files.filter((f) => f.indexStatus === '?' && f.workingDirStatus === '?');
+  const conflictedFiles = files.filter(isConflicted);
+  const stagedFiles = files.filter((f) => f.indexStatus !== ' ' && f.indexStatus !== '?' && !isConflicted(f));
+  const unstagedFiles = files.filter((f) => f.workingDirStatus !== ' ' && f.workingDirStatus !== '?' && !isConflicted(f));
+  const untrackedFiles = files.filter((f) => f.indexStatus === '?' && f.workingDirStatus === '?' && !isConflicted(f));
+  const hasConflict =
+    mergeInProgress ||
+    !!syncStatus?.mergeInProgress ||
+    conflictedFiles.length > 0;
 
   const handleGenerateCommitMsg = async () => {
     if (stagedFiles.length === 0 || !chatConfig) return;
@@ -263,13 +284,16 @@ Co-Authored-By: Claude <noreply@anthropic.com>
     }
   };
 
-  const loadStatus = async (autoSelect = false) => {
+  const loadStatus = async (autoSelect = false): Promise<GitStatusResponse | null> => {
     try {
       setLoading(true);
-      setError(null);
       const res = await fetchProjectGitStatus(projectId);
       setBranch(res.branch);
       setFiles(res.files);
+      setMergeInProgress(!!res.mergeInProgress);
+      if (error === 'Failed to load git status') {
+        setError(null);
+      }
 
       // Keep selected file if it still exists in the changes, or clear it
       if (selectedFile) {
@@ -287,8 +311,10 @@ Co-Authored-By: Claude <noreply@anthropic.com>
         setSelectedFile(first);
         await loadDiff(first.path);
       }
+      return res;
     } catch (err: any) {
       setError(err?.message || 'Failed to load git status');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -532,7 +558,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           </button>
         </div>
 
-        {error ? (
+        {hasConflict && (
+          <div className={styles.conflictNotice}>
+            <Icon name="info" size={16} style={{ color: 'var(--warning, #f59e0b)', marginTop: '1px', flexShrink: 0 }} />
+            <div className={styles.conflictNoticeText}>
+              <div className={styles.conflictTitle}>Merge Conflict Detected</div>
+              <div className={styles.conflictDescription}>
+                Automatic merge failed. Please open this project in your code editor (like VS Code) to resolve the merge conflicts and commit the changes.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && !hasConflict ? (
           <div className={styles.errorBox}>
             <div className={styles.errorContent}>{error}</div>
             <button
@@ -555,20 +593,49 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             </div>
           ) : null}
 
+          {/* Merge Conflicts */}
+          {conflictedFiles.length > 0 ? (
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <div className={styles.sectionTitle} style={{ color: 'var(--red, #ef4444)' }}>Merge Conflicts ({conflictedFiles.length})</div>
+              </div>
+              <ul className={styles.fileList}>
+                {conflictedFiles.map((file) => (
+                  <li
+                    key={file.path}
+                    className={`${styles.fileRow} ${selectedFile?.path === file.path ? styles.activeRow : ''}`}
+                    onClick={() => handleSelectFile(file)}
+                  >
+                    <Icon name="file-code" size={14} className={styles.fileIcon} style={{ color: 'var(--red, #ef4444)' }} />
+                    <span className={styles.fileName} title={file.path}>
+                      {file.path.split('/').pop() || file.path}
+                      <span className={styles.filePath}>{file.path.includes('/') ? ` in ${file.path.substring(0, file.path.lastIndexOf('/'))}` : ''}</span>
+                    </span>
+                    <div className={styles.fileStatusGroup}>
+                      <span className={`${styles.badge} ${styles.badgeConflict}`}>!</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           {/* Staged Changes */}
           {stagedFiles.length > 0 ? (
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div className={styles.sectionTitle}>Staged Changes ({stagedFiles.length})</div>
-                <button
-                  type="button"
-                  className={`${styles.stageAllBtn} od-tooltip`}
-                  onClick={() => handleUnstageMultiple(stagedFiles.map((f) => f.path))}
-                  data-tooltip="Unstage all changes"
-                  data-tooltip-placement="bottom"
-                >
-                  <Icon name="minus" size={12} />
-                </button>
+                {!hasConflict && (
+                  <button
+                    type="button"
+                    className={`${styles.stageAllBtn} od-tooltip`}
+                    onClick={() => handleUnstageMultiple(stagedFiles.map((f) => f.path))}
+                    data-tooltip="Unstage all changes"
+                    data-tooltip-placement="bottom"
+                  >
+                    <Icon name="minus" size={12} />
+                  </button>
+                )}
               </div>
               <ul className={styles.fileList}>
                 {stagedFiles.map((file) => (
@@ -583,17 +650,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                       <span className={styles.filePath}>{file.path.includes('/') ? ` in ${file.path.substring(0, file.path.lastIndexOf('/'))}` : ''}</span>
                     </span>
                     <div className={styles.fileStatusGroup}>
-                      <div className={styles.actions}>
-                        <button
-                          type="button"
-                          className={`${styles.actionBtn} od-tooltip`}
-                          onClick={(e) => handleUnstage(e, file.path)}
-                          data-tooltip="Unstage changes"
-                          data-tooltip-placement="top"
-                        >
-                          <Icon name="minus" size={12} />
-                        </button>
-                      </div>
+                      {!hasConflict && (
+                        <div className={styles.actions}>
+                          <button
+                            type="button"
+                            className={`${styles.actionBtn} od-tooltip`}
+                            onClick={(e) => handleUnstage(e, file.path)}
+                            data-tooltip="Unstage changes"
+                            data-tooltip-placement="top"
+                          >
+                            <Icon name="minus" size={12} />
+                          </button>
+                        </div>
+                      )}
                       <span className={`${styles.badge} ${styles.badgeStaged}`}>M</span>
                     </div>
                   </li>
@@ -607,15 +676,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div className={styles.sectionTitle}>Changes ({unstagedFiles.length})</div>
-                <button
-                  type="button"
-                  className={`${styles.stageAllBtn} od-tooltip`}
-                  onClick={() => handleStageMultiple(unstagedFiles.map((f) => f.path))}
-                  data-tooltip="Stage all changes"
-                  data-tooltip-placement="bottom"
-                >
-                  <Icon name="plus" size={12} />
-                </button>
+                {!hasConflict && (
+                  <button
+                    type="button"
+                    className={`${styles.stageAllBtn} od-tooltip`}
+                    onClick={() => handleStageMultiple(unstagedFiles.map((f) => f.path))}
+                    data-tooltip="Stage all changes"
+                    data-tooltip-placement="bottom"
+                  >
+                    <Icon name="plus" size={12} />
+                  </button>
+                )}
               </div>
               <ul className={styles.fileList}>
                 {unstagedFiles.map((file) => (
@@ -630,26 +701,28 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                       <span className={styles.filePath}>{file.path.includes('/') ? ` in ${file.path.substring(0, file.path.lastIndexOf('/'))}` : ''}</span>
                     </span>
                     <div className={styles.fileStatusGroup}>
-                      <div className={styles.actions}>
-                        <button
-                          type="button"
-                          className={`${styles.actionBtn} od-tooltip`}
-                          onClick={(e) => handleStage(e, file.path)}
-                          data-tooltip="Stage changes"
-                          data-tooltip-placement="top"
-                        >
-                          <Icon name="plus" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className={`${styles.actionBtn} od-tooltip`}
-                          onClick={(e) => handleRestore(e, file.path)}
-                          data-tooltip="Discard changes"
-                          data-tooltip-placement="top"
-                        >
-                          <Icon name="close" size={12} />
-                        </button>
-                      </div>
+                      {!hasConflict && (
+                        <div className={styles.actions}>
+                          <button
+                            type="button"
+                            className={`${styles.actionBtn} od-tooltip`}
+                            onClick={(e) => handleStage(e, file.path)}
+                            data-tooltip="Stage changes"
+                            data-tooltip-placement="top"
+                          >
+                            <Icon name="plus" size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.actionBtn} od-tooltip`}
+                            onClick={(e) => handleRestore(e, file.path)}
+                            data-tooltip="Discard changes"
+                            data-tooltip-placement="top"
+                          >
+                            <Icon name="close" size={12} />
+                          </button>
+                        </div>
+                      )}
                       <span className={`${styles.badge} ${styles.badgeUnstaged}`}>M</span>
                     </div>
                   </li>
@@ -663,15 +736,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div className={styles.sectionTitle}>{t('workspace.gitChangesUntracked')} ({untrackedFiles.length})</div>
-                <button
-                  type="button"
-                  className={`${styles.stageAllBtn} od-tooltip`}
-                  onClick={() => handleStageMultiple(untrackedFiles.map((f) => f.path))}
-                  data-tooltip={t('workspace.gitStageAll')}
-                  data-tooltip-placement="bottom"
-                >
-                  <Icon name="plus" size={12} />
-                </button>
+                {!hasConflict && (
+                  <button
+                    type="button"
+                    className={`${styles.stageAllBtn} od-tooltip`}
+                    onClick={() => handleStageMultiple(untrackedFiles.map((f) => f.path))}
+                    data-tooltip={t('workspace.gitStageAll')}
+                    data-tooltip-placement="bottom"
+                  >
+                    <Icon name="plus" size={12} />
+                  </button>
+                )}
               </div>
               <ul className={styles.fileList}>
                 {untrackedFiles.map((file) => (
@@ -686,17 +761,19 @@ Co-Authored-By: Claude <noreply@anthropic.com>
                       <span className={styles.filePath}>{file.path.includes('/') ? ` in ${file.path.substring(0, file.path.lastIndexOf('/'))}` : ''}</span>
                     </span>
                     <div className={styles.fileStatusGroup}>
-                      <div className={styles.actions}>
-                        <button
-                          type="button"
-                          className={`${styles.actionBtn} od-tooltip`}
-                          onClick={(e) => handleStage(e, file.path)}
-                          data-tooltip="Add file (stage)"
-                          data-tooltip-placement="top"
-                        >
-                          <Icon name="plus" size={12} />
-                        </button>
-                      </div>
+                      {!hasConflict && (
+                        <div className={styles.actions}>
+                          <button
+                            type="button"
+                            className={`${styles.actionBtn} od-tooltip`}
+                            onClick={(e) => handleStage(e, file.path)}
+                            data-tooltip="Add file (stage)"
+                            data-tooltip-placement="top"
+                          >
+                            <Icon name="plus" size={12} />
+                          </button>
+                        </div>
+                      )}
                       <span className={`${styles.badge} ${styles.badgeUntracked}`}>U</span>
                     </div>
                   </li>

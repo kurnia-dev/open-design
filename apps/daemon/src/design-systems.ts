@@ -1127,6 +1127,10 @@ export async function updateUserDesignSystem(
             }
           }
         }
+      } else {
+        const warningMsg = `Warning: The design system is being published without npm packages because "npmPackages" is not configured in the manifest.\n`;
+        console.warn(`[od] ${warningMsg.trim()}`);
+        onProgress?.('info', warningMsg);
       }
     }
   }

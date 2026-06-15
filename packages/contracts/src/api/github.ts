@@ -19,10 +19,12 @@ export interface GitHubAuthStatusResponse {
   avatarUrl?: string;
   scopes?: string[];
   savedAt?: number;
+  providerUrl?: string | undefined;
 }
 
 export interface GitHubConnectRequest {
   token: string;
+  providerUrl?: string | undefined;
 }
 
 

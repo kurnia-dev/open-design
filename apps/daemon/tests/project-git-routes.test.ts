@@ -90,6 +90,60 @@ describe('Project Git & GitHub Routes', () => {
     }
   });
 
+  it('connects, gets auth status, and disconnects Custom Gitea account', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation((url, init) => {
+      if (url === 'http://gitea.tagsamurai.local/api/v1/user') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: () => Promise.resolve({
+            username: 'gitea-octocat',
+            avatar_url: 'http://gitea.tagsamurai.local/avatar.gif',
+          }),
+        } as Response);
+      }
+      return originalFetch(url, init);
+    });
+
+    try {
+      // 1. Connect
+      const connectResp = await fetch(`${baseUrl}/api/github/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: 'mock-gitea-token', providerUrl: 'http://gitea.tagsamurai.local' }),
+      });
+      expect(connectResp.status).toBe(200);
+      const connectBody = (await connectResp.json()) as any;
+      expect(connectBody.connected).toBe(true);
+      expect(connectBody.username).toBe('gitea-octocat');
+      expect(connectBody.providerUrl).toBe('http://gitea.tagsamurai.local');
+
+      // 2. Get status
+      const statusResp = await fetch(`${baseUrl}/api/github/auth-status`);
+      expect(statusResp.status).toBe(200);
+      const statusBody = (await statusResp.json()) as any;
+      expect(statusBody.connected).toBe(true);
+      expect(statusBody.username).toBe('gitea-octocat');
+      expect(statusBody.providerUrl).toBe('http://gitea.tagsamurai.local');
+
+      // 3. Disconnect
+      const disconnectResp = await fetch(`${baseUrl}/api/github/disconnect`, {
+        method: 'POST',
+      });
+      expect(disconnectResp.status).toBe(200);
+
+      // 4. Get status again
+      const statusResp2 = await fetch(`${baseUrl}/api/github/auth-status`);
+      expect(statusResp2.status).toBe(200);
+      const statusBody2 = (await statusResp2.json()) as any;
+      expect(statusBody2.connected).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('performs remote config, push, pull, and sync status check on git repository', async () => {
     const projectId = `git-test-proj-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {

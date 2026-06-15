@@ -10,6 +10,7 @@
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { Agent } from 'undici';
 
 export interface StoredGitHubToken {
   accessToken: string;
@@ -17,6 +18,7 @@ export interface StoredGitHubToken {
   avatarUrl?: string;
   scopes?: string[];
   savedAt: number;
+  providerUrl?: string | undefined;
 }
 
 export interface GitHubTokensFile {
@@ -56,10 +58,13 @@ function sanitizeToken(raw: unknown): StoredGitHubToken | null {
     typeof raw.savedAt === 'number' && Number.isFinite(raw.savedAt)
       ? raw.savedAt
       : Date.now();
+  const providerUrl =
+    typeof raw.providerUrl === 'string' ? raw.providerUrl.trim() : undefined;
   const out: StoredGitHubToken = { accessToken, savedAt };
   if (username) out.username = username;
   if (avatarUrl) out.avatarUrl = avatarUrl;
   if (scopes) out.scopes = scopes;
+  if (providerUrl) out.providerUrl = providerUrl;
   return out;
 }
 
@@ -139,12 +144,30 @@ export async function clearGitHubToken(dataDir: string): Promise<void> {
   });
 }
 
+/**
+ * Returns a fetch `dispatcher` option that disables TLS certificate verification
+ * for custom (non-GitHub) provider URLs. This is needed for self-hosted Git
+ * servers (e.g. Gitea) that use self-signed certificates.
+ *
+ * For GitHub.com URLs, returns an empty object (strict TLS is preserved).
+ */
+export function customProviderFetchInit(providerUrl: string | undefined): RequestInit {
+  if (!providerUrl || providerUrl.includes('github.com')) return {};
+  return {
+    // undici Agent is the dispatcher used by Node.js native fetch.
+    // Setting rejectUnauthorized:false accepts self-signed certificates.
+    // @ts-expect-error - dispatcher is an undici extension on the fetch API
+    dispatcher: new Agent({ connect: { rejectUnauthorized: false } }),
+  };
+}
+
 export interface CreateRepoParams {
   accessToken: string;
   name: string;
   private?: boolean;
   owner?: string;
   ownerType?: 'user' | 'organization';
+  providerUrl?: string | undefined;
 }
 
 export async function createGitHubRepository(params: CreateRepoParams): Promise<{
@@ -154,14 +177,22 @@ export async function createGitHubRepository(params: CreateRepoParams): Promise<
   fork: boolean;
   description?: string | null;
 }> {
-  const { accessToken, name, private: isPrivate, owner, ownerType } = params;
+  const { accessToken, name, private: isPrivate, owner, ownerType, providerUrl } = params;
   if (!name || !name.trim()) {
     throw new Error('repository name is required');
   }
 
-  let url = 'https://api.github.com/user/repos';
+  const getUrl = (pathStr: string) => {
+    if (!providerUrl || providerUrl.includes('github.com')) {
+      return `https://api.github.com${pathStr}`;
+    }
+    const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
+    return `${cleanBase}/api/v1${pathStr}`;
+  };
+
+  let url = getUrl('/user/repos');
   if (owner && owner.trim() && ownerType === 'organization') {
-    url = `https://api.github.com/orgs/${owner.trim()}/repos`;
+    url = getUrl(`/orgs/${owner.trim()}/repos`);
   }
 
   const createResp = await fetch(url, {
@@ -169,7 +200,7 @@ export async function createGitHubRepository(params: CreateRepoParams): Promise<
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Accept': 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
+      ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
       'Content-Type': 'application/json',
       'User-Agent': 'Open-Design-Daemon'
     },
@@ -177,6 +208,7 @@ export async function createGitHubRepository(params: CreateRepoParams): Promise<
       name: name.trim(),
       private: !!isPrivate,
     }),
+    ...customProviderFetchInit(providerUrl),
   });
 
   if (!createResp.ok) {
@@ -190,7 +222,7 @@ export async function createGitHubRepository(params: CreateRepoParams): Promise<
 
   const repo = await createResp.json() as any;
   return {
-    fullName: repo.full_name,
+    fullName: repo.full_name || repo.name,
     cloneUrl: repo.clone_url,
     private: repo.private,
     fork: repo.fork,

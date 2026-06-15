@@ -2529,20 +2529,25 @@ export async function createGitHubRepo(
     try {
       const body = await resp.json();
       if (body?.error?.message) msg = body.error.message;
-    } catch {}
+    } catch { }
     throw new Error(msg);
   }
   return (await resp.json()) as GitHubRepoItem;
 }
 
-export async function connectGitHub(token: string): Promise<GitHubAuthStatusResponse> {
+export async function connectGitHub(token: string, providerUrl?: string): Promise<GitHubAuthStatusResponse> {
   const resp = await fetch('/api/github/connect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify({ token, providerUrl }),
   });
   if (!resp.ok) {
-    throw new Error(`Failed to connect to GitHub (${resp.status})`);
+    let msg = `Failed to connect to Git provider (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (body?.error?.message) msg = body.error.message;
+    } catch { }
+    throw new Error(msg);
   }
   return (await resp.json()) as GitHubAuthStatusResponse;
 }

@@ -34,7 +34,7 @@ import {
 } from './project-locations.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 import { callLlmOnce } from './memory-llm.js';
-import { getGitHubToken, setGitHubToken, clearGitHubToken, createGitHubRepository } from './github-tokens.js';
+import { getGitHubToken, setGitHubToken, clearGitHubToken, createGitHubRepository, customProviderFetchInit } from './github-tokens.js';
 
 const GITHUB_OAUTH_CLIENT_ID = 'Ov23liHk43HwCQdYerkO';
 
@@ -1201,8 +1201,8 @@ function runProjectInstall(
     const hasWorkspaceFile = existsSync(path.join(dir, 'pnpm-workspace.yaml'));
     const args = tool === 'pnpm'
       ? (hasWorkspaceFile
-          ? ['install', '--no-frozen-lockfile']
-          : ['install', '--ignore-workspace', '--no-frozen-lockfile'])
+        ? ['install', '--no-frozen-lockfile']
+        : ['install', '--ignore-workspace', '--no-frozen-lockfile'])
       : ['install', '--no-workspaces', '--legacy-peer-deps'];
     console.log(`[project-routes] Running ${tool} ${args.join(' ')} in ${dir}`);
     const child = spawn(tool, args, {
@@ -3501,12 +3501,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       if (!accessToken) {
         return res.json({ connected: false });
       }
-      const profileResp = await fetch('https://api.github.com/user', {
+      const providerUrl = tokenObj?.providerUrl;
+      const getUrl = (pathStr: string) => {
+        if (!providerUrl || providerUrl.includes('github.com')) {
+          return `https://api.github.com${pathStr}`;
+        }
+        const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
+        return `${cleanBase}/api/v1${pathStr}`;
+      };
+
+      const profileResp = await fetch(getUrl('/user'), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
           'User-Agent': 'Open-Design-Daemon'
-        }
+        },
+        ...customProviderFetchInit(providerUrl),
       });
       if (!profileResp.ok) {
         if (profileResp.status === 401) {
@@ -3520,7 +3530,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           username: tokenObj?.username || '',
           avatarUrl: tokenObj?.avatarUrl || '',
           scopes: tokenObj?.scopes || [],
-          savedAt: tokenObj?.savedAt || Date.now()
+          savedAt: tokenObj?.savedAt || Date.now(),
+          providerUrl
         });
       }
       const profile = await profileResp.json() as any;
@@ -3529,10 +3540,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       const updatedToken = {
         accessToken,
-        username: profile.login,
+        username: profile.login || profile.username,
         avatarUrl: profile.avatar_url,
         scopes,
-        savedAt: Date.now()
+        savedAt: Date.now(),
+        providerUrl
       };
       if (!headerAccessToken) {
         await setGitHubToken(dataDir, updatedToken);
@@ -3540,10 +3552,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       res.json({
         connected: true,
-        username: profile.login,
+        username: profile.login || profile.username,
         avatarUrl: profile.avatar_url,
         scopes,
-        savedAt: updatedToken.savedAt
+        savedAt: updatedToken.savedAt,
+        providerUrl
       });
     } catch (err: any) {
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
@@ -3554,21 +3567,32 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const headerToken = req.headers['x-github-token'];
+      const tokenObj = await getGitHubToken(dataDir);
       const accessToken = typeof headerToken === 'string' && headerToken.trim()
         ? headerToken.trim()
-        : (await getGitHubToken(dataDir))?.accessToken;
+        : tokenObj?.accessToken;
 
       if (!accessToken) {
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
       }
 
-      const userResp = await fetch('https://api.github.com/user', {
+      const providerUrl = tokenObj?.providerUrl;
+      const getUrl = (pathStr: string) => {
+        if (!providerUrl || providerUrl.includes('github.com')) {
+          return `https://api.github.com${pathStr}`;
+        }
+        const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
+        return `${cleanBase}/api/v1${pathStr}`;
+      };
+
+      const userResp = await fetch(getUrl('/user'), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+          ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
           'User-Agent': 'Open-Design-Daemon'
-        }
+        },
+        ...customProviderFetchInit(providerUrl),
       });
 
       if (!userResp.ok) {
@@ -3577,13 +3601,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       const user = await userResp.json() as any;
 
-      const orgsResp = await fetch('https://api.github.com/user/orgs', {
+      const orgsResp = await fetch(getUrl('/user/orgs'), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+          ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
           'User-Agent': 'Open-Design-Daemon'
-        }
+        },
+        ...customProviderFetchInit(providerUrl),
       });
 
       let orgs: any[] = [];
@@ -3595,12 +3620,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
       const owners = [
         {
-          login: user.login,
+          login: user.login || user.username,
           avatarUrl: user.avatar_url,
           type: 'user'
         },
         ...orgs.map((org: any) => ({
-          login: org.login,
+          login: org.login || org.username,
           avatarUrl: org.avatar_url,
           type: 'organization'
         }))
@@ -3617,20 +3642,31 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const headerToken = req.headers['x-github-token'];
+      const tokenObj = await getGitHubToken(dataDir);
       const accessToken = typeof headerToken === 'string' && headerToken.trim()
         ? headerToken.trim()
-        : (await getGitHubToken(dataDir))?.accessToken;
+        : tokenObj?.accessToken;
 
       if (!accessToken) {
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
       }
 
-      const reposResp = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+      const providerUrl = tokenObj?.providerUrl;
+      const getUrl = (pathStr: string) => {
+        if (!providerUrl || providerUrl.includes('github.com')) {
+          return `https://api.github.com${pathStr}`;
+        }
+        const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
+        return `${cleanBase}/api/v1${pathStr}`;
+      };
+
+      const reposResp = await fetch(getUrl('/user/repos?per_page=100&sort=updated'), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+          ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
         },
+        ...customProviderFetchInit(providerUrl),
       });
 
       if (!reposResp.ok) {
@@ -3657,9 +3693,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const headerToken = req.headers['x-github-token'];
+      const tokenObj = await getGitHubToken(dataDir);
       const accessToken = typeof headerToken === 'string' && headerToken.trim()
         ? headerToken.trim()
-        : (await getGitHubToken(dataDir))?.accessToken;
+        : tokenObj?.accessToken;
 
       if (!accessToken) {
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
@@ -3670,12 +3707,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return sendApiError(res, 400, 'BAD_REQUEST', 'Missing owner or repo parameter');
       }
 
-      const checkResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      const providerUrl = tokenObj?.providerUrl;
+      const getUrl = (pathStr: string) => {
+        if (!providerUrl || providerUrl.includes('github.com')) {
+          return `https://api.github.com${pathStr}`;
+        }
+        const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
+        return `${cleanBase}/api/v1${pathStr}`;
+      };
+
+      const checkResp = await fetch(getUrl(`/repos/${owner}/${repo}`), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+          ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
         },
+        ...customProviderFetchInit(providerUrl),
       });
 
       if (checkResp.status === 404) {
@@ -3695,9 +3742,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const headerToken = req.headers['x-github-token'];
+      const tokenObj = await getGitHubToken(dataDir);
       const accessToken = typeof headerToken === 'string' && headerToken.trim()
         ? headerToken.trim()
-        : (await getGitHubToken(dataDir))?.accessToken;
+        : tokenObj?.accessToken;
 
       if (!accessToken) {
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
@@ -3708,13 +3756,23 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return sendApiError(res, 400, 'BAD_REQUEST', 'Missing owner or repo parameter');
       }
 
-      const repoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      const providerUrl = tokenObj?.providerUrl;
+      const getUrl = (pathStr: string) => {
+        if (!providerUrl || providerUrl.includes('github.com')) {
+          return `https://api.github.com${pathStr}`;
+        }
+        const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
+        return `${cleanBase}/api/v1${pathStr}`;
+      };
+
+      const repoResp = await fetch(getUrl(`/repos/${owner}/${repo}`), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+          ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
           'User-Agent': 'Open-Design-Daemon'
         },
+        ...customProviderFetchInit(providerUrl),
       });
 
       if (!repoResp.ok) {
@@ -3740,9 +3798,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     try {
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const headerToken = req.headers['x-github-token'];
+      const tokenObj = await getGitHubToken(dataDir);
       const accessToken = typeof headerToken === 'string' && headerToken.trim()
         ? headerToken.trim()
-        : (await getGitHubToken(dataDir))?.accessToken;
+        : tokenObj?.accessToken;
 
       if (!accessToken) {
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
@@ -3755,6 +3814,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         private: isPrivate,
         owner,
         ownerType,
+        providerUrl: tokenObj?.providerUrl,
       });
 
       res.json(repo);
@@ -3766,18 +3826,29 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   app.post('/api/github/connect', async (req, res) => {
     try {
-      const { token } = req.body || {};
+      const { token, providerUrl } = req.body || {};
       if (typeof token !== 'string' || !token.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'token is required');
       }
       const accessToken = token.trim();
-      const profileResp = await fetch('https://api.github.com/user', {
+      const cleanProviderUrl = typeof providerUrl === 'string' && providerUrl.trim() ? providerUrl.trim() : undefined;
+      const getUrl = (pathStr: string) => {
+        if (!cleanProviderUrl || cleanProviderUrl.includes('github.com')) {
+          return `https://api.github.com${pathStr}`;
+        }
+        const cleanBase = cleanProviderUrl.endsWith('/') ? cleanProviderUrl.slice(0, -1) : cleanProviderUrl;
+        return `${cleanBase}/api/v1${pathStr}`;
+      };
+
+      const profileResp = await fetch(getUrl('/user'), {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/vnd.github+json',
           'User-Agent': 'Open-Design-Daemon'
-        }
+        },
+        ...customProviderFetchInit(cleanProviderUrl),
       });
+
       if (!profileResp.ok) {
         return sendApiError(res, profileResp.status, 'BAD_REQUEST', `GitHub token validation failed: ${profileResp.statusText}`);
       }
@@ -3789,21 +3860,24 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const dataDir = ctx.paths.RUNTIME_DATA_DIR;
       const storedToken = {
         accessToken,
-        username: profile.login,
+        username: profile.login || profile.username,
         avatarUrl: profile.avatar_url,
         scopes,
-        savedAt: Date.now()
+        savedAt: Date.now(),
+        providerUrl: cleanProviderUrl
       };
       await setGitHubToken(dataDir, storedToken);
 
       res.json({
         connected: true,
-        username: profile.login,
+        username: profile.login || profile.username,
         avatarUrl: profile.avatar_url,
         scopes,
-        savedAt: storedToken.savedAt
+        savedAt: storedToken.savedAt,
+        providerUrl: cleanProviderUrl
       });
     } catch (err: any) {
+      console.error('[project-routes] POST /api/github/connect error:', err);
       sendApiError(res, 500, 'INTERNAL_ERROR', String(err?.message || err));
     }
   });
@@ -3922,12 +3996,24 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
   // --- Project Git Remote & Sync Endpoints ---
 
-  function getAuthenticatedGitUrl(remoteUrl: string, token: string): string {
+  function getAuthenticatedGitUrl(remoteUrl: string, token: string, providerUrl?: string): string {
     const clean = remoteUrl.trim();
+    let gitHost = 'github.com';
+    if (providerUrl) {
+      try {
+        gitHost = new URL(providerUrl).hostname || providerUrl;
+      } catch {
+        gitHost = providerUrl;
+      }
+    }
+
+    const httpsRegex = new RegExp(`https?://[^/]*${gitHost.replace('.', '\\.')}/([^/]+)/([^/]+?)(?:\\.git)?$`);
+    const sshRegex = new RegExp(`git@${gitHost.replace('.', '\\.')}:([^/]+)/([^/]+?)(?:\\.git)?$`);
+    const httpsMatch = httpsRegex.exec(clean);
+    const sshMatch = sshRegex.exec(clean);
+
     let owner = '';
     let repo = '';
-    const httpsMatch = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/.exec(clean);
-    const sshMatch = /git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/.exec(clean);
     if (httpsMatch) {
       owner = httpsMatch[1]!;
       repo = httpsMatch[2]!;
@@ -3935,9 +4021,25 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       owner = sshMatch[1]!;
       repo = sshMatch[2]!;
     } else {
-      return clean;
+      // Fallback for standard github just in case
+      const ghHttps = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/.exec(clean);
+      const ghSsh = /git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/.exec(clean);
+      if (ghHttps) {
+        owner = ghHttps[1]!;
+        repo = ghHttps[2]!;
+        gitHost = 'github.com';
+      } else if (ghSsh) {
+        owner = ghSsh[1]!;
+        repo = ghSsh[2]!;
+        gitHost = 'github.com';
+      } else {
+        return clean;
+      }
     }
-    return `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
+
+    const protocol = providerUrl && providerUrl.startsWith('http:') ? 'http' : 'https';
+    const username = gitHost === 'github.com' ? 'x-access-token' : 'oauth2';
+    return `${protocol}://${username}:${token}@${gitHost}/${owner}/${repo}.git`;
   }
 
   app.get('/api/projects/:id/git/remote', async (req, res) => {
@@ -4049,8 +4151,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const tokenObj = await getGitHubToken(dataDir);
 
       let pushUrl = remoteUrlRaw.trim();
-      if (tokenObj && pushUrl.includes('github.com')) {
-        pushUrl = getAuthenticatedGitUrl(pushUrl, tokenObj.accessToken);
+      if (tokenObj) {
+        pushUrl = getAuthenticatedGitUrl(pushUrl, tokenObj.accessToken, tokenObj.providerUrl);
       }
 
       await execGit(['push', pushUrl, branch]);
@@ -4093,8 +4195,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const tokenObj = await getGitHubToken(dataDir);
 
       let pullUrl = remoteUrlRaw.trim();
-      if (tokenObj && pullUrl.includes('github.com')) {
-        pullUrl = getAuthenticatedGitUrl(pullUrl, tokenObj.accessToken);
+      if (tokenObj) {
+        pullUrl = getAuthenticatedGitUrl(pullUrl, tokenObj.accessToken, tokenObj.providerUrl);
       }
 
       await execGit(['pull', '--no-rebase', pullUrl, branch]);
@@ -4150,8 +4252,8 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const tokenObj = await getGitHubToken(dataDir);
 
       let fetchUrl = remoteUrlRaw.trim();
-      if (tokenObj && fetchUrl.includes('github.com')) {
-        fetchUrl = getAuthenticatedGitUrl(fetchUrl, tokenObj.accessToken);
+      if (tokenObj) {
+        fetchUrl = getAuthenticatedGitUrl(fetchUrl, tokenObj.accessToken, tokenObj.providerUrl);
       }
 
       try {

@@ -7439,6 +7439,10 @@ export function GitHubSettingsSection({
   const [githubPatLoading, setGithubPatLoading] = useState(false);
   const [githubPatError, setGithubPatError] = useState<string | null>(null);
 
+  const [customProviderUrl, setCustomProviderUrl] = useState('');
+  const [customToken, setCustomToken] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
+
   const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const [codeCopied, setCodeCopied] = useState(false);
@@ -7560,6 +7564,26 @@ export function GitHubSettingsSection({
     }
   };
 
+  const handleConnectCustom = async () => {
+    if (!customToken.trim() || !customProviderUrl.trim()) return;
+    setGithubPatLoading(true);
+    setCustomError(null);
+    try {
+      const auth = await connectGitHub(customToken.trim(), customProviderUrl.trim());
+      if (auth.connected) {
+        setCustomToken('');
+        setCustomProviderUrl('');
+        onRefreshGitHubAuth?.();
+      } else {
+        setCustomError('Failed to connect. Please check your token and provider URL.');
+      }
+    } catch (err: any) {
+      setCustomError(err?.message || 'Failed to connect to Git provider. Please check your network connection.');
+    } finally {
+      setGithubPatLoading(false);
+    }
+  };
+
   const handleDisconnectGitHub = async () => {
     setIsDisconnecting(true);
     try {
@@ -7590,12 +7614,14 @@ export function GitHubSettingsSection({
                 <img src={githubAuth.avatarUrl} alt={githubAuth.username} style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bg-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="github" size={24} />
+                  <Icon name={githubAuth.providerUrl ? 'repo' : 'github'} size={24} />
                 </div>
               )}
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <strong style={{ fontSize: 16 }}>@{githubAuth.username}</strong>
-                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{t('settings.githubConnected')}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
+                  {githubAuth.providerUrl ? `Gitea Connected (${githubAuth.providerUrl})` : t('settings.githubConnected')}
+                </span>
               </div>
             </div>
             <div>
@@ -7687,6 +7713,51 @@ export function GitHubSettingsSection({
                     disabled={!githubPatInput.trim() || githubPatLoading}
                   >
                     {githubPatLoading ? t('settings.githubConnecting') : t('settings.githubConnect')}
+                  </Button>
+                </div>
+              </div>
+            </details>
+
+            <details style={{ background: 'var(--bg-3)', borderRadius: '8px', padding: '12px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+                Alternative: Connect Custom Git Provider (Gitea)
+              </summary>
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>
+                  Connect to a custom Git provider instance such as Gitea.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>Provider Base URL</label>
+                  <input
+                    type="text"
+                    placeholder="https://gitea.example.com"
+                    value={customProviderUrl}
+                    onChange={(e) => setCustomProviderUrl(e.target.value)}
+                    className="settings-input"
+                    disabled={githubPatLoading}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)' }}>Access Token / Personal Access Token</label>
+                  <input
+                    type="password"
+                    placeholder="gto_..."
+                    value={customToken}
+                    onChange={(e) => setCustomToken(e.target.value)}
+                    className="settings-input"
+                    disabled={githubPatLoading}
+                  />
+                </div>
+                {customError && (
+                  <div style={{ color: 'var(--error)', fontSize: 13, marginTop: 4 }}>{customError}</div>
+                )}
+                <div>
+                  <Button
+                    variant="subtle"
+                    onClick={handleConnectCustom}
+                    disabled={!customProviderUrl.trim() || !customToken.trim() || githubPatLoading}
+                  >
+                    {githubPatLoading ? 'Connecting...' : 'Connect'}
                   </Button>
                 </div>
               </div>

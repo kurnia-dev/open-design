@@ -165,11 +165,13 @@ export function GitHubIntegrationMenu({
             {githubAuth.avatarUrl ? (
               <img src={githubAuth.avatarUrl} alt={githubAuth.username} className={styles.githubAvatar} />
             ) : (
-              <Icon name="github" size={20} />
+              <Icon name={githubAuth.providerUrl ? 'repo' : 'github'} size={20} />
             )}
             <div className={styles.githubDetails}>
               <span className={styles.githubUser}>@{githubAuth.username}</span>
-              <span className={styles.githubStatusText}>GitHub Connected</span>
+              <span className={styles.githubStatusText}>
+                {githubAuth.providerUrl ? 'Gitea Connected' : 'GitHub Connected'}
+              </span>
             </div>
             {onOpenGitHubSettings && (
               <button
@@ -188,7 +190,7 @@ export function GitHubIntegrationMenu({
           <div className={styles.githubHeader}>
             <Icon name="github" size={20} />
             <div className={styles.githubDetails}>
-              <span className={styles.githubUser}>GitHub Integration</span>
+              <span className={styles.githubUser}>Git Integration</span>
               <span className={styles.githubStatusText}>Not connected</span>
             </div>
             <button
@@ -352,12 +354,11 @@ function cleanGitUrl(url: string | null): string {
 
 function parseGitHubUrl(url: string | null): { owner: string; repo: string } | null {
   if (!url) return null;
-  const httpsMatch = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);
-  const sshMatch = /git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);
-  if (httpsMatch) {
-    return { owner: httpsMatch[1]!, repo: httpsMatch[2]! };
-  } else if (sshMatch) {
-    return { owner: sshMatch[1]!, repo: sshMatch[2]! };
-  }
-  return null;
+  const clean = url.endsWith('.git') ? url.slice(0, -4) : url;
+  const parts = clean.replace(':', '/').split('/');
+  if (parts.length < 2) return null;
+  const repo = parts[parts.length - 1];
+  const owner = parts[parts.length - 2];
+  if (!owner || !repo) return null;
+  return { owner, repo };
 }

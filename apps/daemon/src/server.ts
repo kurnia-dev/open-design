@@ -225,7 +225,7 @@ import { createQoderStreamHandler } from './qoder-stream.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
-import { startDevScript, getDevServerUrl, killPortProcesses } from './design-system-import.js';
+import { startDevScript, getDevServerUrl, killPortProcesses } from './dev-server.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { classifyRunFailure } from './run-failure-classification.js';

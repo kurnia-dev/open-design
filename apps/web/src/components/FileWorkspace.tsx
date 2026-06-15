@@ -478,15 +478,18 @@ export function FileWorkspace({
       setDevServerReady(false);
       fetch(`/api/projects/${projectId}/dev-server`, { method: 'POST' }).catch(() => { });
     }
+  }, [projectId, npmInstallStatus]);
 
+  useEffect(() => {
     return () => {
       // Use keepalive: true so the request completes even if the tab/page is unloading
       fetch(`/api/projects/${projectId}/dev-server`, {
         method: 'DELETE',
         keepalive: true,
       }).catch(() => { });
+      devServerStartedRef.current = null;
     };
-  }, [projectId, npmInstallStatus]);
+  }, [projectId]);
 
   const activeDevServerUrl = devServerUrl ?? designSystemProject?.devServerUrl;
 

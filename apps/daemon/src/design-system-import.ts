@@ -1,5 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { copyFile, cp, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -393,37 +392,27 @@ export async function importLocalDesignSystemProject(
   options: LocalDesignSystemImportOptions = {},
 ): Promise<LocalDesignSystemImportResult> {
   const setup = await validateAndScanProject(sourceRootInput, userDesignSystemsRoot, options);
-  const { sourceRoot, hasManifest, id, outDir } = setup;
+  const { sourceRoot, isGitProject, hasManifest, id, outDir } = setup;
 
-  if (!hasManifest) {
-    throw new LocalDesignSystemImportError(
-      'BAD_REQUEST',
-      'Cannot import design system project: missing manifest.json at repository root.',
-    );
+  if (hasManifest) {
+    if (options.projectsRoot) {
+      await copyDocAndManifestFiles(sourceRoot, outDir, hasManifest);
+      await copyProjectToProjectsRoot(sourceRoot, options.projectsRoot, id);
+    } else {
+      await mkdir(outDir, { recursive: true });
+      await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
+    }
+    return await updateManifestIdAndSource(sourceRoot, outDir, id, setup.scan, options);
   }
 
+  // hasManifest is false: Scaffold
   if (options.projectsRoot) {
-    const filesToCopy = [
-      'DESIGN.md',
-      'design.md',
-      'README.md',
-      'readme.md',
-      'USAGE.md',
-      'usage.md',
-      'tokens.css',
-      'design-tokens.json',
-      'tailwind-v4.css',
-      'components.html',
-      'components.manifest.json',
-    ];
-    await copySpecificFiles(sourceRoot, outDir, filesToCopy);
     await copyProjectToProjectsRoot(sourceRoot, options.projectsRoot, id);
-  } else {
-    await mkdir(outDir, { recursive: true });
+  } else if (isGitProject) {
     await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
   }
 
-  return await updateManifestIdAndSource(sourceRoot, outDir, id, setup.scan, options);
+  return await generateDesignSystemArtifacts(setup, options);
 }
 
 export async function importLocalDesignSystemProjectAsReference(
@@ -438,6 +427,10 @@ export async function importLocalDesignSystemProjectAsReference(
 
   if (options.projectsRoot) {
     await copyProjectToProjectsRoot(sourceRoot, options.projectsRoot, id);
+  }
+
+  if (hasManifest) {
+    return await updateManifestIdAndSource(sourceRoot, outDir, id, setup.scan, options);
   }
 
   return await generateDesignSystemArtifacts(setup, options);
@@ -752,155 +745,6 @@ function skipNodeModules(src: string): boolean {
   return !parts.includes('node_modules');
 }
 
-/**
- * Sniffs the project's lockfile to pick the right package manager.
- * Falls back to `npm` when no lockfile is present.
- */
-async function detectPackageManager(dir: string): Promise<string> {
-  const [hasPnpm, hasYarn] = await Promise.all([
-    exists(path.join(dir, 'pnpm-lock.yaml')),
-    exists(path.join(dir, 'yarn.lock')),
-  ]);
-  if (hasPnpm) return 'pnpm';
-  if (hasYarn) return 'yarn';
-  return 'npm';
-}
-
-export function getDevServerUrl(dir: string): string | undefined {
-  const manifestPath = path.join(path.resolve(dir), 'manifest.json');
-  try {
-    if (existsSync(manifestPath)) {
-      const content = readFileSync(manifestPath, 'utf8');
-      const manifest = JSON.parse(content) as Record<string, any>;
-      return manifest.devServer?.url;
-    }
-  } catch {
-    // Ignored
-  }
-  return undefined;
-}
-
-export async function killPortProcesses(port: number) {
-  try {
-    const { execSync } = await import('node:child_process');
-    const pids = new Set<number>();
-    if (process.platform === 'win32') {
-      try {
-        const stdout = execSync('netstat -ano').toString();
-        const lines = stdout.split('\n');
-        for (const line of lines) {
-          const parts = line.trim().split(/\s+/);
-          if (parts.length >= 5 && parts[3] === 'LISTENING') {
-            const localAddress = parts[1];
-            const pidStr = parts[4];
-            if (localAddress && pidStr && localAddress.endsWith(`:${port}`)) {
-              const pid = Number(pidStr);
-              if (!isNaN(pid) && pid > 0) {
-                pids.add(pid);
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.warn(`[design-system-import] Failed to run netstat on Windows:`, err);
-      }
-    } else {
-      try {
-        const stdout = execSync(`lsof -t -i:${port}`).toString().trim();
-        if (stdout) {
-          const lines = stdout.split('\n').map(p => Number(p.trim())).filter(p => !isNaN(p));
-          for (const pid of lines) {
-            pids.add(pid);
-          }
-        }
-      } catch {
-        // Ignored
-      }
-    }
-
-    if (pids.size > 0) {
-      for (const pid of pids) {
-        console.log(`[design-system-import] Port ${port} is in use by PID ${pid}. Terminating it.`);
-        try { process.kill(pid, 'SIGKILL'); } catch { }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  } catch (err) {
-    // Ignored
-  }
-}
-
-export async function stopDevScript(dir: string): Promise<void> {
-  const resolvedDir = path.resolve(dir);
-  const manifestPath = path.join(resolvedDir, 'manifest.json');
-  if (existsSync(manifestPath)) {
-    try {
-      const content = readFileSync(manifestPath, 'utf8');
-      const manifest = JSON.parse(content) as Record<string, any>;
-      if (manifest.devServer?.port) {
-        await killPortProcesses(manifest.devServer.port);
-      }
-    } catch {
-      // Ignored
-    }
-  }
-}
-
-/**
- * Starts the `dev` script if present in `package.json`.
- * Spawns it as a detached background process so it continues running.
- */
-export async function startDevScript(dir: string): Promise<void> {
-  const resolvedDir = path.resolve(dir);
-  console.log("Checking package json", resolvedDir)
-  const pkgPath = path.join(resolvedDir, 'package.json');
-  if (!(await exists(pkgPath))) return;
-  console.log("Package json exists")
-
-  // Check manifest.json for existing devServer configuration and terminate whatever is on the port
-  const manifestPath = path.join(resolvedDir, 'manifest.json');
-  if (existsSync(manifestPath)) {
-    try {
-      const content = readFileSync(manifestPath, 'utf8');
-      const manifest = JSON.parse(content) as Record<string, any>;
-      if (manifest.devServer?.port) {
-        await killPortProcesses(manifest.devServer.port);
-      }
-    } catch {
-      // Ignored
-    }
-  }
-
-  try {
-    const pkgContent = await readFile(pkgPath, 'utf8');
-    const pkg = JSON.parse(pkgContent) as Record<string, any>;
-    if (!pkg.scripts || !pkg.scripts.dev) return;
-
-    const pm = await detectPackageManager(resolvedDir);
-    console.log(`[design-system-import] Starting dev server using ${pm} run dev in ${resolvedDir}`);
-
-    const isWindows = process.platform === 'win32';
-    const child = spawn(pm, ['run', 'dev'], {
-      cwd: resolvedDir,
-      detached: !isWindows,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      shell: isWindows,
-      windowsHide: true,
-    });
-
-    child.stderr?.on('data', (chunk) => {
-      console.warn(`[design-system-import-stderr] ${chunk.toString().trim()}`);
-    });
-
-    (child.stderr as any)?.unref?.();
-    child.unref();
-  } catch (err) {
-    console.warn(
-      `[design-system-import] Failed to start dev server in ${resolvedDir}:`,
-      err instanceof Error ? err.message : String(err),
-    );
-  }
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 

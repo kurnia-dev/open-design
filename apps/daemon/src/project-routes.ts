@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { rm, writeFile, readFile, readdir, stat, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -11,7 +12,7 @@ import { createProjectArtifactFile } from './artifact-create.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems, readDesignSystemPackageInfo } from './design-systems.js';
-import { startDevScript, getDevServerUrl, stopDevScript } from './design-system-import.js';
+import { startDevScript, getDevServerUrl, stopDevScript } from './dev-server.js';
 import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
@@ -1194,8 +1195,14 @@ function runProjectInstall(
     // creating a local node_modules for just this project.
     // --ignore-workspace tells pnpm to treat this directory as a standalone
     // project and create its own node_modules here.
+    // However, if the project has its own pnpm-workspace.yaml, we should not
+    // use --ignore-workspace, because it is a workspace itself and needs its
+    // internal packages resolved and linked properly.
+    const hasWorkspaceFile = existsSync(path.join(dir, 'pnpm-workspace.yaml'));
     const args = tool === 'pnpm'
-      ? ['install', '--ignore-workspace']
+      ? (hasWorkspaceFile
+          ? ['install', '--no-frozen-lockfile']
+          : ['install', '--ignore-workspace', '--no-frozen-lockfile'])
       : ['install', '--no-workspaces', '--legacy-peer-deps'];
     console.log(`[project-routes] Running ${tool} ${args.join(' ')} in ${dir}`);
     const child = spawn(tool, args, {
@@ -1207,6 +1214,7 @@ function runProjectInstall(
       env: {
         ...process.env,
         FORCE_COLOR: '1',
+        CI: 'true',
       },
     });
     child.stdout?.on('data', (data: Buffer) => {
@@ -2134,12 +2142,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const kind = projectMetadata?.kind;
       if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
         const hasActiveProc = activeInstallProcesses.has(req.params.id);
-        if (!hasActiveProc) {
+        const currentStatus = npmInstallStatuses.get(req.params.id);
+        if (!hasActiveProc && currentStatus !== 'completed') {
           npmInstallStatuses.delete(req.params.id);
           npmInstallMessages.delete(req.params.id);
           npmInstallLogs.delete(req.params.id);
         }
-        const currentStatus = npmInstallStatuses.get(req.params.id);
         if (currentStatus !== 'completed' && !hasActiveProc) {
           const resolvedDir = projectDetailResolvedDir(PROJECTS_DIR, watchProject, resolveProjectDir);
           installDependencies(req.params.id, resolvedDir, activeProjectEventSinks);

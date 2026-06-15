@@ -500,12 +500,17 @@ Co-Authored-By: Claude <noreply@anthropic.com>
           <button
             type="button"
             className={`${styles.refreshBtn} od-tooltip`}
-            onClick={() => loadStatus()}
-            disabled={loading}
+            onClick={async () => {
+              await Promise.all([
+                loadStatus().catch(() => {}),
+                refreshGitState().catch(() => {})
+              ]);
+            }}
+            disabled={loading || isLoading}
             data-tooltip={t('workspace.gitRefresh')}
             data-tooltip-placement="bottom"
           >
-            <Icon name="refresh" size={13} className={loading ? styles.spinIcon : undefined} />
+            <Icon name="refresh" size={13} className={loading || isLoading ? styles.spinIcon : undefined} />
           </button>
         </div>
 

@@ -1,16 +1,7 @@
-// Persistent GitHub OAuth/PAT token storage.
-//
-// Mirrors the pattern in `xai-tokens.ts` (atomic write + per-dataDir
-// in-memory mutex + chmod 0600).
-//
-// File: `<dataDir>/github-tokens.json`
-// Permissions: chmod 0600 best-effort on POSIX.
-// Lock: in-memory promise chain keyed by dataDir.
-
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { Agent } from 'undici';
+import { createGitRemoteProvider } from './git-provider.js';
 
 export interface StoredGitHubToken {
   accessToken: string;
@@ -145,20 +136,11 @@ export async function clearGitHubToken(dataDir: string): Promise<void> {
 }
 
 /**
- * Returns a fetch `dispatcher` option that disables TLS certificate verification
- * for custom (non-GitHub) provider URLs. This is needed for self-hosted Git
- * servers (e.g. Gitea) that use self-signed certificates.
- *
- * For GitHub.com URLs, returns an empty object (strict TLS is preserved).
+ * Legacy wrapper — delegates to GitRemoteProvider.fetchInit().
+ * Kept for callers that haven't migrated to the provider yet.
  */
 export function customProviderFetchInit(providerUrl: string | undefined): RequestInit {
-  if (!providerUrl || providerUrl.includes('github.com')) return {};
-  return {
-    // undici Agent is the dispatcher used by Node.js native fetch.
-    // Setting rejectUnauthorized:false accepts self-signed certificates.
-    // @ts-expect-error - dispatcher is an undici extension on the fetch API
-    dispatcher: new Agent({ connect: { rejectUnauthorized: false } }),
-  };
+  return createGitRemoteProvider(providerUrl).fetchInit();
 }
 
 export interface CreateRepoParams {
@@ -182,45 +164,64 @@ export async function createGitHubRepository(params: CreateRepoParams): Promise<
     throw new Error('repository name is required');
   }
 
-  const getUrl = (pathStr: string) => {
-    if (!providerUrl || providerUrl.includes('github.com')) {
-      return `https://api.github.com${pathStr}`;
-    }
-    const cleanBase = providerUrl.endsWith('/') ? providerUrl.slice(0, -1) : providerUrl;
-    return `${cleanBase}/api/v1${pathStr}`;
+  console.log('[createGitHubRepository] Starting repo creation with params:', {
+    name,
+    isPrivate,
+    owner,
+    ownerType,
+    providerUrl,
+    tokenLength: accessToken?.length,
+    tokenPreview: accessToken ? `${accessToken.substring(0, 4)}...` : null
+  });
+
+  const provider = createGitRemoteProvider(providerUrl);
+
+  let url = provider.apiUrl('/user/repos');
+  if (owner && owner.trim() && ownerType === 'organization') {
+    url = provider.apiUrl(`/orgs/${owner.trim()}/repos`);
+  }
+
+  const reqHeaders: Record<string, string> = {
+    ...provider.apiHeaders(accessToken),
+    'Content-Type': 'application/json',
   };
 
-  let url = getUrl('/user/repos');
-  if (owner && owner.trim() && ownerType === 'organization') {
-    url = getUrl(`/orgs/${owner.trim()}/repos`);
-  }
+  console.log('[createGitHubRepository] Fetch request configuration:', {
+    url,
+    headers: {
+      ...reqHeaders,
+      Authorization: reqHeaders.Authorization ? `${reqHeaders.Authorization.substring(0, 15)}...` : undefined
+    }
+  });
 
   const createResp = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Accept': 'application/vnd.github+json',
-      ...(!providerUrl || providerUrl.includes('github.com') ? { 'X-GitHub-Api-Version': '2022-11-28' } : {}),
-      'Content-Type': 'application/json',
-      'User-Agent': 'Open-Design-Daemon'
-    },
+    headers: reqHeaders,
     body: JSON.stringify({
       name: name.trim(),
       private: !!isPrivate,
     }),
-    ...customProviderFetchInit(providerUrl),
+    ...provider.fetchInit(),
   });
+
+  console.log('[createGitHubRepository] Fetch response status:', createResp.status, createResp.statusText);
 
   if (!createResp.ok) {
     let errMsg = createResp.statusText;
+    let rawBody = '';
     try {
-      const body = await createResp.json() as any;
+      rawBody = await createResp.text();
+      console.log('[createGitHubRepository] Failure body:', rawBody);
+      const body = JSON.parse(rawBody);
       if (body?.message) errMsg = body.message;
-    } catch {}
+    } catch (err) {
+      console.log('[createGitHubRepository] Could not read/parse error body:', err, '; raw body was:', rawBody);
+    }
     throw new Error(`Failed to create repository: ${errMsg}`);
   }
 
   const repo = await createResp.json() as any;
+  console.log('[createGitHubRepository] Repo successfully created:', repo.full_name || repo.name);
   return {
     fullName: repo.full_name || repo.name,
     cloneUrl: repo.clone_url,

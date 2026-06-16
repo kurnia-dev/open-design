@@ -1,33 +1,30 @@
-import type { Express } from 'express';
-import path from 'node:path';
-import fs from 'node:fs';
 import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
+import type { Express } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
 import { detectAgents, detectAgentsStream } from '../agents.js';
-import {
-  SkillImportError,
-  deleteUserSkill,
-  findSkillById,
-  importUserSkill,
-  listSkillFiles,
-  splitDerivedSkillId,
-  updateUserSkill,
-} from '../skills.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
-import { readDesignSystem } from '../design-systems.js';
+import { importGitHubDesignSystemProject } from '../design-system-github-import.js';
 import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
 } from '../design-system-import.js';
-import { importGitHubDesignSystemProject, parseGitHubRepoUrl } from '../design-system-github-import.js';
 import { importShadcnDesignSystemProject } from '../design-system-shadcn-import.js';
+import { createGitRemoteProvider } from '../git-provider.js';
 import { getGitHubToken } from '../github-tokens.js';
+import {
+  SkillImportError,
+  findSkillById,
+  importUserSkill,
+  listSkillFiles,
+  splitDerivedSkillId,
+  updateUserSkill
+} from '../skills.js';
 
-import { renderDesignSystemPreview } from '../design-system-preview.js';
-import { renderDesignSystemShowcase } from '../design-system-showcase.js';
-import { listPromptTemplates, readPromptTemplate } from '../prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
 import { installFromTarget, uninstallById } from '../library-install.js';
+import { listPromptTemplates, readPromptTemplate } from '../prompt-templates.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'http' | 'paths' | 'resources'> {
@@ -790,8 +787,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
 
       const tokenObj = await getGitHubToken(RUNTIME_DATA_DIR);
-      const isApplicable = tokenObj ? isTokenApplicableForUrl(gitUrl, tokenObj.providerUrl) : false;
-      const finalToken = isApplicable ? tokenObj?.accessToken : undefined;
+      const provider = createGitRemoteProvider(tokenObj?.providerUrl);
+      const finalToken = tokenObj && provider.matchesUrl(gitUrl) ? tokenObj.accessToken : undefined;
 
       const wantsStream = req.headers.accept === 'text/event-stream' || body.stream === true;
 
@@ -821,6 +818,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
               projectsRoot: PROJECTS_DIR,
               onProgress,
               isReferenceOnly: false,
+              providerUrl: tokenObj?.providerUrl,
               ...(finalToken ? { githubToken: finalToken } : {}),
             },
           );
@@ -1000,15 +998,5 @@ function rewriteSkillAssetUrls(html: string, skillId: string) {
   );
 }
 
-function isTokenApplicableForUrl(gitUrl: string, tokenProviderUrl: string | undefined): boolean {
-  try {
-    const gitHost = new URL(gitUrl).hostname.toLowerCase();
-    const providerHost = tokenProviderUrl
-      ? new URL(tokenProviderUrl).hostname.toLowerCase()
-      : 'github.com';
-    return gitHost === providerHost || gitHost === `www.${providerHost}` || providerHost === `www.${gitHost}`;
-  } catch {
-    return false;
-  }
-}
+
 

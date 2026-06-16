@@ -10,6 +10,7 @@ import {
   importLocalDesignSystemProject,
   importLocalDesignSystemProjectAsReference,
 } from './design-system-import.js';
+import { createGitRemoteProvider } from './git-provider.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,6 +35,8 @@ export type GitHubDesignSystemImportOptions = Pick<
   githubToken?: string;
   /** If true, imports the repository as reference only. */
   isReferenceOnly?: boolean;
+  /** Optional base URL of the remote Git provider (e.g. self-hosted Gitea). */
+  providerUrl?: string | undefined;
 };
 
 export type ParsedGitHubRepoUrl = {
@@ -71,14 +74,19 @@ export async function importGitHubDesignSystemProject(
   userDesignSystemsRoot: string,
   options: GitHubDesignSystemImportOptions = {},
 ): Promise<LocalDesignSystemImportResult> {
-  const isGitHub = (() => {
-    try {
-      parseGitHubRepoUrl(gitUrl);
-      return true;
-    } catch {
-      return false;
-    }
-  })();
+  // Try GitHub-specific parsing first for structured owner/repo metadata.
+  // Falls back to the generic parser for non-GitHub URLs.
+  let parsedGitHub: ParsedGitHubRepoUrl | null = null;
+  try {
+    parsedGitHub = parseGitHubRepoUrl(gitUrl);
+  } catch {
+    // Not a github.com URL — use generic path
+  }
+
+  const parsedGeneric = parsedGitHub ?? parseGitRepoUrl(gitUrl);
+  const sourceType: 'github' | 'git' = parsedGitHub ? 'github' : 'git';
+  const repoName = parsedGitHub?.repo ?? parsedGeneric.repo;
+  const ownerPrefix = parsedGitHub ? `${parsedGitHub.owner}-` : '';
 
   const importedAt = (options.now ?? new Date()).toISOString();
   const gitBin = options.gitBin ?? 'git';
@@ -86,35 +94,32 @@ export async function importGitHubDesignSystemProject(
   const branch = cleanBranch(options.branch);
   if (branch) cloneArgs.push('--branch', branch);
 
-  let parsed: { repo: string; cloneUrl: string; owner?: string };
-  let cloneRoot: string;
-  let cloneDirName: string;
-  let sourceType: 'github' | 'git';
+  const cloneRoot = path.join(
+    tmpRoot,
+    parsedGitHub ? 'github-design-system-imports' : 'git-design-system-imports',
+  );
+  const cloneDirName = `${ownerPrefix}${repoName}-${importedAt.replace(/[^0-9a-z]/gi, '')}`;
 
-  if (isGitHub) {
-    const parsedGitHub = parseGitHubRepoUrl(gitUrl);
-    parsed = parsedGitHub;
-    cloneRoot = path.join(tmpRoot, 'github-design-system-imports');
-    cloneDirName = `${parsedGitHub.owner}-${parsedGitHub.repo}-${importedAt.replace(/[^0-9a-z]/gi, '')}`;
-    sourceType = 'github';
-
-    const cloneUrl = options.githubToken
-      ? `https://x-access-token:${options.githubToken}@github.com/${parsedGitHub.owner}/${parsedGitHub.repo}.git`
-      : parsedGitHub.cloneUrl;
-    cloneArgs.push(cloneUrl);
-  } else {
-    const parsedGit = parseGitRepoUrl(gitUrl);
-    parsed = parsedGit;
-    cloneRoot = path.join(tmpRoot, 'git-design-system-imports');
-    cloneDirName = `${parsedGit.repo}-${importedAt.replace(/[^0-9a-z]/gi, '')}`;
-    sourceType = 'git';
-
-    let cloneUrl = parsedGit.cloneUrl;
-    if (options.githubToken && cloneUrl.toLowerCase().startsWith('http')) {
-      cloneUrl = cloneUrl.replace(/^(https?:\/\/)/i, `$1oauth2:${options.githubToken}@`);
+  const isGitHub = !!parsedGitHub;
+  let providerUrl = options.providerUrl;
+  if (!providerUrl) {
+    if (!isGitHub) {
+      try {
+        const parsedUrl = new URL(gitUrl);
+        providerUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+      } catch {
+        // ignore
+      }
     }
-    cloneArgs.push(cloneUrl);
   }
+  const provider = createGitRemoteProvider(providerUrl);
+
+  // Build authenticated clone URL when a token is provided
+  let cloneUrl = parsedGeneric.cloneUrl;
+  if (options.githubToken) {
+    cloneUrl = provider.authenticatedCloneUrl(cloneUrl, options.githubToken);
+  }
+  cloneArgs.push(cloneUrl);
 
   await mkdir(cloneRoot, { recursive: true });
   const cloneDir = path.join(cloneRoot, cloneDirName);
@@ -122,7 +127,6 @@ export async function importGitHubDesignSystemProject(
 
   try {
     options.onProgress?.('Cloning Git repository...');
-    console.log("cloneArgs", cloneArgs)
     await execGit(gitBin, cloneArgs, undefined, 120_000);
     const [detectedBranch, commit] = await Promise.all([
       readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),
@@ -134,7 +138,7 @@ export async function importGitHubDesignSystemProject(
       : importLocalDesignSystemProject;
     const result = await importFn(cloneDir, userDesignSystemsRoot, {
       now: new Date(importedAt),
-      fallbackName: parsed.repo,
+      fallbackName: repoName,
       ...(options.name ? { name: options.name } : {}),
       ...(options.reservedIds ? { reservedIds: options.reservedIds } : {}),
       ...(options.importMode ? { importMode: options.importMode } : {}),
@@ -143,7 +147,7 @@ export async function importGitHubDesignSystemProject(
       onProgress: options.onProgress,
       source: {
         type: sourceType,
-        url: parsed.cloneUrl,
+        url: parsedGeneric.cloneUrl,
         commit,
         importedAt,
         ...(sourceBranch ? { branch: sourceBranch } : {}),
@@ -156,7 +160,7 @@ export async function importGitHubDesignSystemProject(
     if (err instanceof LocalDesignSystemImportError) throw err;
     throw new LocalDesignSystemImportError(
       'BAD_REQUEST',
-      isGitHub
+      parsedGitHub
         ? `could not import public GitHub repository: ${formatGitError(err)}`
         : `could not import Git repository: ${formatGitError(err)}`,
     );

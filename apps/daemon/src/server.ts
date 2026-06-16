@@ -4518,7 +4518,7 @@ function stopVerdaccioServer() {
     } catch {
       try {
         verdaccioChild.kill('SIGKILL');
-      } catch {}
+      } catch { }
     }
     verdaccioChild = null;
   }
@@ -6825,9 +6825,10 @@ export async function startServer({
       let createdRepoUrl: string | undefined;
       const dataDir = RUNTIME_DATA_DIR;
       const headerToken = req.headers['x-github-token'];
+      const tokenObj = await getGitHubToken(dataDir);
       const accessToken = typeof headerToken === 'string' && headerToken.trim()
         ? headerToken.trim()
-        : (await getGitHubToken(dataDir))?.accessToken;
+        : tokenObj?.accessToken;
 
       if (gitHubRepo) {
         if (!accessToken) {
@@ -6840,6 +6841,7 @@ export async function startServer({
             private: gitHubRepo.private,
             owner: gitHubRepo.owner,
             ownerType: gitHubRepo.ownerType,
+            providerUrl: tokenObj?.providerUrl,
           });
           createdRepoUrl = repo.cloneUrl;
         } catch (repoErr: any) {

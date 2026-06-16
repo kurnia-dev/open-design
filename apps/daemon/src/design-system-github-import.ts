@@ -128,10 +128,7 @@ export async function importGitHubDesignSystemProject(
   try {
     options.onProgress?.('Cloning Git repository...');
     await execGit(gitBin, cloneArgs, undefined, 120_000);
-    const [detectedBranch, commit] = await Promise.all([
-      readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']),
-      readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', 'HEAD']),
-    ]);
+    const detectedBranch = await readGitStdout(gitBin, ['-C', cloneDir, 'rev-parse', '--abbrev-ref', 'HEAD']);
     const sourceBranch = branch ?? normalizeDetachedBranch(detectedBranch);
     const importFn = options.isReferenceOnly
       ? importLocalDesignSystemProjectAsReference
@@ -148,9 +145,8 @@ export async function importGitHubDesignSystemProject(
       source: {
         type: sourceType,
         url: parsedGeneric.cloneUrl,
-        commit,
-        importedAt,
         ...(sourceBranch ? { branch: sourceBranch } : {}),
+        importedAt,
       },
     });
     await rm(cloneDir, { recursive: true, force: true });

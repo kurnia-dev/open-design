@@ -294,7 +294,6 @@ async function updateManifestIdAndSource(
   scan: ProjectScan,
   options: LocalDesignSystemImportOptions,
 ): Promise<LocalDesignSystemImportResult> {
-  const now = options.now ?? new Date();
   const srcManifestPath = path.join(sourceRoot, 'manifest.json');
   const manifestPath = path.join(outDir, 'manifest.json');
   try {
@@ -304,7 +303,6 @@ async function updateManifestIdAndSource(
     parsed.source = options.source ?? {
       type: 'local',
       path: sourceRoot,
-      importedAt: now.toISOString(),
     };
     if (scan.packageName) {
       parsed.packageName = scan.packageName;

@@ -1249,6 +1249,58 @@ function runProjectInstall(
   });
 }
 
+function runProjectBuild(
+  projectId: string,
+  dir: string,
+  tool: 'pnpm' | 'npm',
+  activeProjectEventSinks: Map<string, Set<any>>
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const args = ['run', 'build'];
+    console.log(`[project-routes] Running ${tool} ${args.join(' ')} in ${dir}`);
+    const child = spawn(tool, args, {
+      cwd: dir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+      shell: process.platform === 'win32',
+      windowsHide: true,
+      env: {
+        ...process.env,
+        FORCE_COLOR: '1',
+        CI: 'true',
+      },
+    });
+    child.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      console.log(`[project-routes][${tool}-build] ${text.trim()}`);
+      for (const rawLine of text.split('\n')) {
+        const line = rawLine.trimEnd();
+        if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
+      }
+    });
+    child.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      console.warn(`[project-routes][${tool}-build] ${text.trim()}`);
+      for (const rawLine of text.split('\n')) {
+        const line = rawLine.trimEnd();
+        if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
+      }
+    });
+    activeInstallProcesses.set(projectId, child);
+    child.on('error', (err) => {
+      console.error(`[project-routes] Failed to start ${tool} build:`, err);
+      resolve(false);
+    });
+    child.on('close', (code) => {
+      console.log(`[project-routes] ${tool} build exited with code ${code} for ${dir}`);
+      if (activeInstallProcesses.get(projectId) === child) {
+        activeInstallProcesses.delete(projectId);
+      }
+      resolve(code === 0);
+    });
+  });
+}
+
 async function installDependencies(
   projectId: string,
   dir: string,
@@ -1296,7 +1348,28 @@ async function installDependencies(
     }
 
     if (installSuccess) {
-      updateStatus('completed', 'Dependencies installed successfully.');
+      const hasWorkspaceFile = existsSync(path.join(dir, 'pnpm-workspace.yaml'));
+      const pkgPath = path.join(dir, 'package.json');
+      let hasBuildScript = false;
+      if (existsSync(pkgPath)) {
+        try {
+          const pkgContent = await readFile(pkgPath, 'utf8');
+          const pkg = JSON.parse(pkgContent);
+          hasBuildScript = !!(pkg.scripts && pkg.scripts.build);
+        } catch { }
+      }
+
+      if (hasWorkspaceFile && hasBuildScript) {
+        updateStatus('running', 'Building workspace projects...');
+        const buildSuccess = await runProjectBuild(projectId, dir, tool, activeProjectEventSinks);
+        if (buildSuccess) {
+          updateStatus('completed', 'Dependencies installed and built successfully.');
+        } else {
+          updateStatus('failed', 'Failed to build workspace projects.');
+        }
+      } else {
+        updateStatus('completed', 'Dependencies installed successfully.');
+      }
     } else {
       updateStatus('failed', `Failed to install dependencies using ${tool}.`);
     }

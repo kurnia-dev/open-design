@@ -1167,7 +1167,6 @@ function checkPnpmInstalled(): Promise<boolean> {
 
 function installPnpmGlobally(projectId: string): Promise<boolean> {
   return new Promise((resolve) => {
-    console.log('[project-routes] Installing pnpm globally for project ' + projectId);
     const child = spawn('npm', ['install', '-g', 'pnpm'], { stdio: 'ignore', shell: process.platform === 'win32', windowsHide: true });
     activeInstallProcesses.set(projectId, child);
     child.on('error', (err) => {
@@ -1205,7 +1204,6 @@ function runProjectInstall(
         ? ['install', '--no-frozen-lockfile']
         : ['install', '--ignore-workspace', '--no-frozen-lockfile'])
       : ['install', '--no-workspaces', '--legacy-peer-deps'];
-    console.log(`[project-routes] Running ${tool} ${args.join(' ')} in ${dir}`);
     const child = spawn(tool, args, {
       cwd: dir,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1220,7 +1218,6 @@ function runProjectInstall(
     });
     child.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
-      console.log(`[project-routes][${tool}] ${text.trim()}`);
       for (const rawLine of text.split('\n')) {
         const line = rawLine.trimEnd();
         if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
@@ -1228,7 +1225,6 @@ function runProjectInstall(
     });
     child.stderr?.on('data', (data: Buffer) => {
       const text = data.toString();
-      console.warn(`[project-routes][${tool}] ${text.trim()}`);
       for (const rawLine of text.split('\n')) {
         const line = rawLine.trimEnd();
         if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
@@ -1240,7 +1236,6 @@ function runProjectInstall(
       resolve(false);
     });
     child.on('close', (code) => {
-      console.log(`[project-routes] ${tool} install exited with code ${code} for ${dir}`);
       if (activeInstallProcesses.get(projectId) === child) {
         activeInstallProcesses.delete(projectId);
       }
@@ -1257,7 +1252,6 @@ function runProjectBuild(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const args = ['run', 'build'];
-    console.log(`[project-routes] Running ${tool} ${args.join(' ')} in ${dir}`);
     const child = spawn(tool, args, {
       cwd: dir,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1272,7 +1266,6 @@ function runProjectBuild(
     });
     child.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
-      console.log(`[project-routes][${tool}-build] ${text.trim()}`);
       for (const rawLine of text.split('\n')) {
         const line = rawLine.trimEnd();
         if (line) broadcastNpmInstallLog(projectId, line, activeProjectEventSinks);
@@ -1292,7 +1285,6 @@ function runProjectBuild(
       resolve(false);
     });
     child.on('close', (code) => {
-      console.log(`[project-routes] ${tool} build exited with code ${code} for ${dir}`);
       if (activeInstallProcesses.get(projectId) === child) {
         activeInstallProcesses.delete(projectId);
       }
@@ -2136,7 +2128,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     try {
       const activeProc = activeInstallProcesses.get(req.params.id);
       if (activeProc) {
-        console.log(`[project-routes] Terminating install process for project ${req.params.id} due to project deletion`);
         activeInstallProcesses.delete(req.params.id);
         if (activeProc.pid) {
           try {
@@ -3715,15 +3706,6 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       const provider = createGitRemoteProvider(providerUrl);
 
       const url = provider.reposUrl(q, page, limit);
-      console.log('[project-routes] GET /api/github/repos context:', {
-        queryQ: req.query.q,
-        parsedQ: q,
-        page,
-        limit,
-        providerUrl,
-        providerType: provider.type,
-        url,
-      });
       const reposResp = await fetch(url, {
         headers: provider.apiHeaders(accessToken),
         ...provider.fetchInit(),

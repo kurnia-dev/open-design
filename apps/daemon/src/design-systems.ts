@@ -130,10 +130,10 @@ type DesignSystemProjectManifest = {
   description?: string;
   files: {
     design: 'DESIGN.md';
-    tokens: 'tokens.css';
-    designTokens?: 'design-tokens.json';
-    tailwind?: 'tailwind-v4.css';
-    components?: 'components.html';
+    tokens: string;
+    designTokens?: string;
+    tailwind?: string;
+    components?: string;
   };
   assetsDir?: 'assets';
   previewDir?: 'preview';
@@ -3205,10 +3205,10 @@ function isProjectManifest(value: unknown, expectedId: string): value is DesignS
   const fileRecord = files as Record<string, unknown>;
   return (
     fileRecord.design === 'DESIGN.md' &&
-    fileRecord.tokens === 'tokens.css' &&
-    (fileRecord.designTokens === undefined || fileRecord.designTokens === 'design-tokens.json') &&
-    (fileRecord.tailwind === undefined || fileRecord.tailwind === 'tailwind-v4.css') &&
-    (fileRecord.components === undefined || fileRecord.components === 'components.html')
+    typeof fileRecord.tokens === 'string' && isSafeManifestPath(fileRecord.tokens) &&
+    (fileRecord.designTokens === undefined || (typeof fileRecord.designTokens === 'string' && isSafeManifestPath(fileRecord.designTokens))) &&
+    (fileRecord.tailwind === undefined || (typeof fileRecord.tailwind === 'string' && isSafeManifestPath(fileRecord.tailwind))) &&
+    (fileRecord.components === undefined || (typeof fileRecord.components === 'string' && isSafeManifestPath(fileRecord.components)))
   );
 }
 

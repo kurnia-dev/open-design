@@ -3707,86 +3707,52 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         return sendApiError(res, 401, 'UNAUTHORIZED', 'Not connected to GitHub');
       }
 
-      const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim().toLowerCase() : null;
+      const q = typeof req.query.q === 'string' && req.query.q.trim() ? req.query.q.trim() : null;
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 50;
 
       const providerUrl = tokenObj?.providerUrl;
       const provider = createGitRemoteProvider(providerUrl);
-      let rawRepos: any[] = [];
 
-      if (q) {
-        // Fetch all repositories to perform server-side filtering
-        let currentPage = 1;
-        let actualPageSize: number | null = null;
-        const fetchPageSize = 100;
+      const url = provider.reposUrl(q, page, limit);
+      console.log('[project-routes] GET /api/github/repos context:', {
+        queryQ: req.query.q,
+        parsedQ: q,
+        page,
+        limit,
+        providerUrl,
+        providerType: provider.type,
+        url,
+      });
+      const reposResp = await fetch(url, {
+        headers: provider.apiHeaders(accessToken),
+        ...provider.fetchInit(),
+      });
 
-        while (true) {
-          const queryParams = provider.paginationParams(currentPage, fetchPageSize);
-          const url = provider.apiUrl(`/user/repos?${queryParams}`);
-
-          const reposResp = await fetch(url, {
-            headers: provider.apiHeaders(accessToken),
-            ...provider.fetchInit(),
-          });
-
-          if (!reposResp.ok) {
-            const respText = await reposResp.text().catch(() => '');
-            return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
-          }
-
-          const pageRepos = (await reposResp.json()) as any[];
-          if (!Array.isArray(pageRepos) || pageRepos.length === 0) {
-            break;
-          }
-
-          if (actualPageSize === null) {
-            actualPageSize = pageRepos.length;
-          }
-
-          rawRepos.push(...pageRepos);
-
-          if (pageRepos.length < actualPageSize) {
-            break;
-          }
-          currentPage++;
-
-          if (currentPage > 10) {
-            console.warn(`[project-routes] GET /api/github/repos (search mode) - Reached pagination guard limit of 10 pages`);
-            break;
-          }
-        }
-
-        // Filter by query q
-        rawRepos = rawRepos.filter((repo) => {
-          const fullName = (repo.full_name || '').toLowerCase();
-          const desc = (repo.description || '').toLowerCase();
-          return fullName.includes(q) || desc.includes(q);
-        });
-
-        // Slice for pagination
-        const startIndex = (page - 1) * limit;
-        rawRepos = rawRepos.slice(startIndex, startIndex + limit);
-      } else {
-        // Standard single page fetch
-        const queryParams = provider.paginationParams(page, limit);
-        const url = provider.apiUrl(`/user/repos?${queryParams}`);
-
-        const reposResp = await fetch(url, {
-          headers: provider.apiHeaders(accessToken),
-          ...provider.fetchInit(),
-        });
-
-        if (!reposResp.ok) {
-          const respText = await reposResp.text().catch(() => '');
-          console.error(`[project-routes] GET /api/github/repos (pagination mode) - Failed to fetch repos. Status: ${reposResp.status} ${reposResp.statusText}. Response: ${respText}`);
-          return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
-        }
-
-        rawRepos = (await reposResp.json()) as any[];
+      if (!reposResp.ok) {
+        const respText = await reposResp.text().catch(() => '');
+        console.error(`[project-routes] GET /api/github/repos - Failed to fetch repos. Status: ${reposResp.status} ${reposResp.statusText}. Response: ${respText}`);
+        return sendApiError(res, reposResp.status, 'BAD_REQUEST', `Failed to fetch repos: ${reposResp.statusText}`);
       }
 
-      const repos = rawRepos.map((repo) => ({
+      let body = (await reposResp.json()) as any;
+
+      let rawRepos = 'data' in body ? body.data : body;
+
+      if (!Array.isArray(rawRepos)) {
+        rawRepos = [];
+      }
+
+      if (provider.type === 'github' && q) {
+        const query = q.toLowerCase();
+        rawRepos = rawRepos.filter((repo: any) => {
+          const fullName = (repo.full_name || '').toLowerCase();
+          const desc = (repo.description || '').toLowerCase();
+          return fullName.includes(query) || desc.includes(query);
+        });
+      }
+
+      const repos = rawRepos.map((repo: any) => ({
         fullName: repo.full_name,
         cloneUrl: repo.clone_url,
         private: repo.private,

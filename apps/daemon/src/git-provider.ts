@@ -28,8 +28,8 @@ export interface GitRemoteProvider {
   /** Extra `RequestInit` fields for `fetch` (e.g. TLS bypass). */
   fetchInit(): RequestInit;
 
-  /** Build a query-string for paginated list endpoints. */
-  paginationParams(page: number, limit: number): string;
+  /** Return the full URL for listing/searching repositories. */
+  reposUrl(q: string | null, page: number, limit: number): string;
 
   /** Return an authenticated HTTPS clone URL for `git clone`. */
   authenticatedCloneUrl(repoUrl: string, accessToken: string): string;
@@ -62,8 +62,8 @@ class GitHubProvider implements GitRemoteProvider {
     return {};
   }
 
-  paginationParams(page: number, limit: number): string {
-    return `per_page=${limit}&page=${page}&sort=updated`;
+  reposUrl(q: string | null, page: number, limit: number): string {
+    return this.apiUrl(`/search/repositories?per_page=${limit}&page=${page}&sort=updated&q=${encodeURIComponent(q ?? "")}`);
   }
 
   authenticatedCloneUrl(repoUrl: string, accessToken: string): string {
@@ -144,8 +144,11 @@ class GiteaProvider implements GitRemoteProvider {
     };
   }
 
-  paginationParams(page: number, limit: number): string {
-    return `limit=${limit}&page=${page}`;
+  reposUrl(q: string | null, page: number, limit: number): string {
+    if (q) {
+      return this.apiUrl(`/repos/search?q=${encodeURIComponent(q)}&limit=${limit}&page=${page}`);
+    }
+    return this.apiUrl(`/repos/search?limit=${limit}&page=${page}`);
   }
 
   authenticatedCloneUrl(repoUrl: string, accessToken: string): string {

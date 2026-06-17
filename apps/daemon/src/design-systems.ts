@@ -451,6 +451,7 @@ export async function readDesignSystemAssets(
       : readFileOptional(path.join(brandRoot, manifest?.files.components ?? 'components.html')),
     readManifestFileOptional(brandRoot, manifest?.componentsManifest ?? 'components.manifest.json'),
   ]);
+
   return withComponentsManifest(id, {
     usageMd,
     tokensCss,

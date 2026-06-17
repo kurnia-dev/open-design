@@ -196,7 +196,19 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         entryFile,
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
-      const updated = updateProject(db, projectId, { metadata: nextMeta });
+      const isReactVite = fs.existsSync(path.join(normalizedPath, 'package.json'));
+      let nextSkillId = existing.skillId;
+      if (isReactVite) {
+        if (nextSkillId === 'web-prototype' || nextSkillId === 'web-prototype-wireframe' || !nextSkillId) {
+          nextSkillId = 'web-prototype-high-fidelity';
+        } else if (nextSkillId === 'example-web-prototype' || nextSkillId === 'example-web-prototype-wireframe') {
+          nextSkillId = 'example-web-prototype-high-fidelity';
+        }
+      }
+      const updated = updateProject(db, projectId, {
+        metadata: nextMeta,
+        ...(nextSkillId !== existing.skillId ? { skillId: nextSkillId } : {}),
+      });
       if (!updated) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       }
@@ -319,10 +331,20 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         );
       }
 
+      let targetSkillId = skillId;
+      const isReactVite = fs.existsSync(path.join(normalizedPath, 'package.json'));
+      if (isReactVite) {
+        if (targetSkillId === 'web-prototype' || targetSkillId === 'web-prototype-wireframe' || !targetSkillId) {
+          targetSkillId = 'web-prototype-high-fidelity';
+        } else if (targetSkillId === 'example-web-prototype' || targetSkillId === 'example-web-prototype-wireframe') {
+          targetSkillId = 'example-web-prototype-high-fidelity';
+        }
+      }
+
       const project = insertProject(db, {
         id,
         name: projectName,
-        skillId: skillId ?? null,
+        skillId: targetSkillId ?? null,
         designSystemId: designSystemValidation.id,
         pendingPrompt: null,
         metadata: {

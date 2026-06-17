@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DISCOVERY_AND_PHILOSOPHY } from '../../src/prompts/discovery.js';
+import { buildDiscoveryAndPhilosophy } from '../../src/prompts/discovery.js';
 
 // When a project is opened through a plugin chip on Home, the daemon
 // renders the chosen plugin inputs (fidelity, platform, audience,
@@ -17,7 +17,7 @@ import { DISCOVERY_AND_PHILOSOPHY } from '../../src/prompts/discovery.js';
 
 describe('discovery.ts — Plugin inputs are authoritative for Quick brief defaults', () => {
   it('directs the agent to read both Project metadata AND the Active plugin / Plugin inputs block', () => {
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
+    expect(buildDiscoveryAndPhilosophy()).toMatch(
       /Read the "Project metadata" section AND any "## Active plugin" \/ "## Plugin inputs" block/,
     );
   });
@@ -25,10 +25,10 @@ describe('discovery.ts — Plugin inputs are authoritative for Quick brief defau
   it('explicitly equates plugin input values with answers to Quick-brief defaults', () => {
     // Wording-level lock so a future trim of the rule cannot accidentally
     // demote plugin inputs back to "ignore unless metadata is set".
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
+    expect(buildDiscoveryAndPhilosophy()).toMatch(
       /Both sources are equally authoritative — treat a plugin input value as a complete answer/,
     );
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
+    expect(buildDiscoveryAndPhilosophy()).toMatch(
       /Drop the matching default question whenever EITHER source supplies the answer/,
     );
   });
@@ -37,13 +37,13 @@ describe('discovery.ts — Plugin inputs are authoritative for Quick brief defau
     // The list is non-exhaustive on purpose (semantic match handles the
     // long tail). These five cover the regressions the bug report
     // surfaced and the canonical Web Prototype scenario plugin's inputs.
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`fidelity` answers the Fidelity question');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`platform`');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('Target platform');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`artifactKind`');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`slideCount` / `slides` / `pageCount` answers Slide count');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`audience` answers "Who is this for?"');
-    expect(DISCOVERY_AND_PHILOSOPHY).toContain('`designSystem`');
+    expect(buildDiscoveryAndPhilosophy()).toContain('`fidelity` answers the Fidelity question');
+    expect(buildDiscoveryAndPhilosophy()).toContain('`platform`');
+    expect(buildDiscoveryAndPhilosophy()).toContain('Target platform');
+    expect(buildDiscoveryAndPhilosophy()).toContain('`artifactKind`');
+    expect(buildDiscoveryAndPhilosophy()).toContain('`slideCount` / `slides` / `pageCount` answers Slide count');
+    expect(buildDiscoveryAndPhilosophy()).toContain('`audience` answers "Who is this for?"');
+    expect(buildDiscoveryAndPhilosophy()).toContain('`designSystem`');
   });
 
   it('teaches the agent to accept semantically-equivalent input names', () => {
@@ -51,14 +51,14 @@ describe('discovery.ts — Plugin inputs are authoritative for Quick brief defau
     // `surface` / `platformTargets` / `target`. The agent must treat any
     // of them as the Target platform answer instead of bailing because
     // the literal key isn't `platform`.
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(/semantically-equivalent input such as `surface`, `platformTargets`, `target`/);
+    expect(buildDiscoveryAndPhilosophy()).toMatch(/semantically-equivalent input such as `surface`, `platformTargets`, `target`/);
   });
 
   it('does not re-ask the kind when the active plugin already names it', () => {
     // RULE 1 used to scope the "don't re-ask kind" carve-out to
     // `metadata.kind` only. Extending it to the active plugin's
     // `od.kind` / `taskKind` closes the loop for chip-launched flows.
-    expect(DISCOVERY_AND_PHILOSOPHY).toMatch(
+    expect(buildDiscoveryAndPhilosophy()).toMatch(
       /metadata\.kind is set or the active plugin's `od\.kind` \/ `taskKind` already names it/,
     );
   });

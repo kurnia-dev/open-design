@@ -198,7 +198,7 @@ function defaultPluginInputsForCreate(
   const kind = input.metadata.kind;
   const projectName = input.name.trim();
 
-  if (pluginId === 'example-web-prototype') {
+  if (pluginId === 'example-web-prototype' || pluginId === 'example-web-prototype-wireframe') {
     return {
       artifactKind: input.metadata.includeLandingPage
         ? 'landing page'

@@ -1,8 +1,8 @@
 {
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
-  "name": "example-web-prototype",
-  "title": "Web Prototype",
+  "name": "example-web-prototype-wireframe",
+  "title": "Web Prototype Wireframe",
   "title_i18n": {
     "zh-CN": "网页原型",
     "zh-TW": "網頁原型",
@@ -50,7 +50,7 @@
     "name": "Open Design",
     "url": "https://github.com/nexu-io"
   },
-  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/web-prototype",
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/web-prototype-wireframe",
   "tags": [
     "example",
     "first-party",

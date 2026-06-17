@@ -46,7 +46,8 @@ export type DefaultScenarioPluginId =
   | 'od-tune-collab'
   | 'example-live-artifact'
   | 'example-simple-deck'
-  | 'example-web-prototype';
+  | 'example-web-prototype-wireframe'
+  | 'example-web-prototype-high-fidelity';
 
 export const DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID =
   'od-default' satisfies DefaultScenarioPluginId;
@@ -54,7 +55,7 @@ export const DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID =
 export const DEFAULT_SCENARIO_PLUGIN_BY_KIND: Record<ProjectKind, DefaultScenarioPluginId> = {
   // Prototypes bind to web-prototype's seed template (single-file HTML,
   // 1280×800 frame, section layouts library, P0 checklist).
-  prototype: 'example-web-prototype',
+  prototype: 'example-web-prototype-wireframe',
   // Decks bind to simple-deck's seed (1920×1080 canvas, 8-pattern
   // layout vocabulary including cover / body / big-stat / pipeline /
   // closing, plus an overflow checklist that catches the
@@ -82,9 +83,12 @@ export function defaultScenarioPluginIdForKind(
 }
 
 export function defaultScenarioPluginIdForProjectMetadata(
-  metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
+  metadata: Pick<ProjectMetadata, 'kind' | 'intent' | 'fidelity'> | null | undefined,
 ): DefaultScenarioPluginId | null {
   if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
+  if (metadata?.kind === 'prototype' && metadata?.fidelity === 'high-fidelity') {
+    return 'example-web-prototype-high-fidelity';
+  }
   return defaultScenarioPluginIdForKind(metadata?.kind);
 }
 

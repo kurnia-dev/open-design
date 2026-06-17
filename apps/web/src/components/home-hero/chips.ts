@@ -86,7 +86,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     // `{{template}}` slots; Home renders those placeholders inline.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
+      pluginId: 'example-web-prototype-wireframe',
       projectKind: 'prototype',
     },
   },

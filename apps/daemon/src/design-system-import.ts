@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { copyFile, cp, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import path, { parse } from 'node:path';
 import { promisify } from 'node:util';
 
 import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
@@ -285,6 +285,98 @@ async function copyDocAndManifestFiles(
       }
     }
   }
+
+  if (hasManifest) {
+    try {
+      const manifestPath = path.join(sourceRoot, 'manifest.json');
+      const content = await readFile(manifestPath, 'utf8');
+      const manifest = JSON.parse(content);
+      if (manifest && typeof manifest === 'object') {
+        const pathsToCopy = new Set<string>();
+
+        // 1. Files from files object (design, tokens, designTokens, tailwind, components)
+        if (manifest.files && typeof manifest.files === 'object') {
+          for (const key of Object.keys(manifest.files)) {
+            const fileVal = manifest.files[key];
+            if (typeof fileVal === 'string') {
+              pathsToCopy.add(fileVal);
+            }
+          }
+        }
+
+        // 2. Usage file
+        if (typeof manifest.usage === 'string') {
+          pathsToCopy.add(manifest.usage);
+        }
+
+        // 3. Components manifest
+        if (typeof manifest.componentsManifest === 'string') {
+          pathsToCopy.add(manifest.componentsManifest);
+        }
+
+        // 4. Fonts
+        if (Array.isArray(manifest.fonts)) {
+          for (const font of manifest.fonts) {
+            if (font && typeof font === 'object' && typeof font.file === 'string') {
+              pathsToCopy.add(font.file);
+            }
+          }
+        }
+
+        // 5. Preview pages
+        if (manifest.preview && typeof manifest.preview === 'object') {
+          if (Array.isArray(manifest.preview.pages)) {
+            for (const page of manifest.preview.pages) {
+              if (page && typeof page === 'object' && typeof page.path === 'string') {
+                pathsToCopy.add(page.path);
+              }
+            }
+          }
+        }
+
+        // 6. SourceFiles
+        if (manifest.sourceFiles && typeof manifest.sourceFiles === 'object') {
+          for (const key of Object.keys(manifest.sourceFiles)) {
+            const fileVal = manifest.sourceFiles[key];
+            if (typeof fileVal === 'string') {
+              pathsToCopy.add(fileVal);
+            }
+          }
+        }
+
+        // 7. Assets directory
+        if (typeof manifest.assetsDir === 'string') {
+          const srcAssets = path.join(sourceRoot, manifest.assetsDir);
+          const destAssets = path.join(destDir, manifest.assetsDir);
+          try {
+            const stats = await stat(srcAssets);
+            if (stats.isDirectory()) {
+              await cp(srcAssets, destAssets, { recursive: true });
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        // Copy all collected files
+        for (const relPath of pathsToCopy) {
+          const srcFile = path.join(sourceRoot, relPath);
+          const destFile = path.join(destDir, relPath);
+          try {
+            const stats = await stat(srcFile);
+            if (stats.isFile()) {
+              await mkdir(path.dirname(destFile), { recursive: true });
+              await copyFile(srcFile, destFile);
+            }
+          } catch {
+            // Ignore missing files or conflicts
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[design-system-import] Failed to copy registered manifest files:`, err);
+    }
+  }
 }
 
 async function updateManifestIdAndSource(
@@ -304,6 +396,8 @@ async function updateManifestIdAndSource(
       type: 'local',
       path: sourceRoot,
     };
+
+    console.log("source", parsed.source), options.source
     if (scan.packageName) {
       parsed.packageName = scan.packageName;
     }

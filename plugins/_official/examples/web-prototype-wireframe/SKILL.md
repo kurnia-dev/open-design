@@ -1,5 +1,5 @@
 ---
-name: web-prototype
+name: web-prototype-wireframe
 description: |
   General-purpose desktop web prototype. Single self-contained HTML file built
   by copying the seed `assets/template.html` and pasting section layouts from
@@ -25,7 +25,6 @@ od:
 ---
 
 # Web Prototype Skill
-
 Produce a single, self-contained HTML prototype using the bundled seed and layout library — **not** by writing CSS from scratch. The seed already encodes good defaults (typography, spacing, accent budget). Your job is to compose it.
 
 ## Resource map

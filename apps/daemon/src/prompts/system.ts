@@ -29,7 +29,7 @@
  * The composed string is what the daemon sees as `systemPrompt` and what
  * the Anthropic path sends as `system`.
  */
-import { OFFICIAL_DESIGNER_PROMPT } from './official-system.js';
+import { buildOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
@@ -241,7 +241,7 @@ export function resolveExclusiveSurface(args: {
     ?? (composedSurfaceModes.length === 1 ? composedSurfaceModes[0] ?? null : null);
 }
 
-export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
+
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
@@ -370,14 +370,14 @@ export interface ComposeInput {
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
-    | 'prototype'
-    | 'deck'
-    | 'template'
-    | 'design-system'
-    | 'image'
-    | 'video'
-    | 'audio'
-    | undefined;
+  | 'prototype'
+  | 'deck'
+  | 'template'
+  | 'design-system'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | undefined;
   skillModes?: Array<'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio'> | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
@@ -458,7 +458,7 @@ export interface ComposeInput {
   // available, and burning a turn on a redundant OAuth dance just
   // confuses the user.
   connectedExternalMcp?: ReadonlyArray<{ id: string; label?: string | undefined }>
-    | undefined;
+  | undefined;
   // Optional `## Active plugin` / `## Plugin inputs` block. The daemon's
   // plugin module renders this from an AppliedPluginSnapshot; we splice
   // it in after the active skill so the plugin description sits next to
@@ -491,20 +491,6 @@ export interface ComposeInput {
   mediaExecution?: MediaExecutionPolicy | undefined;
   isReactVite?: boolean | undefined;
 }
-
-const REACT_VITE_PROJECT_DIRECTIVE = `\
-## React + Vite + TypeScript Project Mode (CRITICAL)
-
-This project is a fully functional React + Vite + TypeScript application (not a single-file static HTML mockup). 
-
-You MUST follow these rules when editing or creating code files:
-1. **Source Folder**: All React components, logic, and entrypoints live under \`src/\`. The main entry component is \`src/App.tsx\` and the CSS is \`src/index.css\`. 
-2. **Component Creation**: Do not write components as inline scripts in \`index.html\`. Create modular component files (e.g. \`src/components/Button.tsx\`) and import them.
-3. **No Standalone Babel/Script Blocks**: Never use \`<script type="text/babel">\` or Babel-standalone. Use standard TypeScript/ES6 imports and exports.
-4. **Design System Imports**: This project has the design system package(s) linked in \`package.json\` dependencies. You must import components or helpers directly from the linked packages (e.g., \`import { Button } from '@mystaline/mysta-lib';\`). Check \`package.json\` to see which packages are available.
-5. **Vite Entry**: Keep \`index.html\` as the Vite entrypoint pointing to \`/src/main.tsx\`. Do not overwrite it with a self-contained single-page mockup unless explicitly requested.
-6. **Editing Files**: Use the edit tools to make precise modular edits to the files under \`src/\`.
-7. **Tailwind CSS v4**: The project is pre-configured with Tailwind CSS v4. Use standard Tailwind utility classes in JSX. Custom styles or custom theme extensions can be configured directly in \`src/index.css\` using Tailwind v4 directives (e.g. \`@theme { --color-primary: #...; }\`). Do not create a \`tailwind.config.js\` or \`postcss.config.js\` file.`;
 
 export function composeSystemPrompt({
   agentId,
@@ -589,6 +575,9 @@ export function composeSystemPrompt({
     metadata?.kind === 'video' ||
     metadata?.kind === 'audio';
 
+  const isHighFidelityPrototype = metadata?.kind === 'prototype' && metadata?.fidelity === 'high-fidelity';
+  const effectiveReactVite = Boolean(isReactVite || isHighFidelityPrototype);
+
   if (metadata?.examplePrompt === true) {
     parts.push(buildExamplePromptOverride(metadata.examplePromptTitle, metadata.examplePromptBrief));
     parts.push('\n\n---\n\n');
@@ -607,13 +596,9 @@ export function composeSystemPrompt({
     parts.push(DISCOVERY_AND_PHILOSOPHY, '\n\n---\n\n');
   }
 
-  if (isReactVite) {
-    parts.push(REACT_VITE_PROJECT_DIRECTIVE, '\n\n---\n\n');
-  }
-
   parts.push(
     '# Identity and workflow charter (background)\n\n',
-    BASE_SYSTEM_PROMPT,
+    buildOfficialDesignerPrompt({ isReactVite: effectiveReactVite, sessionMode, streamFormat }),
   );
 
   if (memoryBody && memoryBody.trim().length > 0) {
@@ -635,10 +620,15 @@ export function composeSystemPrompt({
   }
 
   if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
-    const usageBlock =
+    let usageBlock =
       designSystemUsageMd && designSystemUsageMd.trim().length > 0
         ? designSystemUsageMd.trim()
         : DEFAULT_DESIGN_SYSTEM_USAGE;
+
+    if (designSystemUsageMd && designSystemUsageMd.trim().length > 0) {
+      usageBlock = `**CRITICAL REFERENCE RULE**: This design system has a custom USAGE.md file. You MUST treat this file as your absolute reference guide. Never create or implement your own custom components for this design system; you must import and use the official components provided by this design system. You are allowed to build a custom component ONLY if the design system does not provide the required component for the task.\n\n${usageBlock}`;
+    }
+
     parts.push(
       `\n\n## How to use this design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${usageBlock}`,
     );
@@ -764,7 +754,7 @@ export function composeSystemPrompt({
     // adopts it when the brief actually is a deck — otherwise the
     // directive is read as background reference and ignored.
     parts.push(
-      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
+      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if, the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
     );
   }
 
@@ -1436,8 +1426,8 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
 function formatElevenLabsVoiceLabel(option: AudioVoiceOption): string {
   const labels = option.labels && typeof option.labels === 'object'
     ? Object.values(option.labels)
-        .map((value) => (typeof value === 'string' ? value.trim() : ''))
-        .filter(Boolean)
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean)
     : [];
   const bits = [...labels];
   if (bits.length > 0) return `${option.name} — ${bits.join(' · ')}`;

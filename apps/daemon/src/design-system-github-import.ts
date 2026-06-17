@@ -146,7 +146,6 @@ export async function importGitHubDesignSystemProject(
         type: sourceType,
         url: parsedGeneric.cloneUrl,
         ...(sourceBranch ? { branch: sourceBranch } : {}),
-        importedAt,
       },
     });
     await rm(cloneDir, { recursive: true, force: true });

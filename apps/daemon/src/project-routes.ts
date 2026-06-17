@@ -1586,10 +1586,19 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             continue;
           }
           try {
+            let targetSkillId = manifest.skillId ?? null;
+            const isReactVite = existsSync(path.join(entry.dir, 'package.json'));
+            if (isReactVite) {
+              if (targetSkillId === 'web-prototype-wireframe' || targetSkillId === 'web-prototype' || !targetSkillId) {
+                targetSkillId = 'web-prototype-high-fidelity';
+              } else if (targetSkillId === 'example-web-prototype-wireframe' || targetSkillId === 'example-web-prototype') {
+                targetSkillId = 'example-web-prototype-high-fidelity';
+              }
+            }
             const project = insertProject(db, {
               id: manifest.id,
               name: manifest.name,
-              skillId: manifest.skillId ?? null,
+              skillId: targetSkillId,
               designSystemId: manifest.designSystemId ?? null,
               pendingPrompt: null,
               metadata: {
@@ -1754,7 +1763,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
-      const skillValidation = await validateProjectSkillId(skillId);
+      let targetSkillId = skillId;
+      if (metadata && typeof metadata === 'object') {
+        const isHighFidelity = metadata.kind === 'prototype' && metadata.fidelity === 'high-fidelity';
+        if (isHighFidelity) {
+          if (targetSkillId === 'web-prototype' || targetSkillId === 'web-prototype-wireframe') {
+            targetSkillId = 'web-prototype-high-fidelity';
+          } else if (targetSkillId === 'example-web-prototype' || targetSkillId === 'example-web-prototype-wireframe') {
+            targetSkillId = 'example-web-prototype-high-fidelity';
+          }
+        }
+      }
+      const skillValidation = await validateProjectSkillId(targetSkillId);
       if (!skillValidation.ok) {
         return sendApiError(res, 400, skillValidation.code, skillValidation.message);
       }
@@ -1820,7 +1840,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         });
 
         const kind = projectMetadata?.kind;
-        if (kind === 'prototype' || kind === 'deck' || kind === 'other' || kind === 'template') {
+        if (kind === 'prototype' && projectMetadata?.fidelity == 'high-fidelity') {
           try {
             const projectDir = await ensureProject(PROJECTS_DIR, id, projectMetadata);
 
@@ -2017,6 +2037,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
 
   app.patch('/api/projects/:id', async (req, res) => {
     try {
+      const existing = getProject(db, req.params.id);
+      if (!existing) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'not found');
+      }
       const patch = req.body || {};
       // baseDir / folder-import state is privileged: it's set only by the
       // import endpoint and otherwise immutable. Two failure modes to
@@ -2032,8 +2056,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       // project record onto the incoming patch so the user can keep
       // patching other metadata without ever losing their import root.
       if (patch.metadata && typeof patch.metadata === 'object') {
-        const existing = getProject(db, req.params.id);
-        const existingMeta = existing?.metadata;
+        const existingMeta = existing.metadata;
         if ('fromTrustedPicker' in patch.metadata
           && patch.metadata.fromTrustedPicker !== existingMeta?.fromTrustedPicker) {
           return sendApiError(
@@ -2074,13 +2097,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       if (patch.metadata?.linkedDirs) {
-        const existing = getProject(db, req.params.id);
         const validated = validateLinkedDirs(patch.metadata.linkedDirs);
         if (validated.error) {
           return sendApiError(res, 400, 'INVALID_LINKED_DIR', validated.error);
         }
         patch.metadata.linkedDirs =
-          existing?.metadata?.fromTrustedPicker === true
+          existing.metadata?.fromTrustedPicker === true
             ? patch.metadata.linkedDirs
             : validated.dirs;
       }
@@ -2104,8 +2126,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         patch.designSystemId = designSystemValidation.id;
       }
-      if (Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
-        const skillValidation = await validateProjectSkillId(patch.skillId);
+      const mergedMeta = {
+        ...(existing.metadata ?? {}),
+        ...(patch.metadata ?? {}),
+      };
+      let targetSkillId = Object.prototype.hasOwnProperty.call(patch, 'skillId')
+        ? patch.skillId
+        : existing.skillId;
+      const isHighFidelity = mergedMeta?.kind === 'prototype' && mergedMeta?.fidelity === 'high-fidelity';
+      if (isHighFidelity) {
+        if (targetSkillId === 'web-prototype' || targetSkillId === 'web-prototype-wireframe') {
+          targetSkillId = 'web-prototype-high-fidelity';
+        } else if (targetSkillId === 'example-web-prototype' || targetSkillId === 'example-web-prototype-wireframe') {
+          targetSkillId = 'example-web-prototype-high-fidelity';
+        }
+      } else if (mergedMeta?.kind === 'prototype' && mergedMeta?.fidelity === 'wireframe') {
+        if (targetSkillId === 'web-prototype-react' || targetSkillId === 'web-prototype-high-fidelity') {
+          targetSkillId = 'web-prototype-wireframe';
+        } else if (targetSkillId === 'example-web-prototype-react' || targetSkillId === 'example-web-prototype-high-fidelity') {
+          targetSkillId = 'example-web-prototype-wireframe';
+        }
+      }
+      if (targetSkillId !== existing.skillId || Object.prototype.hasOwnProperty.call(patch, 'skillId')) {
+        const skillValidation = await validateProjectSkillId(targetSkillId);
         if (!skillValidation.ok) {
           return sendApiError(res, 400, skillValidation.code, skillValidation.message);
         }

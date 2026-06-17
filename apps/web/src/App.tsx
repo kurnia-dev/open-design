@@ -94,6 +94,7 @@ import {
   patchProject,
 } from './state/projects';
 import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
+import { isDesignSystemProject } from './components/design-system-project';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
@@ -1631,7 +1632,7 @@ function AppInner() {
     const ok = await deleteProjectApi(id);
     if (!ok) return false;
 
-    if (designSystemId) {
+    if (designSystemId && project && isDesignSystemProject(project)) {
       await deleteDesignSystemDraft(designSystemId, true);
       handleDesignSystemsChanged(designSystemId);
     }

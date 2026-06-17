@@ -278,6 +278,7 @@ describe('design system import catalog lookup', () => {
   });
 
   it('keeps local design-system import successful when token contract auto-queue fails', async () => {
+    fs.rmSync(path.join(userDesignSystemsDir, 'demo-app'), { recursive: true, force: true });
     maybeStartTokenContractRebuild = async () => {
       throw new Error('token report stat failed');
     };

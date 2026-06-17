@@ -213,7 +213,7 @@ function chatProtocolFromAgentId(agentId) {
   if (!agentId || typeof agentId !== 'string') return null;
   const id = agentId.trim().toLowerCase();
   if (id === 'claude') return 'anthropic';
-  if (id === 'gemini') return 'google';
+  if (id === 'gemini' || id === 'antigravity') return 'google';
   // Codex, OpenCode, Qwen, DeepSeek, Kimi, Copilot, Pi, Kiro, Kilo,
   // Vibe, Devin, Hermes, Cursor-Agent, Qoder all use the OpenAI chat-
   // completions wire format.
@@ -245,6 +245,7 @@ function canUseLocalCliForMemory(agentId, provider) {
   if (agentId === 'codex' && provider === 'openai') return true;
   if (agentId === 'opencode' && provider === 'openai') return true;
   if (agentId === 'gemini' && provider === 'google') return true;
+  if (agentId === 'antigravity' && provider === 'google') return true;
   return false;
 }
 
@@ -882,6 +883,15 @@ async function callLocalCli(provider, system, user, options) {
       { cwd },
     );
     parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
+  } else if (provider.agentId === 'antigravity') {
+    args = def.buildArgs(
+      '',
+      [],
+      [],
+      { model: provider.model },
+      { cwd },
+    );
+    parseStdout = (raw) => raw.trim();
   } else {
     throw new Error(`Local CLI execution is not supported for ${provider.agentId}`);
   }

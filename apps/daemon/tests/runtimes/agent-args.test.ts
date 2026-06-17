@@ -1,10 +1,23 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, grokBuild, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...mod,
+    spawn: (command: any, spawnArgs: any, options: any) => {
+      if ((globalThis as any).__mockSpawn) {
+        return (globalThis as any).__mockSpawn(command, spawnArgs, options);
+      }
+      return mod.spawn(command, spawnArgs, options);
+    },
+  };
+});
 
 test('cursor-agent args deliver prompts via stdin without passing a literal dash prompt', () => {
   const args = cursorAgent.buildArgs(
@@ -927,3 +940,41 @@ test('promptInputFormat is a string property (or undefined) on every promptViaSt
     );
   }
 });
+
+test('antigravity is mapped to local CLI provider and gets executed in callLlmOnce', async () => {
+  const { callLlmOnce } = await import('../../src/memory-llm.js');
+  const { EventEmitter } = await import('node:events');
+
+  (globalThis as any).__mockSpawn = () => {
+    const child = new EventEmitter() as any;
+    child.stdout = new EventEmitter();
+    child.stdout.setEncoding = () => {};
+    child.stderr = new EventEmitter();
+    child.stderr.setEncoding = () => {};
+    child.stdin = {
+      write: () => {},
+      end: () => {
+        process.nextTick(() => {
+          child.stdout.emit('data', 'Generated commit message');
+          child.emit('close', 0, null);
+        });
+      },
+      on: () => {},
+    };
+    child.kill = () => {};
+    return child;
+  };
+
+  try {
+    const res = await callLlmOnce({
+      systemPrompt: 'sys',
+      userPrompt: 'user',
+      chatAgentId: 'antigravity',
+    });
+    assert.equal(res, 'Generated commit message');
+  } finally {
+    delete (globalThis as any).__mockSpawn;
+  }
+});
+
+

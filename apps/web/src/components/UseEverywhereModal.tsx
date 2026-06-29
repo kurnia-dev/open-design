@@ -8,7 +8,7 @@
 // agent-handoff markdown blob in ./use-everywhere/agent-guide.ts so the
 // modal only owns rendering + clipboard interactions.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { motion } from 'motion/react';
 import { useAnalytics } from '../analytics/provider';
 import { trackIntegrationsUseEverywhereTabClick } from '../analytics/events';
@@ -90,7 +90,7 @@ export function UseEverywhereModal({
       aria-modal="true"
       aria-label={t('useEverywhere.modalAria')}
       data-testid="use-everywhere-modal"
-      onClick={(e) => {
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
         if (e.target === e.currentTarget) onClose();
       }}
       variants={modalOverlay}

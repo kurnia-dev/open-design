@@ -5,7 +5,7 @@
 // Enter. Esc closes. ↑↓ navigates the list. With an empty query, recents
 // surface first, then the rest of the file list by mtime.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { WorkspaceContextItem } from '@open-design/contracts';
 import { motion } from 'motion/react';
 import { modalOverlay, scaleIn } from '../motion';
@@ -152,7 +152,7 @@ export function QuickSwitcher({
     >
       <motion.div
         className="qs-palette"
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}
         variants={scaleIn}
         initial="hidden"
         animate="visible"

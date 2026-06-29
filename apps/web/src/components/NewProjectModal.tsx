@@ -8,7 +8,7 @@
 // when the panel calls onCreate and it completes (success path) or when the user
 // clicks the backdrop / Esc.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -134,7 +134,7 @@ function NewProjectModalBody({
       aria-modal="true"
       aria-label="New project"
       data-testid="new-project-modal"
-      onClick={(e) => {
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
         if (e.target === e.currentTarget && !creating) onClose();
       }}
       variants={modalOverlay}

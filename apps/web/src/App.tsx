@@ -1680,7 +1680,6 @@ function AppInner() {
     let cancelled = false;
     (async () => {
       const project = await getProject(route.projectId);
-      console.log("project", project, activeProject)
       if (cancelled) return;
       if (project) {
         setProjects((curr) => {

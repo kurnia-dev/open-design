@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { motion } from 'motion/react';
 import { Button, Input, Textarea } from '@open-design/components';
 import { useT } from '../i18n';
@@ -32,7 +32,7 @@ export function PasteTextDialog({ onSave, onClose }: Props) {
     >
       <motion.div
         className="modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e: MouseEvent<HTMLDivElement>) => e.stopPropagation()}
         variants={modalContent}
         initial="hidden"
         animate="visible"

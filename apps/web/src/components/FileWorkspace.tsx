@@ -2637,6 +2637,7 @@ function DesignSystemProjectPanel({
   const [statusBusy, setStatusBusy] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishLogs, setPublishLogs] = useState<string[]>([]);
+  const [activeSectionTitle, setActiveSectionTitle] = useState<string | null>(null);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
   }, [system.status]);
@@ -2709,6 +2710,26 @@ function DesignSystemProjectPanel({
     system,
   });
   const generationProgress = designSystemGenerationProgress(generationSteps);
+
+  const activeSectionTitleResolved = activeSectionTitle || visibleSectionReviews[0]?.section.title || null;
+
+  const isPrimary = (item: DesignSystemProjectSectionReview) =>
+    primaryNeedsReview.some((p) => p.section.title === item.section.title);
+
+  const getInstanceId = (item: DesignSystemProjectSectionReview) =>
+    isPrimary(item)
+      ? `needs-review:${item.section.title}`
+      : `${item.section.category}:${item.section.title}`;
+
+  const handleSelectSection = (title: string, instanceId: string) => {
+    setActiveSectionTitle(title);
+    setExpandedSections((current) => ({
+      ...current,
+      [instanceId]: true,
+    }));
+  };
+
+  const tocGroups = designSystemReviewGroups(visibleSectionReviews);
 
   async function togglePublished(nextPublished: boolean) {
     if (nextPublished && !githubEvidence.ready) return;
@@ -2846,6 +2867,11 @@ function DesignSystemProjectPanel({
       !needsAttention && (reviewDecisions[section.title] ?? reviewEntry?.decision) === 'looks-good';
     const expanded =
       (expandedSections[instanceId] ?? (defaultExpanded && !reviewedGood)) || sectionActivity.running;
+
+    const activeSectionTitleResolved = activeSectionTitle || visibleSectionReviews[0]?.section.title || null;
+    const isThisCardActive = activeSectionTitleResolved === section.title;
+    const shouldRenderBody = expanded || isThisCardActive;
+
     return (
       <section
         key={instanceId}
@@ -2888,7 +2914,7 @@ function DesignSystemProjectPanel({
               </span>
             ) : null}
           </span>
-          {expanded ? (
+          {shouldRenderBody ? (
             <div className="ds-project-review-actions" aria-label={`${section.title} review`}>
               <button
                 type="button"
@@ -2956,7 +2982,7 @@ function DesignSystemProjectPanel({
             </div>
           ) : null}
         </div>
-        {expanded ? (
+        {shouldRenderBody ? (
           <div className="ds-project-section-body">
             {sectionActivity.running ? (
               <div className="ds-project-review-notice is-running">
@@ -3137,30 +3163,73 @@ function DesignSystemProjectPanel({
           <MissingBrandFontsBanner projectId={projectId} onUploadAssets={onUploadAssets} />
         ) : null}
 
-        <div className="ds-project-sections">
-          {primaryNeedsReview.length > 0 ? (
-            <div className="ds-project-section-group">
-              {primaryNeedsReview.map((item, index) =>
-                renderReviewCard(item, `needs-review:${item.section.title}`, index === 0),
-              )}
-            </div>
-          ) : null}
+        <div className="ds-project-split-layout">
+          {visibleSectionReviews.length > 0 ? (
+            <>
+              {/* Left TOC Sidebar */}
+              <aside className="ds-project-sidebar-toc">
+                {tocGroups.map((group) => (
+                  <div key={group.title} className="ds-toc-group">
+                    <div className="ds-toc-group-title">{group.title}</div>
+                    <div className="ds-toc-items">
+                      {group.items.map((item) => {
+                        const isActive = activeSectionTitleResolved === item.section.title;
+                        const instanceId = getInstanceId(item);
+                        return (
+                          <button
+                            key={item.section.title}
+                            type="button"
+                            className={`ds-toc-item${isActive ? ' active' : ''}`}
+                            onClick={() => handleSelectSection(item.section.title, instanceId)}
+                          >
+                            <span
+                              className={`ds-toc-status-dot ${designSystemSectionStatusClass(item.sectionStatus)}`}
+                              title={item.sectionStatusLabel}
+                            />
+                            <span className="ds-toc-item-label">{item.section.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </aside>
 
-          {groupedSectionReviews.map((group) => (
-            <div key={group.title} className="ds-project-section-group">
-              <h2>{group.title}</h2>
-              {group.items.map((item) =>
-                renderReviewCard(item, `${group.title}:${item.section.title}`, Boolean(item.previewFile)),
-              )}
-            </div>
-          ))}
+              {/* Right Previews List (only active one is visible via CSS) */}
+              <main className="ds-project-preview-content">
+                {primaryNeedsReview.map((item) => {
+                  const isActive = activeSectionTitleResolved === item.section.title;
+                  return (
+                    <div
+                      key={`primary-${item.section.title}`}
+                      className={`ds-project-preview-wrapper${isActive ? ' is-active' : ' is-inactive'}`}
+                    >
+                      {renderReviewCard(item, `needs-review:${item.section.title}`, true)}
+                    </div>
+                  );
+                })}
 
-          {visibleSectionReviews.length === 0 ? (
+                {groupedSectionReviews.map((group) =>
+                  group.items.map((item) => {
+                    const isActive = activeSectionTitleResolved === item.section.title;
+                    return (
+                      <div
+                        key={`grouped-${group.title}-${item.section.title}`}
+                        className={`ds-project-preview-wrapper${isActive ? ' is-active' : ' is-inactive'}`}
+                      >
+                        {renderReviewCard(item, `${group.title}:${item.section.title}`, Boolean(item.previewFile))}
+                      </div>
+                    );
+                  })
+                )}
+              </main>
+            </>
+          ) : (
             <div className="ds-project-empty-review">
               <Icon name="sparkles" size={18} />
               <span>Preview cards will appear here as the agent creates them.</span>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

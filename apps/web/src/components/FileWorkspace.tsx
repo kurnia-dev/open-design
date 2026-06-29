@@ -1994,22 +1994,6 @@ export function FileWorkspace({
                 <span className="ws-tab-label">Preview</span>
               </button>
             ) : null}
-            <button
-              type="button"
-              className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === DESIGN_FILES_TAB}
-              tabIndex={0}
-              data-testid="design-files-tab"
-              onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
-              title={t('workspace.designFiles')}
-            >
-              <span className="tab-icon" aria-hidden>
-                <Icon name="grid" size={13} />
-              </span>
-              <span className="ws-tab-label">{t('workspace.designFiles')}</span>
-            </button>
-
             {showQuestionsTab ? (
               <button
                 type="button"
@@ -2027,6 +2011,21 @@ export function FileWorkspace({
                 <span className="ws-tab-label">{t('questions.tabLabel')}</span>
               </button>
             ) : null}
+            <button
+              type="button"
+              className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === DESIGN_FILES_TAB}
+              tabIndex={0}
+              data-testid="design-files-tab"
+              onClick={() => setPersistedActive(DESIGN_FILES_TAB)}
+              title={t('workspace.designFiles')}
+            >
+              <span className="tab-icon" aria-hidden>
+                <Icon name="grid" size={13} />
+              </span>
+              <span className="ws-tab-label">{t('workspace.designFiles')}</span>
+            </button>
             {orderedWorkspaceTabs.map((entry) => {
               if (entry.kind === 'browser') {
                 const browserTab = entry.browserTab;

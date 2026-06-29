@@ -74,7 +74,7 @@ import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { PasteTextDialog } from './PasteTextDialog';
 import { ProjectPreparationPanel } from './ProjectPreparationPanel';
-import { ProjectPublishingPanel } from './ProjectPublishingPanel';
+import { ProjectPublishingPanel, type PublishStep } from './ProjectPublishingPanel';
 import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
@@ -2636,6 +2636,7 @@ function DesignSystemProjectPanel({
   const [statusBusy, setStatusBusy] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishLogs, setPublishLogs] = useState<string[]>([]);
+  const [publishSteps, setPublishSteps] = useState<PublishStep[]>([]);
   const [activeSectionTitle, setActiveSectionTitle] = useState<string | null>(null);
   useEffect(() => {
     setStatus(system.status ?? 'draft');
@@ -2736,6 +2737,7 @@ function DesignSystemProjectPanel({
     if (nextPublished) {
       setIsPublishing(true);
       setPublishLogs([]);
+      setPublishSteps([]);
 
       const es = new EventSource(`/api/design-systems/${encodeURIComponent(system.id)}/publish`);
 
@@ -2744,6 +2746,22 @@ function DesignSystemProjectPanel({
           const payload = JSON.parse(e.data);
           const prefix = payload.type === 'stdout' || payload.type === 'stderr' ? '' : `[${payload.type.toUpperCase()}] `;
           setPublishLogs((prev) => [...prev, `${prefix}${payload.data}`]);
+        } catch { }
+      });
+
+      es.addEventListener('step-init', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.steps) {
+            setPublishSteps(payload.steps.map((s: any) => ({ ...s, status: 'pending' })));
+          }
+        } catch { }
+      });
+
+      es.addEventListener('step-status', (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          setPublishSteps((prev) => prev.map(s => s.id === payload.id ? { ...s, status: payload.status } : s));
         } catch { }
       });
 
@@ -3056,6 +3074,7 @@ function DesignSystemProjectPanel({
         isPublishing={isPublishing}
         publishLogs={publishLogs}
         setPublishLogs={setPublishLogs}
+        publishSteps={publishSteps}
       />
     );
   }

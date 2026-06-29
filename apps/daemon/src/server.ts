@@ -7053,7 +7053,11 @@ export async function startServer({
         { status: 'published' },
         PROJECTS_DIR,
         (type, data) => {
-          writeEvent('progress', { type, data });
+          if (type === 'step-init' || type === 'step-status') {
+            writeEvent(type, data);
+          } else {
+            writeEvent('progress', { type, data });
+          }
         }
       );
       if (!updated) {

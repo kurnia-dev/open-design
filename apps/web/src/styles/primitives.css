@@ -7,7 +7,11 @@ button {
   border-radius: var(--radius-sm);
   padding: 6px 12px;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 button:hover:not(:disabled) {
@@ -25,7 +29,9 @@ button.primary {
   border-color: var(--accent);
   color: white;
   font-weight: 500;
-  box-shadow: 0 1px 0 rgba(180, 90, 59, 0.18) inset, var(--shadow-xs);
+  box-shadow:
+    0 1px 0 rgba(180, 90, 59, 0.18) inset,
+    var(--shadow-xs);
 }
 
 button.primary:hover:not(:disabled) {
@@ -64,7 +70,10 @@ button.ghost:hover:not(:disabled) {
  * ghost button that wants the same "did it" pulse.
  */
 button.ghost.is-success-flash {
-  border-color: var(--green-border, color-mix(in srgb, #1f9d55 32%, var(--border)));
+  border-color: var(
+    --green-border,
+    color-mix(in srgb, #1f9d55 32%, var(--border))
+  );
   background: var(--green-bg, color-mix(in srgb, #1f9d55 8%, transparent));
   color: var(--green, #137a3d);
 }
@@ -152,8 +161,10 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 7px 10px;
-  width: 100%;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  width: max-content;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 input::placeholder,
@@ -204,7 +215,7 @@ select::-ms-expand {
   display: none;
 }
 
-[data-theme='dark'] select {
+[data-theme="dark"] select {
   background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
@@ -247,17 +258,20 @@ textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
 }
 
 .od-select-trigger:hover:not(:disabled),
-.od-select-trigger[aria-expanded='true'] {
+.od-select-trigger[aria-expanded="true"] {
   border-color: var(--border-strong);
   background: var(--bg-subtle);
 }
 
 .od-select-trigger:focus-visible,
-.od-select-trigger[aria-expanded='true'] {
+.od-select-trigger[aria-expanded="true"] {
   outline: none;
   border-color: var(--selected);
   box-shadow: 0 0 0 3px var(--selected-soft);
@@ -273,7 +287,7 @@ textarea {
   transition: transform 120ms ease;
 }
 
-.od-select-trigger[aria-expanded='true'] svg {
+.od-select-trigger[aria-expanded="true"] svg {
   transform: rotate(180deg);
 }
 
@@ -361,7 +375,7 @@ textarea {
   opacity: 1;
 }
 
-.od-select-group+.od-select-group {
+.od-select-group + .od-select-group {
   margin-top: 4px;
   padding-top: 4px;
   border-top: 1px solid var(--border-soft);

@@ -168,7 +168,9 @@ type DesignSystemProjectManifest = {
   };
   npmPackages?: Array<{
     name: string;
-    buildCommand: string;
+    buildCommand?: string;
+    registry?: string;
+    version?: string;
   }>;
 };
 
@@ -1010,7 +1012,7 @@ export async function updateUserDesignSystem(
   id: string,
   input: UserDesignSystemInput,
   projectsRoot?: string,
-  onProgress?: (type: 'info' | 'stdout' | 'stderr', data: string) => void,
+  onProgress?: (type: string, data: any) => void,
 ): Promise<DesignSystemSummary | null> {
   const dirId = stripPrefixAndValidateId(id, 'user:');
   if (!dirId) return null;
@@ -1031,101 +1033,155 @@ export async function updateUserDesignSystem(
       const manifest = await readProjectManifest(projectDir, dirId);
       if (manifest && manifest.npmPackages && manifest.npmPackages.length > 0) {
         onProgress?.('info', `Found ${manifest.npmPackages.length} package(s) to publish.\n`);
-        const pm = await detectPackageManager(projectDir);
-        const msg = `Installing dependencies with ${pm} in ${projectDir}...\n`;
-        console.log(`[od] ${msg}`);
-        onProgress?.('info', msg);
-        try {
-          await runCommand(`${pm} install`, projectDir, onProgress);
-        } catch (err: any) {
-          console.error(`[od] Dependency install failed in ${projectDir}:`, err.message);
-          throw new Error(`Failed to install dependencies: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+
+        const packagesToCheck = manifest.npmPackages.filter(pkg => pkg.registry && pkg.version);
+        const packagesToBuild = manifest.npmPackages.filter(pkg => !pkg.registry || pkg.buildCommand);
+
+        const steps: { id: string; label: string }[] = [];
+        if (packagesToCheck.length > 0) {
+          steps.push({ id: 'check-registry', label: 'Checking registry connections' });
+        }
+        if (packagesToBuild.length > 0) {
+          steps.push({ id: 'install', label: 'Installing dependencies' });
+          steps.push({ id: 'build', label: 'Building packages' });
+          steps.push({ id: 'config-npm', label: 'Configuring npm registry' });
+          steps.push({ id: 'publish', label: 'Publishing packages' });
+          steps.push({ id: 'cleanup', label: 'Cleaning up temporary files' });
         }
 
-        // 1. Build all packages
-        for (const pkg of manifest.npmPackages) {
-          if (pkg.buildCommand) {
-            const msgBuild = `Running build command "${pkg.buildCommand}" in ${projectDir}...\n`;
-            console.log(`[od] ${msgBuild}`);
-            onProgress?.('info', msgBuild);
+        onProgress?.('step-init', { steps });
+
+        if (packagesToCheck.length > 0) {
+          onProgress?.('step-status', { id: 'check-registry', status: 'running' });
+          for (const pkg of packagesToCheck) {
+            const msgCheck = `Checking registry connection for ${pkg.name} at ${pkg.registry}...\n`;
+            console.log(`[od] ${msgCheck}`);
+            onProgress?.('info', msgCheck);
             try {
-              await runCommand(pkg.buildCommand, projectDir, onProgress);
+              // npm ping --registry <url> handles the ping correctly
+              await runCommand(`npm ping --registry ${pkg.registry}`, projectDir, onProgress);
             } catch (err: any) {
-              console.error(`[od] Build command failed for ${pkg.name}:`, err.message);
-              throw new Error(`Build command failed: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+              onProgress?.('step-status', { id: 'check-registry', status: 'failed' });
+              console.error(`[od] Registry check failed for ${pkg.name}:`, err.message);
+              throw new Error(`Failed to verify registry connection for ${pkg.name}: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
             }
           }
+          onProgress?.('step-status', { id: 'check-registry', status: 'completed' });
         }
 
-        // 2. Prepare .npmrc paths to write and clean up
-        const npmrcFilesToClean: { path: string; originalContent: string | null; existed: boolean }[] = [];
-
-        // Root .npmrc
-        const rootNpmrcPath = path.join(projectDir, '.npmrc');
-        const rootNpmrcExisted = await stat(rootNpmrcPath).then(() => true).catch(() => false);
-        let rootNpmrcContent: string | null = null;
-        if (rootNpmrcExisted) {
-          rootNpmrcContent = await readFile(rootNpmrcPath, 'utf8');
-        }
-        npmrcFilesToClean.push({ path: rootNpmrcPath, originalContent: rootNpmrcContent, existed: rootNpmrcExisted });
-
-        // Package-specific .npmrc files
-        for (const pkg of manifest.npmPackages) {
-          const pkgDir = await findPackageDir(projectDir, pkg.name);
-          if (pkgDir) {
-            const npmrcPath = path.join(pkgDir, '.npmrc');
-            if (npmrcPath !== rootNpmrcPath) {
-              const existed = await stat(npmrcPath).then(() => true).catch(() => false);
-              let originalContent: string | null = null;
-              if (existed) {
-                originalContent = await readFile(npmrcPath, 'utf8');
-              }
-              npmrcFilesToClean.push({ path: npmrcPath, originalContent, existed });
-            }
-          }
-        }
-
-        try {
-          // 3. Write temporary .npmrc to all paths
-          const scopes = await findScopes(projectDir);
-          let npmrcLines = 'registry=http://127.0.0.1:4873/\n//127.0.0.1:4873/:_authToken="dummy-token"\n';
-          for (const scope of scopes) {
-            npmrcLines += `${scope}:registry=http://127.0.0.1:4873/\n`;
-          }
-
-          for (const item of npmrcFilesToClean) {
-            const msgNpmrc = `Writing temporary .npmrc to ${item.path}...\n`;
-            console.log(`[od] ${msgNpmrc}`);
-            onProgress?.('info', msgNpmrc);
-            await writeFile(
-              item.path,
-              npmrcLines,
-              'utf8'
-            );
-          }
-
-          // 4. Publish all packages topologically using recursive filter
-          const filterArgs = manifest.npmPackages.map(pkg => `--filter ${pkg.name}...`).join(' ');
-          const msgPublish = `Publishing packages using: pnpm ${filterArgs} publish --no-git-checks\n`;
-          console.log(`[od] ${msgPublish}`);
-          onProgress?.('info', msgPublish);
+        if (packagesToBuild.length > 0) {
+          onProgress?.('step-status', { id: 'install', status: 'running' });
+          const pm = await detectPackageManager(projectDir);
+          const msg = `Installing dependencies with ${pm} in ${projectDir}...\n`;
+          console.log(`[od] ${msg}`);
+          onProgress?.('info', msg);
           try {
-            await runCommand(`pnpm ${filterArgs} publish --no-git-checks`, projectDir, onProgress);
+            await runCommand(`${pm} install`, projectDir, onProgress);
+            onProgress?.('step-status', { id: 'install', status: 'completed' });
           } catch (err: any) {
-            console.error(`[od] pnpm publish failed:`, err.message);
-            throw new Error(`Failed to publish design system packages: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+            onProgress?.('step-status', { id: 'install', status: 'failed' });
+            console.error(`[od] Dependency install failed in ${projectDir}:`, err.message);
+            throw new Error(`Failed to install dependencies: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
           }
-        } finally {
-          // 5. Clean up all temporary .npmrc files
-          for (const item of npmrcFilesToClean) {
-            const msgCleanup = `Cleaning up temporary .npmrc in ${item.path}...\n`;
-            console.log(`[od] ${msgCleanup}`);
-            onProgress?.('info', msgCleanup);
-            if (item.existed && item.originalContent !== null) {
-              await writeFile(item.path, item.originalContent, 'utf8');
-            } else {
-              await rm(item.path).catch(() => { });
+
+          // 1. Build packages
+          onProgress?.('step-status', { id: 'build', status: 'running' });
+          let buildFailed = false;
+          for (const pkg of packagesToBuild) {
+            if (pkg.buildCommand) {
+              const msgBuild = `Running build command "${pkg.buildCommand}" in ${projectDir}...\n`;
+              console.log(`[od] ${msgBuild}`);
+              onProgress?.('info', msgBuild);
+              try {
+                await runCommand(pkg.buildCommand, projectDir, onProgress);
+              } catch (err: any) {
+                onProgress?.('step-status', { id: 'build', status: 'failed' });
+                console.error(`[od] Build command failed for ${pkg.name}:`, err.message);
+                throw new Error(`Build command failed: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+              }
             }
+          }
+          if (!buildFailed) {
+            onProgress?.('step-status', { id: 'build', status: 'completed' });
+          }
+
+          // 2. Prepare .npmrc paths to write and clean up
+          const npmrcFilesToClean: { path: string; originalContent: string | null; existed: boolean }[] = [];
+          onProgress?.('step-status', { id: 'config-npm', status: 'running' });
+
+          // Root .npmrc
+          const rootNpmrcPath = path.join(projectDir, '.npmrc');
+          const rootNpmrcExisted = await stat(rootNpmrcPath).then(() => true).catch(() => false);
+          let rootNpmrcContent: string | null = null;
+          if (rootNpmrcExisted) {
+            rootNpmrcContent = await readFile(rootNpmrcPath, 'utf8');
+          }
+          npmrcFilesToClean.push({ path: rootNpmrcPath, originalContent: rootNpmrcContent, existed: rootNpmrcExisted });
+
+          // Package-specific .npmrc files
+          for (const pkg of packagesToBuild) {
+            const pkgDir = await findPackageDir(projectDir, pkg.name);
+            if (pkgDir) {
+              const npmrcPath = path.join(pkgDir, '.npmrc');
+              if (npmrcPath !== rootNpmrcPath) {
+                const existed = await stat(npmrcPath).then(() => true).catch(() => false);
+                let originalContent: string | null = null;
+                if (existed) {
+                  originalContent = await readFile(npmrcPath, 'utf8');
+                }
+                npmrcFilesToClean.push({ path: npmrcPath, originalContent, existed });
+              }
+            }
+          }
+
+          try {
+            // 3. Write temporary .npmrc to all paths
+            const scopes = await findScopes(projectDir);
+            let npmrcLines = 'registry=http://127.0.0.1:4873/\n//127.0.0.1:4873/:_authToken="dummy-token"\n';
+            for (const scope of scopes) {
+              npmrcLines += `${scope}:registry=http://127.0.0.1:4873/\n`;
+            }
+
+            for (const item of npmrcFilesToClean) {
+              const msgNpmrc = `Writing temporary .npmrc to ${item.path}...\n`;
+              console.log(`[od] ${msgNpmrc}`);
+              onProgress?.('info', msgNpmrc);
+              await writeFile(
+                item.path,
+                npmrcLines,
+                'utf8'
+              );
+            }
+            onProgress?.('step-status', { id: 'config-npm', status: 'completed' });
+
+            // 4. Publish packages to verdaccio
+            onProgress?.('step-status', { id: 'publish', status: 'running' });
+            const filterArgs = packagesToBuild.map(pkg => `--filter ${pkg.name}...`).join(' ');
+            const msgPublish = `Publishing packages using: pnpm ${filterArgs} publish --no-git-checks\n`;
+            console.log(`[od] ${msgPublish}`);
+            onProgress?.('info', msgPublish);
+            try {
+              await runCommand(`pnpm ${filterArgs} publish --no-git-checks`, projectDir, onProgress);
+              onProgress?.('step-status', { id: 'publish', status: 'completed' });
+            } catch (err: any) {
+              onProgress?.('step-status', { id: 'publish', status: 'failed' });
+              console.error(`[od] pnpm publish failed:`, err.message);
+              throw new Error(`Failed to publish design system packages: ${err.message || String(err)}\nStdout: ${err.stdout || ''}\nStderr: ${err.stderr || ''}`);
+            }
+          } finally {
+            // 5. Clean up all temporary .npmrc files
+            onProgress?.('step-status', { id: 'cleanup', status: 'running' });
+            for (const item of npmrcFilesToClean) {
+              const msgCleanup = `Cleaning up temporary .npmrc in ${item.path}...\n`;
+              console.log(`[od] ${msgCleanup}`);
+              onProgress?.('info', msgCleanup);
+              if (item.existed && item.originalContent !== null) {
+                await writeFile(item.path, item.originalContent, 'utf8');
+              } else {
+                await rm(item.path).catch(() => { });
+              }
+            }
+            onProgress?.('step-status', { id: 'cleanup', status: 'completed' });
           }
         }
       } else {

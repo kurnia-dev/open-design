@@ -5,16 +5,24 @@ import { Icon } from './Icon';
 import { Spinner } from './Loading';
 import { useT } from '../i18n';
 
+export interface PublishStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+}
+
 interface Props {
   isPublishing: boolean;
   publishLogs: string[];
   setPublishLogs: (logs: string[]) => void;
+  publishSteps: PublishStep[];
 }
 
 export function ProjectPublishingPanel({
   isPublishing,
   publishLogs,
   setPublishLogs,
+  publishSteps,
 }: Props) {
   const t = useT();
   const [showLogs, setShowLogs] = useState(false);
@@ -29,50 +37,7 @@ export function ProjectPublishingPanel({
     }
   }, [publishLogs, showLogs]);
 
-  // Deduce step statuses from logs
-  const logsStr = publishLogs.join('\n');
-
-  const hasInstallStarted = logsStr.includes('Installing dependencies');
-  const hasBuildStarted = logsStr.includes('Running build command');
-  const hasNpmrcStarted = logsStr.includes('Writing temporary .npmrc');
-  const hasPublishStarted = logsStr.includes('Publishing packages');
-  const hasCleanupStarted = logsStr.includes('Cleaning up temporary');
-
-  let step1Status: 'pending' | 'running' | 'completed' | 'failed' = 'pending';
-  let step2Status: 'pending' | 'running' | 'completed' | 'failed' = 'pending';
-  let step3Status: 'pending' | 'running' | 'completed' | 'failed' = 'pending';
-  let step4Status: 'pending' | 'running' | 'completed' | 'failed' = 'pending';
-  let step5Status: 'pending' | 'running' | 'completed' | 'failed' = 'pending';
-
-  if (hasInstallStarted) {
-    if (hasBuildStarted) step1Status = 'completed';
-    else if (hasFailedPublish) step1Status = 'failed';
-    else step1Status = 'running';
-  }
-
-  if (hasBuildStarted) {
-    if (hasNpmrcStarted) step2Status = 'completed';
-    else if (hasFailedPublish && step1Status === 'completed') step2Status = 'failed';
-    else step2Status = 'running';
-  }
-
-  if (hasNpmrcStarted) {
-    if (hasPublishStarted) step3Status = 'completed';
-    else if (hasFailedPublish && step2Status === 'completed') step3Status = 'failed';
-    else step3Status = 'running';
-  }
-
-  if (hasPublishStarted) {
-    if (hasCleanupStarted) step4Status = 'completed';
-    else if (hasFailedPublish && step3Status === 'completed') step4Status = 'failed';
-    else step4Status = 'running';
-  }
-
-  if (hasCleanupStarted) {
-    if (hasSuccessfulPublish) step5Status = 'completed';
-    else if (hasFailedPublish && step4Status === 'completed') step5Status = 'failed';
-    else step5Status = 'running';
-  }
+  // We don't deduce steps from logs anymore, we use the `publishSteps` prop
 
   const renderStepIcon = (status: 'pending' | 'running' | 'completed' | 'failed') => {
     if (status === 'completed') {
@@ -142,14 +107,14 @@ export function ProjectPublishingPanel({
     <div className="ds-project-panel ds-project-panel--generating" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: '24px 0' }}>
       <style>{styles}</style>
       <div className="ds-project-generation-stage" style={{ width: 'min(500px, calc(100% - 48px))', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        
+
         {/* Animated Package Box Card */}
         <div style={{
           width: '240px',
           height: '140px',
           border: hasFailedPublish
             ? '2px dashed var(--red)'
-            : step4Status === 'running'
+            : isPublishing
               ? '2px dashed var(--accent)'
               : '2px dashed var(--border)',
           borderRadius: '16px',
@@ -161,21 +126,21 @@ export function ProjectPublishingPanel({
           position: 'relative',
           background: 'rgba(0, 0, 0, 0.02)',
           marginBottom: 24,
-          animation: step4Status === 'running' ? 'od-pulse-border 2s infinite' : 'none'
+          animation: isPublishing ? 'od-pulse-border 2s infinite' : 'none'
         }}>
           <div
-            className={`od-skeleton-line ${isPublishing && step4Status !== 'running' ? 'is-running' : step4Status === 'running' ? 'is-publishing' : hasFailedPublish ? 'is-failed' : ''}`}
+            className={`od-skeleton-line ${isPublishing ? 'is-publishing' : hasFailedPublish ? 'is-failed' : ''}`}
             style={{ width: '80%', animationDelay: '0s' }}
           />
           <div
-            className={`od-skeleton-line ${isPublishing && step4Status !== 'running' ? 'is-running' : step4Status === 'running' ? 'is-publishing' : hasFailedPublish ? 'is-failed' : ''}`}
+            className={`od-skeleton-line ${isPublishing ? 'is-publishing' : hasFailedPublish ? 'is-failed' : ''}`}
             style={{ width: '60%', animationDelay: '0.2s' }}
           />
           <div
-            className={`od-skeleton-line ${isPublishing && step4Status !== 'running' ? 'is-running' : step4Status === 'running' ? 'is-publishing' : hasFailedPublish ? 'is-failed' : ''}`}
+            className={`od-skeleton-line ${isPublishing ? 'is-publishing' : hasFailedPublish ? 'is-failed' : ''}`}
             style={{ width: '70%', animationDelay: '0.4s' }}
           />
-          
+
           <div style={{
             position: 'absolute',
             bottom: '16px',
@@ -229,70 +194,20 @@ export function ProjectPublishingPanel({
           textAlign: 'left',
           marginBottom: 16,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
-              {renderStepIcon(step1Status)}
+          {publishSteps.map((step) => (
+            <div key={step.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
+                {renderStepIcon(step.status)}
+              </div>
+              <span style={{
+                fontSize: '13.5px',
+                color: step.status === 'failed' ? 'var(--red)' : step.status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
+                fontWeight: step.status === 'running' ? 500 : 400
+              }}>
+                {step.label}
+              </span>
             </div>
-            <span style={{
-              fontSize: '13.5px',
-              color: step1Status === 'failed' ? 'var(--red)' : step1Status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
-              fontWeight: step1Status === 'running' ? 500 : 400
-            }}>
-              Installing dependencies
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
-              {renderStepIcon(step2Status)}
-            </div>
-            <span style={{
-              fontSize: '13.5px',
-              color: step2Status === 'failed' ? 'var(--red)' : step2Status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
-              fontWeight: step2Status === 'running' ? 500 : 400
-            }}>
-              Building packages
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
-              {renderStepIcon(step3Status)}
-            </div>
-            <span style={{
-              fontSize: '13.5px',
-              color: step3Status === 'failed' ? 'var(--red)' : step3Status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
-              fontWeight: step3Status === 'running' ? 500 : 400
-            }}>
-              Configuring npm registry
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
-              {renderStepIcon(step4Status)}
-            </div>
-            <span style={{
-              fontSize: '13.5px',
-              color: step4Status === 'failed' ? 'var(--red)' : step4Status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
-              fontWeight: step4Status === 'running' ? 500 : 400
-            }}>
-              Publishing packages
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px' }}>
-              {renderStepIcon(step5Status)}
-            </div>
-            <span style={{
-              fontSize: '13.5px',
-              color: step5Status === 'failed' ? 'var(--red)' : step5Status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
-              fontWeight: step5Status === 'running' ? 500 : 400
-            }}>
-              Cleaning up temporary files
-            </span>
-          </div>
+          ))}
         </div>
 
         {/* Small text-only toggle logs button */}

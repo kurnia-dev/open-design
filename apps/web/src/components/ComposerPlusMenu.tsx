@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   ConnectorDetail,
   InstalledPluginRecord,
@@ -369,8 +369,28 @@ function PlusSubmenuRow({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const [alignUp, setAlignUp] = useState(false);
+
+  const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
+  useIsomorphicLayoutEffect(() => {
+    if (open && rowRef.current && flyoutRef.current) {
+      const rowRect = rowRef.current.getBoundingClientRect();
+      const flyoutRect = flyoutRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rowRect.bottom;
+      if (spaceBelow < flyoutRect.height && rowRect.top > spaceBelow) {
+        setAlignUp(true);
+      } else {
+        setAlignUp(false);
+      }
+    }
+  }, [open]);
+
   return (
     <div
+      ref={rowRef}
       className="plus-menu__submenu-row"
       onMouseEnter={onOpen}
       onMouseLeave={onClose}
@@ -388,7 +408,12 @@ function PlusSubmenuRow({
         <Icon name="chevron-right" size={13} className="plus-menu__chevron" />
       </button>
       {open ? (
-        <div className="plus-menu__flyout" role="menu">
+        <div
+          ref={flyoutRef}
+          className="plus-menu__flyout"
+          role="menu"
+          style={alignUp ? { top: 'auto', bottom: '-5px' } : undefined}
+        >
           {children}
         </div>
       ) : null}

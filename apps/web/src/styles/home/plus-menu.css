@@ -107,6 +107,38 @@
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 10px 28px -10px rgba(0, 0, 0, 0.18);
+  max-height: min(400px, calc(100vh - 120px));
+  overflow-y: hidden;
+}
+.plus-menu__flyout:has(.composer-design-toolbox-head) {
+  min-width: 320px;
+  max-width: 380px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 0;
+}
+.plus-menu__flyout .composer-design-toolbox-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-panel);
+  padding: 9px 9px 6px;
+  margin: 0;
+}
+.plus-menu__flyout .composer-tools-filter {
+  position: sticky;
+  top: 41px;
+  z-index: 10;
+  background: var(--bg-panel);
+  padding: 4px 9px 6px;
+  margin: 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.plus-menu__flyout .composer-tools-list {
+  padding: 4px 5px;
+}
+.plus-menu__flyout .composer-tools-empty {
+  padding: 12px 9px;
 }
 /* Invisible bridge so the cursor can cross the gap into the flyout without
    triggering the row's mouseleave. */

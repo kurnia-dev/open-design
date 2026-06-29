@@ -2688,31 +2688,47 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  border-bottom: 0;
-  padding: 16px 0 28px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0 24px;
+  margin-bottom: 24px;
 }
 .ds-project-head--review h1 {
   margin: 0;
-  font-size: clamp(32px, 4vw, 42px);
+  font-size: 20px;
+  font-weight: 600;
 }
 .ds-project-publish-card--review {
-  margin: 0 0 30px;
-  padding: 0;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 10px 16px;
+  background: var(--bg-card, var(--bg-2));
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 .ds-project-publish-card--review > p {
   margin: 0;
-  padding: 20px 24px;
-  color: var(--text-muted);
-  font-size: 16px;
-  line-height: 1.55;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
 }
 .ds-project-publish-card--review .ds-project-use-row {
   margin: 0;
-  padding: 14px 24px;
-  border-top: 1px solid var(--border);
+  padding: 0;
+  border-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ds-project-publish-card--review .ds-project-use-row > span {
+  display: none;
 }
 .ds-project-section-group {
   display: flex;

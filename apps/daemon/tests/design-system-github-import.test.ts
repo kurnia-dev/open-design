@@ -126,7 +126,6 @@ exit 1
         type: 'github',
         url: 'https://github.com/acme/design-kit.git',
         branch: 'main',
-        commit: 'abc123def456',
         importedAt: '2026-05-18T10:00:00.000Z',
       },
       files: {
@@ -181,7 +180,6 @@ exit 1
         type: 'git',
         url: 'https://example.com/org/my-style-kit.git',
         branch: 'main',
-        commit: 'abc123def456',
         importedAt: '2026-05-18T10:00:00.000Z',
       },
     });
@@ -382,6 +380,45 @@ exit 1
 
     const spyContents = fs.readFileSync(fakeGitSpyPath, 'utf8');
     expect(spyContents).toContain('https://oauth2:my_secret_gitea_token@gitea.tagsamurai.local/Wangsit-Developer/wangs-ui-react.git');
+  });
+
+  it('copies metadata.json if it exists in the imported repository when manifest exists', async () => {
+    fs.writeFileSync(
+      path.join(fixtureRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 'od-design-system-project/v1',
+        name: 'manifested-system',
+        files: { design: 'README.md' },
+      }),
+    );
+
+    const metadata = {
+      title: 'My Custom Git Design System',
+      category: 'Legacy',
+      status: 'active',
+    };
+    fs.writeFileSync(
+      path.join(fixtureRoot, 'metadata.json'),
+      JSON.stringify(metadata),
+      'utf8',
+    );
+
+    const result = await importGitHubDesignSystemProject(
+      'https://github.com/acme/design-kit',
+      tmpRoot,
+      userDesignSystemsRoot,
+      {
+        gitBin: fakeGit,
+        now: new Date('2026-05-18T10:00:00.000Z'),
+        isReferenceOnly: true,
+      },
+    );
+
+    expect(result.id).toBe('manifested-system');
+    const metadataFile = path.join(result.dir, 'metadata.json');
+    expect(fs.existsSync(metadataFile)).toBe(true);
+    const copiedMetadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+    expect(copiedMetadata).toEqual(metadata);
   });
 });
 

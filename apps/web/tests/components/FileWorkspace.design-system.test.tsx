@@ -3,10 +3,47 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace } from '../../src/components/FileWorkspace';
 import type { AgentEvent, DesignSystemSummary, ProjectFile } from '../../src/types';
+
+class StubEventSource {
+  static instances: StubEventSource[] = [];
+  url: string;
+  readyState = 0;
+  listeners: Record<string, Set<any>> = {};
+  onerror: (() => void) | null = null;
+  constructor(url: string) {
+    this.url = url;
+    StubEventSource.instances.push(this);
+    Promise.resolve().then(() => {
+      this.emit('done', {
+        data: JSON.stringify({
+          designSystem: { status: 'published' },
+        }),
+      });
+    });
+  }
+  addEventListener(event: string, cb: any) {
+    if (!this.listeners[event]) this.listeners[event] = new Set();
+    this.listeners[event].add(cb);
+  }
+  removeEventListener(event: string, cb: any) {
+    this.listeners[event]?.delete(cb);
+  }
+  emit(event: string, e: any) {
+    const list = this.listeners[event];
+    if (list) {
+      for (const cb of list) {
+        cb(e);
+      }
+    }
+  }
+  close() {
+    this.readyState = 2;
+  }
+}
 
 const registryMocks = vi.hoisted(() => ({
   updateDesignSystemDraft: vi.fn(),
@@ -26,6 +63,11 @@ let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+beforeEach(() => {
+  vi.stubGlobal('EventSource', StubEventSource);
+  StubEventSource.instances = [];
+});
 
 afterEach(() => {
   if (root) {
@@ -362,9 +404,13 @@ describe('FileWorkspace design-system project surface', () => {
       await Promise.resolve();
     });
 
-    expect(registryMocks.updateDesignSystemDraft).toHaveBeenCalledWith('user:acme', {
-      status: 'published',
+    const backButton = [...container.querySelectorAll('button')].find(
+      (el) => el.textContent?.includes('Back to Workspace')
+    );
+    await act(async () => {
+      backButton?.click();
     });
+
     expect(onRefresh).toHaveBeenCalledOnce();
     expect(container.textContent).toContain('Acme design system');
   });

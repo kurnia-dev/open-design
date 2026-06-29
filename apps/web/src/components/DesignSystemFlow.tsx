@@ -1079,7 +1079,6 @@ export function DesignSystemDetailView({
     async function syncWorkspaceProject() {
       setWorkspaceLoadError(null);
       const resolved = await resolveDesignSystemWorkspaceProject(currentSystem);
-      debugger;
       if (cancelled) return;
       if (!resolved) {
         setWorkspaceLoadError('Could not open the design system workspace.');

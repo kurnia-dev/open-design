@@ -279,7 +279,7 @@ async function copyDocAndManifestFiles(
         nameLower === 'design.md' ||
         nameLower === 'readme.md' ||
         nameLower.startsWith('readme.') ||
-        (hasManifest && nameLower === 'manifest.json')
+        (hasManifest && (nameLower === 'manifest.json' || nameLower === 'metadata.json'))
       ) {
         await copyFile(path.join(sourceRoot, entry.name), path.join(destDir, entry.name));
       }

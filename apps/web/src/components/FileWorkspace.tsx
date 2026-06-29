@@ -2697,7 +2697,11 @@ function DesignSystemProjectPanel({
     : sectionReviews;
   const needsReviewSectionReviews = visibleSectionReviews.filter(designSystemReviewNeedsAttention);
   const primaryNeedsReview = needsReviewSectionReviews.slice(0, 1);
-  const groupedSectionReviews = designSystemReviewGroups(visibleSectionReviews);
+  const groupedSectionReviews = designSystemReviewGroups(
+    visibleSectionReviews.filter(
+      (item) => !primaryNeedsReview.some((p) => p.section.title === item.section.title),
+    ),
+  );
   const creatingInitialDraft = streaming && !published;
   const generationSteps = designSystemInitialGenerationSteps({
     files,
@@ -2868,7 +2872,7 @@ function DesignSystemProjectPanel({
             <Icon name={expanded ? 'chevron-down' : 'chevron-right'} size={13} />
             <span>
               <strong>{section.title}</strong>
-              <small>{section.subtitle}</small>
+              <small>{section.category} • {section.subtitle}</small>
             </span>
             {!expanded ? (
               <span

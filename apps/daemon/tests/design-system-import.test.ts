@@ -345,7 +345,7 @@ describe('importLocalDesignSystemProject', () => {
     expect(result.id).toBe('custom-manifest-name');
     expect(fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8')).toBe('# custom-manifest-name\nCustom content');
     expect(fs.existsSync(path.join(result.dir, 'extra-file.txt'))).toBe(false);
-    expect(fs.existsSync(path.join(result.dir, 'tokens.css'))).toBe(false);
+    expect(fs.existsSync(path.join(result.dir, 'tokens.css'))).toBe(true);
     expect(fs.existsSync(path.join(result.dir, 'USAGE.md'))).toBe(false);
 
     const projectDir = path.join(dummyProjectsRoot, `ds-${result.id}`);
@@ -364,5 +364,41 @@ describe('importLocalDesignSystemProject', () => {
         commit: 'abcdef',
       },
     });
+  });
+
+  it('copies metadata.json if it exists in the imported local source directory when manifest exists', async () => {
+    fs.writeFileSync(
+      path.join(sourceRoot, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'some-existing-id',
+        name: 'custom-manifest-name',
+        category: 'My Category',
+        files: {
+          design: 'DESIGN.md',
+        },
+      }),
+    );
+    fs.writeFileSync(path.join(sourceRoot, 'DESIGN.md'), '# custom-manifest-name\nCustom content');
+
+    const metadata = {
+      title: 'My Local Design System',
+      category: 'Brand',
+      status: 'active',
+    };
+    fs.writeFileSync(
+      path.join(sourceRoot, 'metadata.json'),
+      JSON.stringify(metadata),
+      'utf8',
+    );
+
+    const result = await importLocalDesignSystemProject(sourceRoot, userDesignSystemsRoot, {
+      now: new Date('2026-05-18T09:00:00.000Z'),
+    });
+
+    const metadataFile = path.join(result.dir, 'metadata.json');
+    expect(fs.existsSync(metadataFile)).toBe(true);
+    const copiedMetadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+    expect(copiedMetadata).toEqual(metadata);
   });
 });

@@ -46,24 +46,35 @@ const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
 const CONTAINER_NODE_VERSION = "24.14.1";
 const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
 
-export const INTERNAL_PACKAGES = [
-  { directory: "packages/components", name: "@open-design/components" },
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
-  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
-  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "apps/daemon", name: "@open-design/daemon" },
-  { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
-] as const;
+export type InternalPackage = { directory: string; name: string };
+
+export function resolveInternalPackages(pruned: boolean): readonly InternalPackage[] {
+  return [
+    { directory: "packages/components", name: "@open-design/components" },
+    { directory: "packages/contracts", name: "@open-design/contracts" },
+    { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
+    { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
+    { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
+    { directory: "packages/sidecar", name: "@open-design/sidecar" },
+    { directory: "packages/platform", name: "@open-design/platform" },
+    { directory: "packages/download", name: "@open-design/download" },
+    { directory: "packages/host", name: "@open-design/host" },
+    { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
+    { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
+    { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
+    ...(pruned
+      ? [
+          { directory: "apps/daemon-pruned", name: "@open-design/daemon-pruned" },
+          { directory: "apps/web-pruned", name: "@open-design/web-pruned" },
+        ]
+      : [
+          { directory: "apps/daemon", name: "@open-design/daemon" },
+          { directory: "apps/web", name: "@open-design/web" },
+        ]),
+    { directory: "apps/desktop", name: "@open-design/desktop" },
+    { directory: "apps/packaged", name: "@open-design/packaged" },
+  ];
+}
 
 export function sanitizeNamespace(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
@@ -388,7 +399,11 @@ async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
 }
 
 async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const daemonPkg = config.pruned ? "@open-design/daemon-pruned" : "@open-design/daemon";
+  const webPkg = config.pruned ? "@open-design/web-pruned" : "@open-design/web";
+
+  const webNextEnvPath = join(config.workspaceRoot, "apps", webDir, "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
@@ -404,10 +419,10 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
+  await runPnpm(config, ["--filter", daemonPkg, "build"]);
   try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
+    await runPnpm(config, ["--filter", webPkg, "build"], { OD_WEB_OUTPUT_MODE: "server" });
+    await runPnpm(config, ["--filter", webPkg, "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files before AppImage packaging. See
     // `tools/pack/src/web-sourcemaps.ts`.
@@ -427,7 +442,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
 
 type PackedTarballInfo = {
   fileName: string;
-  packageName: (typeof INTERNAL_PACKAGES)[number]["name"];
+  packageName: string;
 };
 
 async function collectWorkspaceTarballs(
@@ -438,7 +453,7 @@ async function collectWorkspaceTarballs(
   await mkdir(paths.tarballsRoot, { recursive: true });
   const packed: PackedTarballInfo[] = [];
 
-  for (const pkg of INTERNAL_PACKAGES) {
+  for (const pkg of resolveInternalPackages(config.pruned)) {
     const before = new Set(await readdir(paths.tarballsRoot));
     await runPnpm(config, ["-C", pkg.directory, "pack", "--pack-destination", paths.tarballsRoot]);
     const after = await readdir(paths.tarballsRoot);
@@ -457,15 +472,18 @@ async function copyResourceTree(config: ToolPackConfig, paths: LinuxPaths): Prom
   await copyBundledResourceTrees({
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
+    pruned: config.pruned,
   });
   await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
   await cp(process.execPath, join(paths.resourceRoot, "bin", "node"));
   await chmod(join(paths.resourceRoot, "bin", "node"), 0o755);
-  await copyOptionalVelaCliBinary({
-    platform: "linux",
-    requireBundled: config.requireVelaCli,
-    resourceRoot: paths.resourceRoot,
-  });
+  if (!config.pruned) {
+    await copyOptionalVelaCliBinary({
+      platform: "linux",
+      requireBundled: config.requireVelaCli,
+      resourceRoot: paths.resourceRoot,
+    });
+  }
 }
 
 // --- Step 4: writeAssembledApp helper ---

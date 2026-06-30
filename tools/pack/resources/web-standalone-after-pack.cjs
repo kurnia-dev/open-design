@@ -21,6 +21,15 @@ function requireString(record, key) {
   return value;
 }
 
+function optionalString(record, key, fallback) {
+  const value = record[key];
+  if (value == null) return fallback;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`[tools-pack web-standalone] config.${key} must be a non-empty string`);
+  }
+  return value;
+}
+
 function requireBoolean(record, key) {
   const value = record[key];
   if (typeof value !== "boolean") {
@@ -116,6 +125,7 @@ async function readHookConfig() {
     webPublicSourceRoot,
     webStaticSourceRoot,
     workspaceRoot,
+    webDirName: optionalString(raw, "webDirName", "web"),
   };
 }
 
@@ -221,9 +231,9 @@ async function linkPnpmPublicHoist(destinationRoot, options = {}) {
   return linked;
 }
 
-async function resolveStandaloneSourceWebRoot(standaloneSourceRoot) {
+async function resolveStandaloneSourceWebRoot(standaloneSourceRoot, webDirName) {
   const candidates = [
-    path.join(standaloneSourceRoot, "apps", "web"),
+    path.join(standaloneSourceRoot, "apps", webDirName),
     standaloneSourceRoot,
   ];
 
@@ -235,9 +245,9 @@ async function resolveStandaloneSourceWebRoot(standaloneSourceRoot) {
 }
 
 async function installStandaloneResource(config, resourcesRoot, platformName) {
-  const sourceWebRoot = await resolveStandaloneSourceWebRoot(config.standaloneSourceRoot);
+  const sourceWebRoot = await resolveStandaloneSourceWebRoot(config.standaloneSourceRoot, config.webDirName);
   const destinationRoot = path.join(resourcesRoot, config.resourceName);
-  const destinationWebRoot = path.join(destinationRoot, "apps", "web");
+  const destinationWebRoot = path.join(destinationRoot, "apps", config.webDirName);
   const copyOptions = { dereference: platformName === "win32" };
 
   await rm(destinationRoot, { force: true, recursive: true });
@@ -756,7 +766,7 @@ async function auditCopiedStandaloneNextDedupe(installResult, platformName) {
   };
 }
 
-async function pruneRootNext(appNodeModulesRoot, platformName) {
+async function pruneRootNext(appNodeModulesRoot, platformName, webDirName) {
   const removedPaths = [];
 
   if (platformName === "win32") {
@@ -781,8 +791,8 @@ async function pruneRootNext(appNodeModulesRoot, platformName) {
   }
 
   await removePathAndRecord(
-    path.join(appNodeModulesRoot, "@open-design", "web", ".next", "standalone"),
-    "root @open-design/web standalone output",
+    path.join(appNodeModulesRoot, "@open-design", webDirName, ".next", "standalone"),
+    `root @open-design/${webDirName} standalone output`,
     removedPaths,
   );
 
@@ -829,28 +839,28 @@ async function pruneRootSharp(appNodeModulesRoot) {
   return removedPaths;
 }
 
-async function pruneRootWebPackage(appNodeModulesRoot, platformName) {
+async function pruneRootWebPackage(appNodeModulesRoot, platformName, webDirName) {
   if (platformName !== "win32") return [];
 
-  const webPackageRoot = path.join(appNodeModulesRoot, "@open-design", "web");
+  const webPackageRoot = path.join(appNodeModulesRoot, "@open-design", webDirName);
   const removedPaths = [];
   for (const entry of [".next", "app", "next.config.ts", "public", "src"]) {
     await removePathAndRecord(
       path.join(webPackageRoot, entry),
-      "root @open-design/web standalone-safe package residue",
+      `root @open-design/${webDirName} standalone-safe package residue`,
       removedPaths,
     );
   }
   return removedPaths;
 }
 
-async function auditRootWebPackage(appNodeModulesRoot) {
-  const webPackageRoot = path.join(appNodeModulesRoot, "@open-design", "web");
+async function auditRootWebPackage(appNodeModulesRoot, webDirName) {
+  const webPackageRoot = path.join(appNodeModulesRoot, "@open-design", webDirName);
   const packageJsonPath = path.join(webPackageRoot, "package.json");
   const sidecarEntryPath = path.join(webPackageRoot, "dist", "sidecar", "index.js");
   for (const requiredPath of [packageJsonPath, sidecarEntryPath]) {
     if (!(await pathExists(requiredPath))) {
-      throw new Error(`[tools-pack web-standalone] root @open-design/web audit missing: ${requiredPath}`);
+      throw new Error(`[tools-pack web-standalone] root @open-design/${webDirName} audit missing: ${requiredPath}`);
     }
   }
   return {
@@ -908,14 +918,14 @@ async function runWebStandaloneAfterPack(context) {
     context.electronPlatformName,
   );
   const copiedAudit = await auditCopiedStandalone(config, installResult, context.electronPlatformName);
-  const rootPrune = config.pruneRootNext ? await pruneRootNext(appNodeModulesRoot, context.electronPlatformName) : [];
+  const rootPrune = config.pruneRootNext ? await pruneRootNext(appNodeModulesRoot, context.electronPlatformName, config.webDirName) : [];
   const rootSharpPrune = config.pruneRootSharp ? await pruneRootSharp(appNodeModulesRoot) : [];
-  const rootWebPackagePrune = await pruneRootWebPackage(appNodeModulesRoot, context.electronPlatformName);
+  const rootWebPackagePrune = await pruneRootWebPackage(appNodeModulesRoot, context.electronPlatformName, config.webDirName);
   const rootBuildResiduePrune = context.electronPlatformName === "win32"
     ? await pruneSourceBuildResidue(appNodeModulesRoot, "root app source/build residue")
     : [];
   const rootWebPackageAudit = context.electronPlatformName === "win32" && config.requireRootWebPackageAudit
-    ? await auditRootWebPackage(appNodeModulesRoot)
+    ? await auditRootWebPackage(appNodeModulesRoot, config.webDirName)
     : null;
   const rootNextPruneAudit = await auditRootNextPruned(
     appNodeModulesRoot,

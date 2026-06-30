@@ -66,15 +66,18 @@ export async function prepareResourceTree(
       await copyBundledResourceTrees({
         workspaceRoot: config.workspaceRoot,
         resourceRoot,
+        pruned: config.pruned,
       });
       await mkdir(join(resourceRoot, "bin"), { recursive: true });
       await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
       await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));
-      await copyOptionalVelaCliBinary({
-        platform: "win",
-        requireBundled: config.requireVelaCli,
-        resourceRoot,
-      });
+      if (!config.pruned) {
+        await copyOptionalVelaCliBinary({
+          platform: "win",
+          requireBundled: config.requireVelaCli,
+          resourceRoot,
+        });
+      }
       return { resourceName: "open-design" };
     },
   };

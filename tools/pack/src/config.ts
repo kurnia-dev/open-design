@@ -44,6 +44,7 @@ export type ToolPackCliOptions = {
   silent?: boolean;
   to?: string;
   updateAction?: string;
+  pruned?: boolean;
 };
 
 export type ToolPackRoots = {
@@ -124,6 +125,7 @@ export type ToolPackConfig = {
   to: ToolPackBuildOutput;
   webOutputMode: ToolPackWebOutputMode;
   workspaceRoot: string;
+  pruned: boolean;
 };
 
 function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | undefined): ToolPackBuildOutput {
@@ -360,5 +362,6 @@ export function resolveToolPackConfig(
     to: resolveToolPackBuildOutput(platform, options.to),
     webOutputMode: resolveToolPackWebOutputMode(platform, process.env.OD_WEB_OUTPUT_MODE),
     workspaceRoot: WORKSPACE_ROOT,
+    pruned: options.pruned === true,
   };
 }

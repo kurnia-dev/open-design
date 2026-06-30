@@ -116,6 +116,7 @@ function createConfig(root: string, cacheRoot: string): ToolPackConfig {
     to: "dir",
     webOutputMode: "standalone",
     workspaceRoot: root,
+    pruned: false,
   };
 }
 

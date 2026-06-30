@@ -2,11 +2,9 @@ import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot,
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { CacheReport } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
-import type { INTERNAL_PACKAGES } from "./constants.js";
-
 export type PackedTarballInfo = {
   fileName: string;
-  packageName: (typeof INTERNAL_PACKAGES)[number]["name"];
+  packageName: string;
 };
 
 export type PackedTarballsCacheMetadata = {

@@ -92,7 +92,21 @@ type PackagedDaemonManagedPathEnv = {
 };
 
 function resolveSidecarEntry(packageName: string, exportName: string): string {
-  return require.resolve(`${packageName}/${exportName}`);
+  try {
+    return require.resolve(`${packageName}/${exportName}`);
+  } catch (err) {
+    if (packageName === "@open-design/daemon") {
+      try {
+        return require.resolve(`@open-design/daemon-pruned/${exportName}`);
+      } catch {}
+    }
+    if (packageName === "@open-design/web") {
+      try {
+        return require.resolve(`@open-design/web-pruned/${exportName}`);
+      } catch {}
+    }
+    throw err;
+  }
 }
 
 function logPathFor(paths: PackagedNamespacePaths, app: AppKey): string {

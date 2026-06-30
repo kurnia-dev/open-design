@@ -75,10 +75,11 @@ function logWinBuildProgress(message: string, fields: Record<string, unknown> = 
 }
 
 async function assertWebStandaloneOutput(config: ToolPackConfig): Promise<void> {
-  const webRoot = join(config.workspaceRoot, "apps", "web");
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const webRoot = join(config.workspaceRoot, "apps", webDir);
   const standaloneSourceRoot = join(webRoot, ".next", "standalone");
   const candidates = [
-    join(standaloneSourceRoot, "apps", "web", "server.js"),
+    join(standaloneSourceRoot, "apps", webDir, "server.js"),
     join(standaloneSourceRoot, "server.js"),
   ];
 
@@ -86,11 +87,12 @@ async function assertWebStandaloneOutput(config: ToolPackConfig): Promise<void> 
     if (await pathExists(candidate)) return;
   }
 
-  throw new Error("Next.js standalone server output was not produced under apps/web/.next/standalone");
+  throw new Error(`Next.js standalone server output was not produced under apps/${webDir}/.next/standalone`);
 }
 
 async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPaths): Promise<string> {
-  const webRoot = join(config.workspaceRoot, "apps", "web");
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const webRoot = join(config.workspaceRoot, "apps", webDir);
   await assertWebStandaloneOutput(config);
 
   await mkdir(dirname(paths.webStandaloneHookConfigPath), { recursive: true });
@@ -109,6 +111,7 @@ async function writeWebStandaloneHookConfig(config: ToolPackConfig, paths: WinPa
         webPublicSourceRoot: join(webRoot, "public"),
         webStaticSourceRoot: join(webRoot, ".next", "static"),
         workspaceRoot: config.workspaceRoot,
+        webDirName: webDir,
       },
       null,
       2,
@@ -762,6 +765,7 @@ export async function runElectronBuilder(
     }
 
     const materialized = await runSegment("installer:materialize-unpacked", async () => {
+      const webDir = config.pruned ? "web-pruned" : "web";
       const materializedManifest = await cache.readHit({
         materialize: [{
           from: "builder/win-unpacked",
@@ -769,7 +773,7 @@ export async function runElectronBuilder(
           reuseRequiredPaths: [
             ...resolveWinNsisOverlayRequiredPaths(),
             [
-              "resources/open-design-web-standalone/apps/web/server.js",
+              `resources/open-design-web-standalone/apps/${webDir}/server.js`,
               "resources/open-design-web-standalone/server.js",
             ],
           ],

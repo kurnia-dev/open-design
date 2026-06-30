@@ -40,6 +40,7 @@ function makeConfig(root: string, namespace: string): ToolPackConfig {
     to: "dmg",
     webOutputMode: "standalone",
     workspaceRoot: root,
+    pruned: false,
   };
 }
 

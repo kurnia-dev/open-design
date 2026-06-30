@@ -48,6 +48,7 @@ function makeConfig(root: string, platform: ToolPackPlatform, namespace: string,
     to: platform === "win" ? "nsis" : "app",
     webOutputMode: "standalone",
     workspaceRoot: root,
+    pruned: false,
   };
 }
 

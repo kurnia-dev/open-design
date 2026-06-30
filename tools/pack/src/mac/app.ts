@@ -25,7 +25,7 @@ import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
   ELECTRON_REBUILD_MODE,
   ELECTRON_REBUILD_NATIVE_MODULES,
-  INTERNAL_PACKAGES,
+  resolveInternalPackages,
 } from "./constants.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import { readPackagedVersion } from "./manifest.js";
@@ -44,6 +44,9 @@ async function buildPrebundledStandaloneRuntime(
   config: ToolPackConfig,
   paths: MacPaths,
 ): Promise<void> {
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const daemonDir = config.pruned ? "daemon-pruned" : "daemon";
+
   await mkdir(paths.assembledPrebundledRoot, { recursive: true });
   await mkdir(dirname(paths.packagedMainPrebundleMetaPath), { recursive: true });
   await runEsbuild(config, [
@@ -62,7 +65,7 @@ async function buildPrebundledStandaloneRuntime(
   });
 
   await runEsbuild(config, [
-    join(config.workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
+    join(config.workspaceRoot, "apps", webDir, "dist", "sidecar", "index.js"),
     "--bundle",
     "--platform=node",
     "--format=esm",
@@ -82,7 +85,7 @@ async function buildPrebundledStandaloneRuntime(
     `import ${JSON.stringify(
       toRelativeImportSpecifier(
         dirname(paths.daemonSidecarPrebundleEntrypointPath),
-        join(config.workspaceRoot, "apps", "daemon", "dist", "sidecar", "index.js"),
+        join(config.workspaceRoot, "apps", daemonDir, "dist", "sidecar", "index.js"),
       ),
     )};\n`,
     "utf8",
@@ -97,7 +100,7 @@ async function buildPrebundledStandaloneRuntime(
       `await import(${JSON.stringify(
         toRelativeImportSpecifier(
           dirname(paths.daemonCliPrebundleEntrypointPath),
-          join(config.workspaceRoot, "apps", "daemon", "dist", "cli.js"),
+          join(config.workspaceRoot, "apps", daemonDir, "dist", "cli.js"),
         ),
       )});`,
       "",
@@ -137,12 +140,15 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
   await copyBundledResourceTrees({
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
+    pruned: config.pruned,
   });
-  await copyOptionalVelaCliBinary({
-    platform: "mac",
-    requireBundled: config.requireVelaCli,
-    resourceRoot: paths.resourceRoot,
-  });
+  if (!config.pruned) {
+    await copyOptionalVelaCliBinary({
+      platform: "mac",
+      requireBundled: config.requireVelaCli,
+      resourceRoot: paths.resourceRoot,
+    });
+  }
 }
 
 export function renderMacPackagedConfig(options: {
@@ -236,7 +242,7 @@ export async function collectWorkspaceTarballs(
   await mkdir(paths.tarballsRoot, { recursive: true });
   const packedTarballs: PackedTarballInfo[] = [];
 
-  for (const packageInfo of INTERNAL_PACKAGES) {
+  for (const packageInfo of resolveInternalPackages(config.pruned)) {
     if (
       !shouldInstallInternalPackageForMacPrebundle({
         packageName: packageInfo.name,
@@ -284,7 +290,7 @@ export async function writeAssembledApp(
   );
   const usePrebundledStandaloneWeb = shouldUseMacStandalonePrebundle(config.webOutputMode);
   const internalDependencies = Object.fromEntries(
-    INTERNAL_PACKAGES.filter((packageInfo) =>
+    resolveInternalPackages(config.pruned).filter((packageInfo) =>
       shouldInstallInternalPackageForMacPrebundle({
         packageName: packageInfo.name,
         webOutputMode: config.webOutputMode,

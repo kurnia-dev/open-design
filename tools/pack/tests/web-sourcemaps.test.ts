@@ -53,7 +53,7 @@ afterEach(async () => {
   restoreEnv("POSTHOG_CLI_PROJECT_ID", SAVED_PROJECT_ID);
 });
 
-function fakeConfig(workspaceRoot: string): ToolPackConfig {
+function fakeConfig(workspaceRoot: string, pruned = false): ToolPackConfig {
   return {
     appVersion: "0.0.0-test",
     containerized: false,
@@ -88,11 +88,13 @@ function fakeConfig(workspaceRoot: string): ToolPackConfig {
     to: "all",
     webOutputMode: "standalone",
     workspaceRoot,
+    pruned,
   };
 }
 
-async function setupChunksDir(rootDir: string, mapNames: string[]): Promise<string> {
-  const chunksDir = join(rootDir, "apps", "web", ".next", "static");
+async function setupChunksDir(rootDir: string, mapNames: string[], pruned = false): Promise<string> {
+  const webDir = pruned ? "web-pruned" : "web";
+  const chunksDir = join(rootDir, "apps", webDir, ".next", "static");
   await mkdir(join(chunksDir, "chunks"), { recursive: true });
   // Always create a .js file paired with each .map so the layout matches what
   // Next.js actually emits — otherwise a future helper change that filters by
@@ -162,5 +164,18 @@ describe("processWebSourcemaps", () => {
 
     await expect(readFile(join(nestedDir, "x.js.map"), "utf8")).rejects.toThrow();
     await expect(readFile(join(nestedDir, "x.js"), "utf8")).resolves.toContain("/*");
+  });
+
+  it("strips every .map file under web-pruned (pruned path)", async () => {
+    const chunksDir = await setupChunksDir(tempRoot, [
+      "framework-abc.js.map",
+    ], true);
+    const config = fakeConfig(tempRoot, true);
+
+    await processWebSourcemaps(config);
+
+    await expect(
+      readFile(join(chunksDir, "chunks", "framework-abc.js.map"), "utf8"),
+    ).rejects.toThrow();
   });
 });

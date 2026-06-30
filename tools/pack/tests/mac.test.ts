@@ -59,6 +59,7 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
     webOutputMode: "standalone",
     workspaceRoot: root,
     ...overrides,
+    pruned: overrides.pruned ?? false,
   };
 }
 

@@ -48,7 +48,7 @@ export async function collectMacSizeReport(
     builder: {
       asar: ELECTRON_BUILDER_ASAR,
       compression: config.macCompression,
-      electronLanguages: MAC_ELECTRON_LANGUAGES,
+      electronLanguages: config.pruned ? ["en", "id"] : MAC_ELECTRON_LANGUAGES,
       filePatterns: ELECTRON_BUILDER_FILE_PATTERNS,
       nativeRebuild: {
         buildFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,

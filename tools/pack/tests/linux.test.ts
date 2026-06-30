@@ -81,6 +81,7 @@ function makeConfig(): ToolPackConfig {
     to: "all",
     webOutputMode: "server",
     workspaceRoot: "/work",
+    pruned: false,
   };
 }
 

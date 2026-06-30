@@ -8,7 +8,11 @@ import { ensureWorkspaceBuildArtifacts } from "../workspace-build.js";
 import { runPnpm } from "./commands.js";
 
 async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const daemonPkg = config.pruned ? "@open-design/daemon-pruned" : "@open-design/daemon";
+  const webPkg = config.pruned ? "@open-design/web-pruned" : "@open-design/web";
+
+  const webNextEnvPath = join(config.workspaceRoot, "apps", webDir, "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
@@ -22,12 +26,12 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
+  await runPnpm(config, ["--filter", daemonPkg, "build"]);
   try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], {
+    await runPnpm(config, ["--filter", webPkg, "build"], {
       OD_WEB_OUTPUT_MODE: config.webOutputMode,
     });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
+    await runPnpm(config, ["--filter", webPkg, "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files. Runs before any packaging step copies the web output into
     // the Electron resources so .map never ends up inside the .app bundle.

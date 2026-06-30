@@ -64,11 +64,12 @@ interface SourcemapCliEnv {
   host?: string;
 }
 
-function resolveBrowserChunksDir(workspaceRoot: string): string {
+function resolveBrowserChunksDir(workspaceRoot: string, pruned: boolean): string {
   // Both `output: 'standalone'` (mac/win) and the implicit server output
   // (linux) write browser chunks to `.next/static`. Static-export mode
-  // (`apps/web/out/_next/static`) is not used by any release artifact.
-  return join(workspaceRoot, "apps", "web", ".next", "static");
+  // (`apps/web/out/_next/static` or `apps/web-pruned/out/_next/static`) is not used by any release artifact.
+  const webDir = pruned ? "web-pruned" : "web";
+  return join(workspaceRoot, "apps", webDir, ".next", "static");
 }
 
 async function findMapFiles(dir: string): Promise<string[]> {
@@ -143,7 +144,7 @@ export async function processWebSourcemaps(
   config: ToolPackConfig,
   options: WebSourcemapOptions = {},
 ): Promise<void> {
-  const chunksDir = resolveBrowserChunksDir(config.workspaceRoot);
+  const chunksDir = resolveBrowserChunksDir(config.workspaceRoot, config.pruned);
   if (!existsSync(chunksDir)) {
     log(`browser chunks dir not found at ${chunksDir}; skipping`);
     return;

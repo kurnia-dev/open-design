@@ -33,7 +33,7 @@ import {
   ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
   ELECTRON_REBUILD_MODE,
   ELECTRON_REBUILD_NATIVE_MODULES,
-  INTERNAL_PACKAGES,
+  resolveInternalPackages,
   PRODUCT_NAME,
 } from "./constants.js";
 import { readPackagedVersion, writePackagedConfig } from "./manifest.js";
@@ -114,7 +114,12 @@ async function validateNativeRebuildOutput(appRoot: string): Promise<string | nu
 }
 
 async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const daemonDir = config.pruned ? "daemon-pruned" : "daemon";
+  const webPkg = config.pruned ? "@open-design/web-pruned" : "@open-design/web";
+  const daemonPkg = config.pruned ? "@open-design/daemon-pruned" : "@open-design/daemon";
+
+  const webNextEnvPath = join(config.workspaceRoot, "apps", webDir, "next-env.d.ts");
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
@@ -128,10 +133,10 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/host", "build"]);
   await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/components", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
+  await runPnpm(config, ["--filter", daemonPkg, "build"]);
   try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
+    await runPnpm(config, ["--filter", webPkg, "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
+    await runPnpm(config, ["--filter", webPkg, "build:sidecar"]);
     // Inject chunk IDs + upload browser sourcemaps to PostHog, then strip
     // .map files before any packaging step copies the web output into the
     // Electron resources. See `tools/pack/src/web-sourcemaps.ts`.
@@ -152,7 +157,7 @@ export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: Too
 
 export async function createWorkspaceTarballsCacheKey(config: ToolPackConfig): Promise<string> {
   const packageHashes: Record<string, string> = {};
-  for (const packageInfo of INTERNAL_PACKAGES) {
+  for (const packageInfo of resolveInternalPackages(config.pruned)) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
   const rootPackageJson = JSON.parse(await readFile(join(config.workspaceRoot, "package.json"), "utf8")) as {
@@ -185,7 +190,7 @@ export async function collectWorkspaceTarballs(
       const tarballsRoot = join(entryRoot, "tarballs");
       await mkdir(tarballsRoot, { recursive: true });
       const packedTarballs: PackedTarballInfo[] = [];
-      for (const packageInfo of INTERNAL_PACKAGES) {
+      for (const packageInfo of resolveInternalPackages(config.pruned)) {
         if (
           !shouldInstallInternalPackageForWinPrebundle({
             packageName: packageInfo.name,
@@ -220,7 +225,7 @@ function createAssembledAppDependencies(
 ): Record<string, string> {
   const tarballByPackage = Object.fromEntries(packedTarballs.map((entry) => [entry.packageName, entry.fileName] as const));
   const internalDependencies = Object.fromEntries(
-    INTERNAL_PACKAGES.filter((packageInfo) =>
+    resolveInternalPackages(config.pruned).filter((packageInfo) =>
       shouldInstallInternalPackageForWinPrebundle({
         packageName: packageInfo.name,
         webOutputMode: config.webOutputMode,

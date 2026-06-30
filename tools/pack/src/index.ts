@@ -68,7 +68,8 @@ function addSharedOptions(command: CacCommand) {
     .option("--namespace <name>", "runtime namespace")
     .option("--expr <expression>", "desktop inspect eval expression")
     .option("--path <path>", "desktop inspect screenshot path")
-    .option("--update-action <action>", "desktop update action: status|check|download|install");
+    .option("--update-action <action>", "desktop update action: status|check|download|install")
+    .option("--pruned", "use pruned versions of apps (daemon-pruned and web-pruned)");
 }
 
 // Per-platform `--to` help text mirroring resolveToolPackBuildOutput in

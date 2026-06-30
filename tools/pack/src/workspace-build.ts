@@ -7,44 +7,57 @@ import type { ToolPackConfig } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
 import { readRuntimeAppVersion, versionFamilyForAppVersion } from "./versions.js";
 
-const WORKSPACE_BUILD_PACKAGES = [
-  { directory: "packages/components", name: "@open-design/components" },
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
-  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "apps/daemon", name: "@open-design/daemon" },
-  { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
-] as const;
+function resolveWorkspaceBuildPackages(pruned: boolean) {
+  return [
+    { directory: "packages/components", name: "@open-design/components" },
+    { directory: "packages/contracts", name: "@open-design/contracts" },
+    { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
+    { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
+    { directory: "packages/launcher-proto", name: "@open-design/launcher-proto" },
+    { directory: "packages/sidecar", name: "@open-design/sidecar" },
+    { directory: "packages/platform", name: "@open-design/platform" },
+    { directory: "packages/download", name: "@open-design/download" },
+    { directory: "packages/host", name: "@open-design/host" },
+    { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
+    { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
+    { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
+    ...(pruned
+      ? [
+          { directory: "apps/daemon-pruned", name: "@open-design/daemon-pruned" },
+          { directory: "apps/web-pruned", name: "@open-design/web-pruned" },
+        ]
+      : [
+          { directory: "apps/daemon", name: "@open-design/daemon" },
+          { directory: "apps/web", name: "@open-design/web" },
+        ]),
+    { directory: "apps/desktop", name: "@open-design/desktop" },
+    { directory: "apps/packaged", name: "@open-design/packaged" },
+  ];
+}
 
-const BUILD_COMMANDS = [
-  { args: ["--filter", "@open-design/components", "build"] },
-  { args: ["--filter", "@open-design/contracts", "build"] },
-  { args: ["--filter", "@open-design/registry-protocol", "build"] },
-  { args: ["--filter", "@open-design/sidecar-proto", "build"] },
-  { args: ["--filter", "@open-design/launcher-proto", "build"] },
-  { args: ["--filter", "@open-design/sidecar", "build"] },
-  { args: ["--filter", "@open-design/platform", "build"] },
-  { args: ["--filter", "@open-design/download", "build"] },
-  { args: ["--filter", "@open-design/host", "build"] },
-  { args: ["--filter", "@open-design/agui-adapter", "build"] },
-  { args: ["--filter", "@open-design/plugin-runtime", "build"] },
-  { args: ["--filter", "@open-design/diagnostics", "build"] },
-  { args: ["--filter", "@open-design/daemon", "build"] },
-  { args: ["--filter", "@open-design/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
-  { args: ["--filter", "@open-design/web", "build:sidecar"] },
-  { args: ["--filter", "@open-design/desktop", "build"] },
-  { args: ["--filter", "@open-design/packaged", "build"] },
-] as const;
+function resolveBuildCommands(pruned: boolean) {
+  const daemonPkg = pruned ? "@open-design/daemon-pruned" : "@open-design/daemon";
+  const webPkg = pruned ? "@open-design/web-pruned" : "@open-design/web";
+  return [
+    { args: ["--filter", "@open-design/components", "build"] },
+    { args: ["--filter", "@open-design/contracts", "build"] },
+    { args: ["--filter", "@open-design/registry-protocol", "build"] },
+    { args: ["--filter", "@open-design/sidecar-proto", "build"] },
+    { args: ["--filter", "@open-design/launcher-proto", "build"] },
+    { args: ["--filter", "@open-design/sidecar", "build"] },
+    { args: ["--filter", "@open-design/platform", "build"] },
+    { args: ["--filter", "@open-design/download", "build"] },
+    { args: ["--filter", "@open-design/host", "build"] },
+    { args: ["--filter", "@open-design/agui-adapter", "build"] },
+    { args: ["--filter", "@open-design/plugin-runtime", "build"] },
+    { args: ["--filter", "@open-design/diagnostics", "build"] },
+    { args: ["--filter", daemonPkg, "build"] },
+    { args: ["--filter", webPkg, "build"], env: ["OD_WEB_OUTPUT_MODE"] },
+    { args: ["--filter", webPkg, "build:sidecar"] },
+    { args: ["--filter", "@open-design/desktop", "build"] },
+    { args: ["--filter", "@open-design/packaged", "build"] },
+  ];
+}
 
 type WorkspaceBuildMetadata = {
   builtAt: string;
@@ -85,13 +98,13 @@ async function readPackageManager(workspaceRoot: string): Promise<unknown> {
 
 async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<string> {
   const packageHashes: Record<string, string> = {};
-  for (const packageInfo of WORKSPACE_BUILD_PACKAGES) {
+  for (const packageInfo of resolveWorkspaceBuildPackages(config.pruned)) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
   const nodeId = `${config.platform}.workspace-build`;
 
   return hashJson({
-    buildCommands: BUILD_COMMANDS,
+    buildCommands: resolveBuildCommands(config.pruned),
     node: nodeId,
     nodeVersion: process.version,
     packageHashes,
@@ -104,9 +117,11 @@ async function createWorkspaceBuildCacheKey(config: ToolPackConfig): Promise<str
 }
 
 function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const daemonDir = config.pruned ? "daemon-pruned" : "daemon";
   const webStandaloneServerCandidates = [
-    "apps/web/.next/standalone/apps/web/server.js",
-    "apps/web/.next/standalone/server.js",
+    `apps/${webDir}/.next/standalone/apps/${webDir}/server.js`,
+    `apps/${webDir}/.next/standalone/server.js`,
   ];
   return [
     "packages/components/dist/index.mjs",
@@ -133,12 +148,12 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/plugin-runtime/dist/index.d.ts",
     "packages/diagnostics/dist/index.mjs",
     "packages/diagnostics/dist/index.d.ts",
-    "apps/daemon/dist/cli.js",
-    "apps/daemon/dist/cli.d.ts",
-    "apps/daemon/dist/sidecar/index.js",
-    "apps/web/dist/sidecar/index.js",
-    "apps/web/dist/sidecar/index.d.ts",
-    ...(config.webOutputMode === "standalone" ? [webStandaloneServerCandidates.join("|")] : ["apps/web/.next/BUILD_ID"]),
+    `apps/${daemonDir}/dist/cli.js`,
+    `apps/${daemonDir}/dist/cli.d.ts`,
+    `apps/${daemonDir}/dist/sidecar/index.js`,
+    `apps/${webDir}/dist/sidecar/index.js`,
+    `apps/${webDir}/dist/sidecar/index.d.ts`,
+    ...(config.webOutputMode === "standalone" ? [webStandaloneServerCandidates.join("|")] : [`apps/${webDir}/.next/BUILD_ID`]),
     "apps/desktop/dist/main/index.js",
     "apps/desktop/dist/main/index.d.ts",
     "apps/packaged/dist/index.mjs",
@@ -147,6 +162,8 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
 }
 
 function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact[] {
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const daemonDir = config.pruned ? "daemon-pruned" : "daemon";
   const artifacts = [
     "packages/components/dist",
     "packages/contracts/dist",
@@ -160,15 +177,15 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
     "packages/agui-adapter/dist",
     "packages/plugin-runtime/dist",
     "packages/diagnostics/dist",
-    "apps/daemon/dist",
-    "apps/web/dist",
+    `apps/${daemonDir}/dist`,
+    `apps/${webDir}/dist`,
     "apps/desktop/dist",
     "apps/packaged/dist",
   ];
   if (config.webOutputMode === "standalone") {
-    artifacts.push("apps/web/.next/standalone", "apps/web/.next/static");
+    artifacts.push(`apps/${webDir}/.next/standalone`, `apps/${webDir}/.next/static`);
   } else {
-    artifacts.push("apps/web/.next/BUILD_ID");
+    artifacts.push(`apps/${webDir}/.next/BUILD_ID`);
   }
   const outputFiles = workspaceBuildOutputFiles(config);
   return artifacts.map((workspacePath) => {
@@ -214,8 +231,6 @@ async function stripBrokenSymlinks(rootPath: string): Promise<void> {
   }
 }
 
-const WEB_STANDALONE_ARTIFACT = "apps/web/.next/standalone";
-const WEB_STANDALONE_APP_NODE_MODULES = "apps/web/node_modules";
 // Peer deps the web-standalone after-pack audit looks up through
 // `createRequire(server.js).resolve(<pkg>/package.json)`. Next 16
 // standalone build under pnpm workspaces does not hoist them into
@@ -223,8 +238,9 @@ const WEB_STANDALONE_APP_NODE_MODULES = "apps/web/node_modules";
 // of the standalone tree and the audit aborts the packaged build.
 const STANDALONE_HOISTED_PEER_DEPS = ["react", "react-dom", "styled-jsx"];
 
-async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void> {
-  const appNodeModules = join(standaloneRoot, WEB_STANDALONE_APP_NODE_MODULES);
+async function hoistStandaloneNextPeerDeps(config: ToolPackConfig, standaloneRoot: string): Promise<void> {
+  const webDir = config.pruned ? "web-pruned" : "web";
+  const appNodeModules = join(standaloneRoot, "apps", webDir, "node_modules");
   const pnpmRoot = join(standaloneRoot, "node_modules", ".pnpm");
   let pnpmEntries: string[];
   try {
@@ -260,6 +276,7 @@ async function hoistStandaloneNextPeerDeps(standaloneRoot: string): Promise<void
 }
 
 async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryRoot: string): Promise<void> {
+  const webStandaloneArtifact = config.pruned ? "apps/web-pruned/.next/standalone" : "apps/web/.next/standalone";
   for (const artifact of workspaceBuildArtifacts(config)) {
     const sourcePath = join(config.workspaceRoot, artifact.workspacePath);
     // Strip dangling symlinks first: that clears any leftover from a
@@ -267,8 +284,8 @@ async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryR
     // after a dependency bump), so the subsequent hoist step starts
     // from a clean slot and can safely (re-)create its symlinks.
     await stripBrokenSymlinks(sourcePath);
-    if (artifact.workspacePath === WEB_STANDALONE_ARTIFACT) {
-      await hoistStandaloneNextPeerDeps(sourcePath);
+    if (artifact.workspacePath === webStandaloneArtifact) {
+      await hoistStandaloneNextPeerDeps(config, sourcePath);
     }
     const targetPath = join(entryRoot, artifact.cachePath);
     await mkdir(dirname(targetPath), { recursive: true });

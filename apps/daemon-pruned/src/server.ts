@@ -2311,7 +2311,6 @@ function reconcileAssistantMessageOnRunEnd(
       agentId: any;
       appliedPluginSnapshotId: any;
       pluginId: any;
-      mediaExecution: any;
       toolBundle: RunToolBundle;
       status: string;
       createdAt: number;
@@ -2370,7 +2369,6 @@ function reconcileAssistantMessageOnRunEnd(
       error: any;
       errorCode: any;
       eventsLogPath: any;
-      mediaExecution: any;
       toolBundle: RunToolBundleSummary;
     };
     isTerminal?: (status: any) => boolean;

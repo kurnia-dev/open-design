@@ -16,47 +16,46 @@
 // `/api/proxy/*/stream` routes; both paths share the base URL policy from
 // contracts so Settings and daemon-side checks reject the same hosts.
 
-import { spawn } from 'node:child_process';
-import { promises as dnsPromises } from 'node:dns';
-import { promises as fsp } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { Agent, EnvHttpProxyAgent, Socks5ProxyAgent } from 'undici';
-import type { Dispatcher, Pool } from 'undici';
+import { spawn } from "node:child_process";
+import { promises as dnsPromises } from "node:dns";
+import { promises as fsp } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { Agent, EnvHttpProxyAgent, Socks5ProxyAgent } from "undici";
+import type { Dispatcher, Pool } from "undici";
 import {
   applyAgentLaunchEnv,
   getAgentDef,
   resolveAgentLaunch,
   spawnEnvForAgent,
-} from './agents.js';
+} from "./agents.js";
 import {
   createCommandInvocation,
   mergeProxyAwareEnv,
   resolveSystemProxyEnv,
-} from '@open-design/platform';
-import { attachAcpSession } from './acp.js';
-import { attachPiRpcSession } from './pi-rpc.js';
-import { createClaudeStreamHandler } from './claude-stream.js';
-import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
-import { createCopilotStreamHandler } from './copilot-stream.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
-import { agentCliEnvForAgent, validateAgentCliEnv } from './app-config.js';
+} from "@open-design/platform";
+import { attachAcpSession } from "./acp.js";
+import { attachPiRpcSession } from "./pi-rpc.js";
+import { createClaudeStreamHandler } from "./claude-stream.js";
+import { diagnoseClaudeCliFailure } from "./claude-diagnostics.js";
+import { createCopilotStreamHandler } from "./copilot-stream.js";
+import { createJsonEventStreamHandler } from "./json-event-stream.js";
+import { agentCliEnvForAgent, validateAgentCliEnv } from "./app-config.js";
 import {
   classifyAgentAuthFailure,
   cursorAuthGuidance,
   probeAgentAuthStatus,
-} from './runtimes/auth.js';
-import { loadMmdRouteLaunchEnv } from './runtimes/mmd-routes.js';
+} from "./runtimes/auth.js";
+import { loadMmdRouteLaunchEnv } from "./runtimes/mmd-routes.js";
 import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
   isUnsupportedMaxTokensError,
-} from './openai-chat-token-params.js';
-import { aihubmixHeaders } from './aihubmix.js';
-import type { AgentCliEnvPrefs } from './app-config.js';
-import type { RuntimeAgentDef } from './runtimes/types.js';
-import { resolveModelForAgent } from './runtimes/models.js';
+} from "./openai-chat-token-params.js";
+import type { AgentCliEnvPrefs } from "./app-config.js";
+import type { RuntimeAgentDef } from "./runtimes/types.js";
+import { resolveModelForAgent } from "./runtimes/models.js";
 import {
   isBlockedExternalApiHostname,
   isLoopbackApiHost,
@@ -70,10 +69,10 @@ import {
   type ConnectionTestResponse,
   type ParsedBaseUrl,
   type ProviderTestRequest,
-} from '@open-design/contracts/api/connectionTest';
-import { googleGenerateContentUrl } from './google-models.js';
+} from "@open-design/contracts/api/connectionTest";
+import { googleGenerateContentUrl } from "./google-models.js";
 
-export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+export { validateBaseUrl } from "@open-design/contracts/api/connectionTest";
 
 // DNS-aware companion to `validateBaseUrl`. The contracts-side check only
 // inspects the literal hostname string, so a public DNS name pointing at
@@ -101,11 +100,12 @@ const defaultDnsLookup: DnsLookupFn = async (hostname) => {
 };
 
 function looksLikeIpLiteral(hostname: string): boolean {
-  const host = hostname.startsWith('[') && hostname.endsWith(']')
-    ? hostname.slice(1, -1)
-    : hostname;
+  const host =
+    hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
   if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return true;
-  return host.includes(':');
+  return host.includes(":");
 }
 
 export async function validateBaseUrlResolved(
@@ -130,7 +130,7 @@ export async function validateBaseUrlResolved(
     const ip = String(addr.address).toLowerCase();
     if (isLoopbackApiHost(ip)) continue;
     if (isBlockedExternalApiHostname(ip)) {
-      return { error: 'Internal IPs blocked', forbidden: true };
+      return { error: "Internal IPs blocked", forbidden: true };
     }
   }
 
@@ -157,16 +157,16 @@ export async function validateBaseUrlResolved(
 export async function assertExternalAssetUrl(
   rawUrl: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (typeof rawUrl !== 'string' || !rawUrl) {
-    return { ok: false, error: 'empty download url' };
+  if (typeof rawUrl !== "string" || !rawUrl) {
+    return { ok: false, error: "empty download url" };
   }
   const validated = await validateBaseUrlResolved(rawUrl);
   if (validated.error || !validated.parsed) {
     return {
       ok: false,
       error: validated.forbidden
-        ? `blocked download url (${validated.error ?? 'internal address'})`
-        : `invalid download url: ${validated.error ?? 'unknown reason'}`,
+        ? `blocked download url (${validated.error ?? "internal address"})`
+        : `invalid download url: ${validated.error ?? "unknown reason"}`,
     };
   }
   return { ok: true };
@@ -190,14 +190,14 @@ export async function assertAndFetchExternalAsset(
 ): Promise<Response> {
   const check = await assertExternalAssetUrl(url);
   if (!check.ok) throw new Error(check.error);
-  return fetch(url, { ...init, redirect: 'error' });
+  return fetch(url, { ...init, redirect: "error" });
 }
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
 // or distant providers; invalid values fall back to the default.
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
-const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
+const LOOPBACK_NO_PROXY_TOKENS = ["localhost", "127.0.0.1", "[::1]"] as const;
 // CLI boot time is dominated by adapter auth/session restore; the heavy
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
 // run, so 45 s leaves headroom without making a hung child invisible.
@@ -212,12 +212,14 @@ const DEFAULT_AGENT_TIMEOUT_MS = 45_000;
 const MAX_CONNECTION_TEST_TIMEOUT_MS = 2_147_483_647;
 
 export function resolveConnectionTestTimeoutMs(
-  key: 'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS' | 'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+  key:
+    | "OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS"
+    | "OD_CONNECTION_TEST_AGENT_TIMEOUT_MS",
   fallback: number,
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const raw = env[key];
-  if (raw === undefined || raw === '') return fallback;
+  if (raw === undefined || raw === "") return fallback;
   const n = Number(raw);
   if (!Number.isSafeInteger(n) || n < 1 || n > MAX_CONNECTION_TEST_TIMEOUT_MS) {
     console.warn(
@@ -230,71 +232,78 @@ export function resolveConnectionTestTimeoutMs(
 
 function providerTimeoutMs(): number {
   return resolveConnectionTestTimeoutMs(
-    'OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS',
+    "OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS",
     DEFAULT_PROVIDER_TIMEOUT_MS,
   );
 }
 
 function agentTimeoutMs(): number {
   return resolveConnectionTestTimeoutMs(
-    'OD_CONNECTION_TEST_AGENT_TIMEOUT_MS',
+    "OD_CONNECTION_TEST_AGENT_TIMEOUT_MS",
     DEFAULT_AGENT_TIMEOUT_MS,
   );
 }
 
-export function mergeNoProxyWithLoopbackDefaults(noProxy: string | undefined): string | null {
-  if (noProxy?.split(/[\s,]+/).some((token) => token.trim() === '*')) return '*';
+export function mergeNoProxyWithLoopbackDefaults(
+  noProxy: string | undefined,
+): string | null {
+  if (noProxy?.split(/[\s,]+/).some((token) => token.trim() === "*"))
+    return "*";
   const seen = new Set<string>();
   const values: string[] = [];
   for (const rawToken of [
     ...(noProxy ? noProxy.split(/[\s,]+/) : []),
     ...LOOPBACK_NO_PROXY_TOKENS,
   ]) {
-    const token = rawToken.trim() === '::1' ? '[::1]' : rawToken.trim();
+    const token = rawToken.trim() === "::1" ? "[::1]" : rawToken.trim();
     if (!token || seen.has(token)) continue;
     seen.add(token);
     values.push(token);
   }
-  return values.length > 0 ? values.join(',') : null;
+  return values.length > 0 ? values.join(",") : null;
 }
 
 function defaultPortForProtocol(protocol: string): string {
-  if (protocol === 'http:') return '80';
-  if (protocol === 'https:') return '443';
-  return '';
+  if (protocol === "http:") return "80";
+  if (protocol === "https:") return "443";
+  return "";
 }
 
-function splitNoProxyHostAndPort(token: string): { host: string; port: string } {
+function splitNoProxyHostAndPort(token: string): {
+  host: string;
+  port: string;
+} {
   const trimmed = token.trim();
-  if (!trimmed) return { host: '', port: '' };
-  if (trimmed.startsWith('[')) {
-    const closingBracket = trimmed.indexOf(']');
-    if (closingBracket === -1) return { host: trimmed.toLowerCase(), port: '' };
+  if (!trimmed) return { host: "", port: "" };
+  if (trimmed.startsWith("[")) {
+    const closingBracket = trimmed.indexOf("]");
+    if (closingBracket === -1) return { host: trimmed.toLowerCase(), port: "" };
     const host = trimmed.slice(0, closingBracket + 1).toLowerCase();
-    const port = trimmed.slice(closingBracket + 1).replace(/^:/, '');
+    const port = trimmed.slice(closingBracket + 1).replace(/^:/, "");
     return { host, port };
   }
-  const firstColon = trimmed.indexOf(':');
-  const lastColon = trimmed.lastIndexOf(':');
+  const firstColon = trimmed.indexOf(":");
+  const lastColon = trimmed.lastIndexOf(":");
   if (firstColon !== -1 && firstColon === lastColon) {
     return {
       host: trimmed.slice(0, firstColon).toLowerCase(),
       port: trimmed.slice(firstColon + 1),
     };
   }
-  return { host: trimmed.toLowerCase(), port: '' };
+  return { host: trimmed.toLowerCase(), port: "" };
 }
 
 function noProxyTokenMatchesUrl(token: string, url: URL): boolean {
   const trimmed = token.trim();
   if (!trimmed) return false;
-  if (trimmed === '*') return true;
-  if (trimmed === '<local>') return !url.hostname.includes('.') && !url.hostname.includes(':');
-  const { host, port } = splitNoProxyHostAndPort(trimmed.replace(/^\*\./, '.'));
+  if (trimmed === "*") return true;
+  if (trimmed === "<local>")
+    return !url.hostname.includes(".") && !url.hostname.includes(":");
+  const { host, port } = splitNoProxyHostAndPort(trimmed.replace(/^\*\./, "."));
   if (!host) return false;
-  const normalizedHost = host === '::1' ? '[::1]' : host;
+  const normalizedHost = host === "::1" ? "[::1]" : host;
   const hostname = url.hostname.toLowerCase();
-  const matchesHost = normalizedHost.startsWith('.')
+  const matchesHost = normalizedHost.startsWith(".")
     ? hostname === normalizedHost.slice(1) || hostname.endsWith(normalizedHost)
     : hostname === normalizedHost || hostname.endsWith(`.${normalizedHost}`);
   if (!matchesHost) return false;
@@ -302,7 +311,10 @@ function noProxyTokenMatchesUrl(token: string, url: URL): boolean {
   return (url.port || defaultPortForProtocol(url.protocol)) === port;
 }
 
-function shouldBypassProxyForUrl(target: string | URL, noProxy: string | null): boolean {
+function shouldBypassProxyForUrl(
+  target: string | URL,
+  noProxy: string | null,
+): boolean {
   if (!noProxy) return false;
   let url: URL;
   try {
@@ -310,15 +322,21 @@ function shouldBypassProxyForUrl(target: string | URL, noProxy: string | null): 
   } catch {
     return false;
   }
-  return noProxy.split(/[\s,]+/).some((token) => noProxyTokenMatchesUrl(token, url));
+  return noProxy
+    .split(/[\s,]+/)
+    .some((token) => noProxyTokenMatchesUrl(token, url));
 }
 
 function socksProxyAgentOptions(
   options: Pool.Options,
 ): ConstructorParameters<typeof Socks5ProxyAgent>[1] {
   return {
-    ...(options.bodyTimeout === undefined ? {} : { bodyTimeout: options.bodyTimeout }),
-    ...(options.headersTimeout === undefined ? {} : { headersTimeout: options.headersTimeout }),
+    ...(options.bodyTimeout === undefined
+      ? {}
+      : { bodyTimeout: options.bodyTimeout }),
+    ...(options.headersTimeout === undefined
+      ? {}
+      : { headersTimeout: options.headersTimeout }),
   };
 }
 
@@ -327,27 +345,40 @@ class NoProxyAwareSocksProxyAgent {
 
   private readonly socksAgent: Socks5ProxyAgent;
 
-  private readonly socksDispatchTimeouts: Pick<Dispatcher.DispatchOptions, 'bodyTimeout' | 'headersTimeout'>;
+  private readonly socksDispatchTimeouts: Pick<
+    Dispatcher.DispatchOptions,
+    "bodyTimeout" | "headersTimeout"
+  >;
 
   constructor(
     private readonly noProxy: string | null,
     socksProxy: string,
     options: Pool.Options,
   ) {
-    this.directAgent = new Agent(options as ConstructorParameters<typeof Agent>[0]);
-    this.socksAgent = new Socks5ProxyAgent(socksProxy, socksProxyAgentOptions(options));
+    this.directAgent = new Agent(
+      options as ConstructorParameters<typeof Agent>[0],
+    );
+    this.socksAgent = new Socks5ProxyAgent(
+      socksProxy,
+      socksProxyAgentOptions(options),
+    );
     this.socksDispatchTimeouts = {
-      ...(options.bodyTimeout === undefined ? {} : { bodyTimeout: options.bodyTimeout }),
+      ...(options.bodyTimeout === undefined
+        ? {}
+        : { bodyTimeout: options.bodyTimeout }),
       ...(options.headersTimeout === undefined
         ? {}
         : { headersTimeout: options.headersTimeout }),
     };
   }
 
-  dispatch(options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+  dispatch(
+    options: Dispatcher.DispatchOptions,
+    handler: Dispatcher.DispatchHandler,
+  ): boolean {
     const origin = options.origin;
     const targetUrl =
-      typeof origin === 'string' || origin instanceof URL
+      typeof origin === "string" || origin instanceof URL
         ? new URL(options.path, origin)
         : null;
     const dispatcher =
@@ -355,7 +386,9 @@ class NoProxyAwareSocksProxyAgent {
         ? this.directAgent
         : this.socksAgent;
     return dispatcher.dispatch(
-      dispatcher === this.socksAgent ? { ...this.socksDispatchTimeouts, ...options } : options,
+      dispatcher === this.socksAgent
+        ? { ...this.socksDispatchTimeouts, ...options }
+        : options,
       handler,
     );
   }
@@ -380,19 +413,25 @@ class NoProxyAwareEnvProxyAgent {
     private readonly proxyAgent: EnvHttpProxyAgent,
     options: Pool.Options,
   ) {
-    this.directAgent = new Agent(options as ConstructorParameters<typeof Agent>[0]);
+    this.directAgent = new Agent(
+      options as ConstructorParameters<typeof Agent>[0],
+    );
   }
 
-  dispatch(options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+  dispatch(
+    options: Dispatcher.DispatchOptions,
+    handler: Dispatcher.DispatchHandler,
+  ): boolean {
     const origin = options.origin;
     const targetUrl =
-      typeof origin === 'string' || origin instanceof URL
+      typeof origin === "string" || origin instanceof URL
         ? new URL(options.path, origin)
         : null;
-    return (targetUrl && shouldBypassProxyForUrl(targetUrl, this.noProxy) ? this.directAgent : this.proxyAgent).dispatch(
-      options,
-      handler,
-    );
+    return (
+      targetUrl && shouldBypassProxyForUrl(targetUrl, this.noProxy)
+        ? this.directAgent
+        : this.proxyAgent
+    ).dispatch(options, handler);
   }
 
   async close(): Promise<void> {
@@ -414,7 +453,10 @@ class NoProxyAwareMixedProxyAgent {
 
   private readonly socksAgent: Socks5ProxyAgent;
 
-  private readonly socksDispatchTimeouts: Pick<Dispatcher.DispatchOptions, 'bodyTimeout' | 'headersTimeout'>;
+  private readonly socksDispatchTimeouts: Pick<
+    Dispatcher.DispatchOptions,
+    "bodyTimeout" | "headersTimeout"
+  >;
 
   constructor(
     private readonly noProxy: string | null,
@@ -424,37 +466,55 @@ class NoProxyAwareMixedProxyAgent {
     socksProxy: string,
     options: Pool.Options,
   ) {
-    this.directAgent = new Agent(options as ConstructorParameters<typeof Agent>[0]);
+    this.directAgent = new Agent(
+      options as ConstructorParameters<typeof Agent>[0],
+    );
     this.proxyAgent = new EnvHttpProxyAgent(proxyOptions);
-    this.socksAgent = new Socks5ProxyAgent(socksProxy, socksProxyAgentOptions(options));
+    this.socksAgent = new Socks5ProxyAgent(
+      socksProxy,
+      socksProxyAgentOptions(options),
+    );
     this.socksDispatchTimeouts = {
-      ...(options.bodyTimeout === undefined ? {} : { bodyTimeout: options.bodyTimeout }),
+      ...(options.bodyTimeout === undefined
+        ? {}
+        : { bodyTimeout: options.bodyTimeout }),
       ...(options.headersTimeout === undefined
         ? {}
         : { headersTimeout: options.headersTimeout }),
     };
   }
 
-  dispatch(options: Dispatcher.DispatchOptions, handler: Dispatcher.DispatchHandler): boolean {
+  dispatch(
+    options: Dispatcher.DispatchOptions,
+    handler: Dispatcher.DispatchHandler,
+  ): boolean {
     const origin = options.origin;
     const targetUrl =
-      typeof origin === 'string' || origin instanceof URL
+      typeof origin === "string" || origin instanceof URL
         ? new URL(options.path, origin)
         : null;
     if (targetUrl && shouldBypassProxyForUrl(targetUrl, this.noProxy)) {
       return this.directAgent.dispatch(options, handler);
     }
     if (
-      targetUrl && ((targetUrl.protocol === 'http:' && this.hasHttpProxy) ||
-        (targetUrl.protocol === 'https:' && this.hasHttpsProxy))
+      targetUrl &&
+      ((targetUrl.protocol === "http:" && this.hasHttpProxy) ||
+        (targetUrl.protocol === "https:" && this.hasHttpsProxy))
     ) {
       return this.proxyAgent.dispatch(options, handler);
     }
-    return this.socksAgent.dispatch({ ...this.socksDispatchTimeouts, ...options }, handler);
+    return this.socksAgent.dispatch(
+      { ...this.socksDispatchTimeouts, ...options },
+      handler,
+    );
   }
 
   async close(): Promise<void> {
-    await Promise.all([this.directAgent.close(), this.proxyAgent.close(), this.socksAgent.close()]);
+    await Promise.all([
+      this.directAgent.close(),
+      this.proxyAgent.close(),
+      this.socksAgent.close(),
+    ]);
   }
 
   async destroy(error?: Error | null): Promise<void> {
@@ -498,10 +558,19 @@ function buildConnectionTestProxyDispatcher(
   const allProxy = proxyEnv.ALL_PROXY ?? proxyEnv.all_proxy;
   const socksProxy = socksProxyUrl(allProxy);
   const httpProxyFromAll = isHttpOrHttpsProxy(allProxy);
-  const httpProxy = proxyEnv.HTTP_PROXY ?? proxyEnv.http_proxy ?? httpProxyFromAll;
-  const httpsProxy = proxyEnv.HTTPS_PROXY ?? proxyEnv.https_proxy ?? httpProxyFromAll;
-  const noProxy = mergeNoProxyWithLoopbackDefaults(proxyEnv.NO_PROXY ?? proxyEnv.no_proxy);
-  const proxyOptions = envProxyAgentOptions(options, httpProxy, httpsProxy, noProxy);
+  const httpProxy =
+    proxyEnv.HTTP_PROXY ?? proxyEnv.http_proxy ?? httpProxyFromAll;
+  const httpsProxy =
+    proxyEnv.HTTPS_PROXY ?? proxyEnv.https_proxy ?? httpProxyFromAll;
+  const noProxy = mergeNoProxyWithLoopbackDefaults(
+    proxyEnv.NO_PROXY ?? proxyEnv.no_proxy,
+  );
+  const proxyOptions = envProxyAgentOptions(
+    options,
+    httpProxy,
+    httpsProxy,
+    noProxy,
+  );
   if (socksProxy && (httpProxy || httpsProxy) && (!httpProxy || !httpsProxy)) {
     return new NoProxyAwareMixedProxyAgent(
       noProxy,
@@ -517,7 +586,7 @@ function buildConnectionTestProxyDispatcher(
   }
   if (!httpProxy && !httpsProxy) return null;
   const proxyAgent = new EnvHttpProxyAgent(proxyOptions);
-  return noProxy?.split(/[\s,]+/).some((token) => token.trim() === '<local>')
+  return noProxy?.split(/[\s,]+/).some((token) => token.trim() === "<local>")
     ? new NoProxyAwareEnvProxyAgent(noProxy, proxyAgent, options)
     : proxyAgent;
 }
@@ -527,7 +596,7 @@ function isHttpOrHttpsProxy(proxyUrl: string | undefined): string | undefined {
   if (!trimmed) return undefined;
   try {
     const { protocol } = new URL(trimmed);
-    return protocol === 'http:' || protocol === 'https:' ? trimmed : undefined;
+    return protocol === "http:" || protocol === "https:" ? trimmed : undefined;
   } catch {
     return undefined;
   }
@@ -538,9 +607,9 @@ function socksProxyUrl(proxyUrl: string | undefined): string | undefined {
   if (!trimmed) return undefined;
   try {
     const url = new URL(trimmed);
-    if (url.protocol === 'socks:' || url.protocol === 'socks5:') return trimmed;
-    if (url.protocol === 'socks5h:') {
-      url.protocol = 'socks5:';
+    if (url.protocol === "socks:" || url.protocol === "socks5:") return trimmed;
+    if (url.protocol === "socks5h:") {
+      url.protocol = "socks5:";
       return url.toString();
     }
     return undefined;
@@ -554,7 +623,7 @@ export function proxyDispatcherRequestInit(
   options: Pool.Options = {},
 ): {
   close(): Promise<void>;
-  requestInit: Pick<RequestInit, 'dispatcher'>;
+  requestInit: Pick<RequestInit, "dispatcher">;
 } {
   const dispatcher = buildConnectionTestProxyDispatcher(env, options);
   if (dispatcher == null) {
@@ -566,7 +635,9 @@ export function proxyDispatcherRequestInit(
   return {
     close: () => dispatcher.close(),
     requestInit: {
-      dispatcher: dispatcher as unknown as NonNullable<RequestInit['dispatcher']>,
+      dispatcher: dispatcher as unknown as NonNullable<
+        RequestInit["dispatcher"]
+      >,
     },
   };
 }
@@ -580,19 +651,19 @@ const SAMPLE_MAX_CHARS = 120;
 // reasoning models can spend the first few dozen tokens in hidden reasoning
 // before producing a visible `ok`.
 const PROVIDER_MAX_TOKENS = 100;
-const SMOKE_PROMPT = 'Reply with only: ok';
+const SMOKE_PROMPT = "Reply with only: ok";
 
 function formatPromptForAgentStdin(
-  def: Pick<RuntimeAgentDef, 'promptInputFormat'>,
+  def: Pick<RuntimeAgentDef, "promptInputFormat">,
   prompt: string,
 ): string {
-  const promptInputFormat = def.promptInputFormat ?? 'text';
-  if (promptInputFormat === 'stream-json') {
+  const promptInputFormat = def.promptInputFormat ?? "text";
+  if (promptInputFormat === "stream-json") {
     return `${JSON.stringify({
-      type: 'user',
+      type: "user",
       message: {
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
+        role: "user",
+        content: [{ type: "text", text: prompt }],
       },
     })}\n`;
   }
@@ -605,12 +676,12 @@ function codexExecutableGuidance(
   pathResolvedPath: string | null,
 ): string {
   if (
-    agentId !== 'codex' ||
+    agentId !== "codex" ||
     !configuredOverridePath ||
     !pathResolvedPath ||
     configuredOverridePath === pathResolvedPath
   ) {
-    return '';
+    return "";
   }
   return ` Configured Codex path failed: ${configuredOverridePath}. Open Design also detected a PATH Codex CLI at ${pathResolvedPath}. Update CODEX_BIN or clear the custom path to use the detected binary.`;
 }
@@ -654,21 +725,27 @@ function stripCodexBinOverride(
 // through this before logging; if a vendor surfaces the key in body text
 // (some do for 401s), it stays out of the daemon log too.
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function redactSecrets(
   text: string,
   exactSecrets: Array<string | undefined | null> = [],
 ): string {
-  if (typeof text !== 'string' || text.length === 0) return '';
+  if (typeof text !== "string" || text.length === 0) return "";
   let redacted = text
-    .replace(/Bearer\s+[A-Za-z0-9_\-.+/=]+/gi, 'Bearer [REDACTED]')
-    .replace(/(x-api-key|api-key|x-goog-api-key)\s*[:=]\s*[^\s,;"']+/gi, '$1: [REDACTED]')
-    .replace(/([?&]key=)[^&\s]+/gi, '$1[REDACTED]');
+    .replace(/Bearer\s+[A-Za-z0-9_\-.+/=]+/gi, "Bearer [REDACTED]")
+    .replace(
+      /(x-api-key|api-key|x-goog-api-key)\s*[:=]\s*[^\s,;"']+/gi,
+      "$1: [REDACTED]",
+    )
+    .replace(/([?&]key=)[^&\s]+/gi, "$1[REDACTED]");
   for (const secret of exactSecrets) {
-    if (typeof secret !== 'string' || secret.length === 0) continue;
-    redacted = redacted.replace(new RegExp(escapeRegExp(secret), 'g'), '[REDACTED]');
+    if (typeof secret !== "string" || secret.length === 0) continue;
+    redacted = redacted.replace(
+      new RegExp(escapeRegExp(secret), "g"),
+      "[REDACTED]",
+    );
   }
   return redacted;
 }
@@ -678,7 +755,7 @@ type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
-  const pathname = url.pathname.replace(/\/+$/, '');
+  const pathname = url.pathname.replace(/\/+$/, "");
   url.pathname = /\/v\d+(\/|$)/.test(pathname)
     ? `${pathname}${suffix}`
     : `${pathname}/v1${suffix}`;
@@ -686,14 +763,14 @@ function appendVersionedApiPath(baseUrl: string, suffix: string): string {
 }
 
 function truncateSample(text: unknown): string {
-  if (typeof text !== 'string') return '';
-  const trimmed = text.replace(/\s+/g, ' ').trim();
+  if (typeof text !== "string") return "";
+  const trimmed = text.replace(/\s+/g, " ").trim();
   if (trimmed.length <= SAMPLE_MAX_CHARS) return trimmed;
   return `${trimmed.slice(0, SAMPLE_MAX_CHARS - 1)}…`;
 }
 
 export function isSmokeOkReply(text: unknown): boolean {
-  return typeof text === 'string' && text.trim().toLowerCase() === 'ok';
+  return typeof text === "string" && text.trim().toLowerCase() === "ok";
 }
 
 function isLikelyModelErrorText(text: string): boolean {
@@ -708,7 +785,7 @@ function isLikelyModelErrorText(text: string): boolean {
 function smokeFailureDetail(sample: string): string {
   return sample
     ? `Expected smoke test reply "ok"; got "${sample}"`
-    : 'Provider returned a 2xx response without assistant text';
+    : "Provider returned a 2xx response without assistant text";
 }
 
 function inspectProviderCompletion(
@@ -716,16 +793,27 @@ function inspectProviderCompletion(
   data: unknown,
   requestedModel: string,
   enforceResponseModel: boolean,
-): { valid: boolean; sample?: string; kind?: ConnectionTestKind; detail?: string } {
-  const obj = data && typeof data === 'object' ? data as Record<string, unknown> : null;
+): {
+  valid: boolean;
+  sample?: string;
+  kind?: ConnectionTestKind;
+  detail?: string;
+} {
+  const obj =
+    data && typeof data === "object" ? (data as Record<string, unknown>) : null;
   if (!obj) return { valid: false };
 
-  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'aihubmix') {
-    const responseModel = typeof obj.model === 'string' ? obj.model : '';
+  if (
+    protocol === "openai" ||
+    protocol === "azure" ||
+    protocol === "senseaudio" ||
+    protocol === "aihubmix"
+  ) {
+    const responseModel = typeof obj.model === "string" ? obj.model : "";
     if (
       // AIHubMix is omitted from the strict response-model check (like Azure):
       // its gateway routes by model name and may echo a normalized id.
-      (protocol === 'openai' || protocol === 'senseaudio') &&
+      (protocol === "openai" || protocol === "senseaudio") &&
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
@@ -733,44 +821,46 @@ function inspectProviderCompletion(
     ) {
       return {
         valid: false,
-        kind: 'not_found_model',
+        kind: "not_found_model",
         detail: `Provider responded with model "${responseModel}" instead of requested "${requestedModel}".`,
       };
     }
     const choices = obj.choices;
-    if (!Array.isArray(choices) || choices.length === 0) return { valid: false };
+    if (!Array.isArray(choices) || choices.length === 0)
+      return { valid: false };
     const first = choices[0] as { finish_reason?: unknown } | undefined;
     const finishReason =
-      typeof first?.finish_reason === 'string' ? first.finish_reason : '';
+      typeof first?.finish_reason === "string" ? first.finish_reason : "";
     return {
       valid: true,
       sample: finishReason
         ? `valid completion (${finishReason})`
-        : 'valid completion',
+        : "valid completion",
     };
   }
 
-  if (protocol === 'anthropic') {
+  if (protocol === "anthropic") {
     return {
       valid:
         Array.isArray((obj as { content?: unknown }).content) ||
-        typeof (obj as { stop_reason?: unknown }).stop_reason === 'string',
-      sample: 'valid completion',
+        typeof (obj as { stop_reason?: unknown }).stop_reason === "string",
+      sample: "valid completion",
     };
   }
 
-  if (protocol === 'google') {
+  if (protocol === "google") {
     return {
       valid: Array.isArray((obj as { candidates?: unknown }).candidates),
-      sample: 'valid completion',
+      sample: "valid completion",
     };
   }
 
-  if (protocol === 'ollama') {
+  if (protocol === "ollama") {
     const msg = (obj as { message?: { content?: unknown } }).message;
-    const hasContent = typeof msg?.content === 'string';
+    const hasContent = typeof msg?.content === "string";
     return {
-      valid: Array.isArray((obj as { messages?: unknown }).messages) || hasContent,
+      valid:
+        Array.isArray((obj as { messages?: unknown }).messages) || hasContent,
       ...(hasContent ? { sample: truncateSample(msg?.content) } : {}),
     };
   }
@@ -778,17 +868,17 @@ function inspectProviderCompletion(
   return { valid: false };
 }
 
-function statusToKind(status: number, detailText = ''): ConnectionTestKind {
-  if (status === 401) return 'auth_failed';
-  if (status === 403) return 'forbidden';
+function statusToKind(status: number, detailText = ""): ConnectionTestKind {
+  if (status === 401) return "auth_failed";
+  if (status === 403) return "forbidden";
   if (status === 404) {
     return isLikelyModelErrorText(detailText)
-      ? 'not_found_model'
-      : 'invalid_base_url';
+      ? "not_found_model"
+      : "invalid_base_url";
   }
-  if (status === 429) return 'rate_limited';
-  if (status >= 500) return 'upstream_unavailable';
-  return 'unknown';
+  if (status === 429) return "rate_limited";
+  if (status >= 500) return "upstream_unavailable";
+  return "unknown";
 }
 
 function extractOpenAiModelIds(data: unknown): string[] {
@@ -796,44 +886,44 @@ function extractOpenAiModelIds(data: unknown): string[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => (item as { id?: unknown })?.id)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    .filter((id): id is string => typeof id === "string" && id.length > 0);
 }
 
 function extractProviderErrorDetail(data: unknown, rawText: string): string {
-  const obj = data && typeof data === 'object' ? data : null;
+  const obj = data && typeof data === "object" ? data : null;
   const error = obj ? (obj as { error?: unknown }).error : null;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
     const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) return message;
+    if (typeof message === "string" && message.trim()) return message;
   }
   const message = obj ? (obj as { message?: unknown }).message : null;
-  if (typeof message === 'string' && message.trim()) return message;
+  if (typeof message === "string" && message.trim()) return message;
   return rawText.trim().slice(0, 240);
 }
 
 function networkErrorToKind(err: unknown): ConnectionTestKind {
   if (err instanceof Error) {
-    if (err.name === 'AbortError') return 'timeout';
+    if (err.name === "AbortError") return "timeout";
     // fetch's TypeError surface for DNS/TLS/connect failures is
     // `TypeError` with a `cause` whose `code` is one of these.
     const cause = (err as { cause?: { code?: string } }).cause;
     const code = cause?.code;
     if (
-      code === 'ENOTFOUND' ||
-      code === 'EAI_AGAIN' ||
-      code === 'ECONNREFUSED' ||
-      code === 'ECONNRESET' ||
-      code === 'ETIMEDOUT' ||
-      code === 'EHOSTUNREACH' ||
-      code === 'ENETUNREACH' ||
-      code === 'CERT_HAS_EXPIRED' ||
-      code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+      code === "ENOTFOUND" ||
+      code === "EAI_AGAIN" ||
+      code === "ECONNREFUSED" ||
+      code === "ECONNRESET" ||
+      code === "ETIMEDOUT" ||
+      code === "EHOSTUNREACH" ||
+      code === "ENETUNREACH" ||
+      code === "CERT_HAS_EXPIRED" ||
+      code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
     ) {
-      return 'invalid_base_url';
+      return "invalid_base_url";
     }
   }
-  return 'unknown';
+  return "unknown";
 }
 
 async function validateLocalOpenAiModel(
@@ -841,21 +931,21 @@ async function validateLocalOpenAiModel(
   parsed: ParsedBaseUrl,
   signal: AbortSignal,
   start: number,
-  requestInit: Pick<RequestInit, 'dispatcher'> = {},
+  requestInit: Pick<RequestInit, "dispatcher"> = {},
 ): Promise<ConnectionTestResponse | null> {
-  if (input.protocol !== 'openai' || !isLoopbackApiHost(parsed.hostname)) {
+  if (input.protocol !== "openai" || !isLoopbackApiHost(parsed.hostname)) {
     return null;
   }
 
-  const url = appendVersionedApiPath(String(input.baseUrl), '/models');
+  const url = appendVersionedApiPath(String(input.baseUrl), "/models");
   let response: Response;
   try {
     response = await fetch(url, {
       ...requestInit,
-      method: 'GET',
+      method: "GET",
       headers: { authorization: `Bearer ${String(input.apiKey)}` },
       signal,
-      redirect: 'error',
+      redirect: "error",
     });
   } catch {
     // Local OpenAI-compatible servers vary; if model listing is unavailable,
@@ -876,7 +966,7 @@ async function validateLocalOpenAiModel(
   if (modelIds.length === 0 || modelIds.includes(input.model)) return null;
   return {
     ok: false,
-    kind: 'not_found_model',
+    kind: "not_found_model",
     latencyMs: Date.now() - start,
     model: input.model,
     status: response.status,
@@ -886,13 +976,13 @@ async function validateLocalOpenAiModel(
 
 function isSenseAudioNonChatModel(model: string): boolean {
   return (
-    model.startsWith('senseaudio-image-') ||
-    model.startsWith('doubao-seedream-') ||
-    model === 'sensenova-u1-fast' ||
-    model.startsWith('doubao-seedance-') ||
-    model.startsWith('senseaudio-asr-') ||
-    model.startsWith('senseaudio-tts-') ||
-    model.startsWith('senseaudio-music-')
+    model.startsWith("senseaudio-image-") ||
+    model.startsWith("doubao-seedream-") ||
+    model === "sensenova-u1-fast" ||
+    model.startsWith("doubao-seedance-") ||
+    model.startsWith("senseaudio-asr-") ||
+    model.startsWith("senseaudio-tts-") ||
+    model.startsWith("senseaudio-music-")
   );
 }
 
@@ -900,21 +990,24 @@ async function validateSenseAudioNonChatModel(
   input: ProviderTestRequest,
   signal: AbortSignal,
   start: number,
-  requestInit: Pick<RequestInit, 'dispatcher'> = {},
+  requestInit: Pick<RequestInit, "dispatcher"> = {},
 ): Promise<ConnectionTestResponse | null> {
-  if (input.protocol !== 'senseaudio' || !isSenseAudioNonChatModel(input.model)) {
+  if (
+    input.protocol !== "senseaudio" ||
+    !isSenseAudioNonChatModel(input.model)
+  ) {
     return null;
   }
 
-  const url = appendVersionedApiPath(String(input.baseUrl), '/models');
+  const url = appendVersionedApiPath(String(input.baseUrl), "/models");
   let response: Response;
   try {
     response = await fetch(url, {
       ...requestInit,
-      method: 'GET',
+      method: "GET",
       headers: { authorization: `Bearer ${String(input.apiKey)}` },
       signal,
-      redirect: 'error',
+      redirect: "error",
     });
   } catch (err) {
     const latencyMs = Date.now() - start;
@@ -931,13 +1024,13 @@ async function validateSenseAudioNonChatModel(
   }
 
   const latencyMs = Date.now() - start;
-  let rawText = '';
+  let rawText = "";
   let data: unknown = {};
   let parseError: unknown = null;
   try {
     rawText = await response.text();
   } catch {
-    rawText = '';
+    rawText = "";
   }
   try {
     data = rawText ? JSON.parse(rawText) : {};
@@ -948,7 +1041,7 @@ async function validateSenseAudioNonChatModel(
   if (parseError && response.ok) {
     return {
       ok: false,
-      kind: 'unknown',
+      kind: "unknown",
       latencyMs,
       model: input.model,
       status: response.status,
@@ -978,7 +1071,7 @@ async function validateSenseAudioNonChatModel(
   if (!modelIds.includes(input.model)) {
     return {
       ok: false,
-      kind: 'not_found_model',
+      kind: "not_found_model",
       latencyMs,
       model: input.model,
       status: response.status,
@@ -988,11 +1081,12 @@ async function validateSenseAudioNonChatModel(
 
   return {
     ok: true,
-    kind: 'success',
+    kind: "success",
     latencyMs,
     model: input.model,
     status: response.status,
-    detail: 'SenseAudio model is available, but this media model is not chat-testable from Settings.',
+    detail:
+      "SenseAudio model is available, but this media model is not chat-testable from Settings.",
   };
 }
 
@@ -1009,170 +1103,157 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
   const apiKey = String(input.apiKey);
   const model = String(input.model);
   switch (input.protocol) {
-    case 'anthropic':
+    case "anthropic":
       return {
-        url: appendVersionedApiPath(baseUrl, '/messages'),
+        url: appendVersionedApiPath(baseUrl, "/messages"),
         headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
         },
         body: {
           model,
           max_tokens: PROVIDER_MAX_TOKENS,
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          messages: [{ role: "user", content: SMOKE_PROMPT }],
           stream: false,
         },
         extractText: (data) => {
           const blocks = (data as { content?: unknown }).content;
-          if (!Array.isArray(blocks)) return '';
+          if (!Array.isArray(blocks)) return "";
           for (const block of blocks) {
             if (
               block &&
-              typeof block === 'object' &&
-              (block as { type?: string }).type === 'text' &&
-              typeof (block as { text?: unknown }).text === 'string'
+              typeof block === "object" &&
+              (block as { type?: string }).type === "text" &&
+              typeof (block as { text?: unknown }).text === "string"
             ) {
               return (block as { text: string }).text;
             }
           }
-          return '';
+          return "";
         },
       };
-    case 'aihubmix':
-      // AIHubMix is wire-compatible with OpenAI but carries the fixed APP-Code
-      // attribution header on every request (see aihubmixHeaders). Same body /
-      // response shape as the OpenAI case otherwise.
-      return {
-        url: appendVersionedApiPath(baseUrl, '/chat/completions'),
-        headers: {
-          'content-type': 'application/json',
-          ...aihubmixHeaders(apiKey),
-        },
-        body: {
-          model,
-          ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
-          stream: false,
-        },
-        extractText: extractOpenAIMessageText,
-      };
-    case 'openai':
-    case 'senseaudio':
+    case "openai":
+    case "senseaudio":
       // SenseAudio is wire-compatible with OpenAI (POST /v1/chat/completions,
       // Bearer auth, identical body + response shape), so the connection
       // smoke test reuses the same call shape. We default the base URL
       // upstream-side in chat-routes; this layer assumes the caller passed
       // a concrete URL via the BYOK form.
       return {
-        url: appendVersionedApiPath(baseUrl, '/chat/completions'),
+        url: appendVersionedApiPath(baseUrl, "/chat/completions"),
         headers: {
-          'content-type': 'application/json',
+          "content-type": "application/json",
           authorization: `Bearer ${apiKey}`,
-          ...(new URL(baseUrl).hostname === 'openrouter.ai' ? {
-            'HTTP-Referer': 'https://opendesign.dev',
-            'X-Title': 'Open Design',
-          } : {}),
+          ...(new URL(baseUrl).hostname === "openrouter.ai"
+            ? {
+                "HTTP-Referer": "https://opendesign.dev",
+                "X-Title": "Open Design",
+              }
+            : {}),
         },
         body: {
           model,
           ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          messages: [{ role: "user", content: SMOKE_PROMPT }],
           stream: false,
         },
         extractText: extractOpenAIMessageText,
       };
-    case 'azure': {
+    case "azure": {
       const url = new URL(baseUrl);
-      const basePath = url.pathname.replace(/\/+$/, '');
+      const basePath = url.pathname.replace(/\/+$/, "");
       const usesVersionedOpenAIPath = /\/openai\/v\d+(?:$|\/)/.test(basePath);
       const apiVersion =
-        typeof input.apiVersion === 'string' && input.apiVersion.trim()
+        typeof input.apiVersion === "string" && input.apiVersion.trim()
           ? input.apiVersion.trim()
           : usesVersionedOpenAIPath
-            ? ''
-            : '2024-10-21';
+            ? ""
+            : "2024-10-21";
       url.pathname = usesVersionedOpenAIPath
         ? `${basePath}/chat/completions`
         : `${basePath}/openai/deployments/${encodeURIComponent(model)}/chat/completions`;
       if (usesVersionedOpenAIPath && !apiVersion) {
-        url.searchParams.delete('api-version');
+        url.searchParams.delete("api-version");
       }
       if (apiVersion) {
-        url.searchParams.set('api-version', apiVersion);
+        url.searchParams.set("api-version", apiVersion);
       }
       return {
         url: url.toString(),
         headers: {
-          'content-type': 'application/json',
-          'api-key': apiKey,
+          "content-type": "application/json",
+          "api-key": apiKey,
         },
         body: {
           ...(usesVersionedOpenAIPath ? { model } : {}),
           ...buildLegacyMaxTokensParam(PROVIDER_MAX_TOKENS),
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          messages: [{ role: "user", content: SMOKE_PROMPT }],
           stream: false,
         },
         retryBodyOnUnsupportedMaxTokens: {
           ...(usesVersionedOpenAIPath ? { model } : {}),
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          messages: [{ role: "user", content: SMOKE_PROMPT }],
           stream: false,
           ...buildMaxCompletionTokensParam(PROVIDER_MAX_TOKENS),
         },
         extractText: extractOpenAIMessageText,
       };
     }
-    case 'google': {
+    case "google": {
       return {
         url: googleGenerateContentUrl(baseUrl, model),
         headers: {
-          'content-type': 'application/json',
-          'x-goog-api-key': apiKey,
+          "content-type": "application/json",
+          "x-goog-api-key": apiKey,
         },
         body: {
-          contents: [
-            { role: 'user', parts: [{ text: SMOKE_PROMPT }] },
-          ],
+          contents: [{ role: "user", parts: [{ text: SMOKE_PROMPT }] }],
           generationConfig: { maxOutputTokens: PROVIDER_MAX_TOKENS },
         },
         extractText: (data) => {
           const candidates = (data as { candidates?: unknown }).candidates;
-          if (!Array.isArray(candidates) || candidates.length === 0) return '';
+          if (!Array.isArray(candidates) || candidates.length === 0) return "";
           const parts = (candidates[0] as { content?: { parts?: unknown } })
             .content?.parts;
-          if (!Array.isArray(parts)) return '';
+          if (!Array.isArray(parts)) return "";
           return parts
             .map((p: { text?: unknown }) =>
-              typeof p?.text === 'string' ? p.text : '',
+              typeof p?.text === "string" ? p.text : "",
             )
-            .join('');
+            .join("");
         },
       };
     }
-    case 'ollama': {
-      const trimmedBase = baseUrl.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    case "ollama": {
+      const trimmedBase = baseUrl.replace(/\/+$/, "").replace(/\/api\/?$/, "");
       return {
         url: `${trimmedBase}/api/chat`,
         headers: {
-          'content-type': 'application/json',
+          "content-type": "application/json",
           authorization: `Bearer ${apiKey}`,
         },
         body: {
           model,
-          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          messages: [{ role: "user", content: SMOKE_PROMPT }],
           stream: false,
         },
         extractText: (data) => {
           const message = (data as { message?: { content?: unknown } }).message;
-          if (message && typeof (message as { content?: unknown }).content === 'string') {
+          if (
+            message &&
+            typeof (message as { content?: unknown }).content === "string"
+          ) {
             return (message as { content: string }).content;
           }
-          return '';
+          return "";
         },
       };
     }
     default:
-      throw new Error(`Unknown protocol: ${(input as { protocol?: string }).protocol}`);
+      throw new Error(
+        `Unknown protocol: ${(input as { protocol?: string }).protocol}`,
+      );
   }
 }
 
@@ -1181,29 +1262,31 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
 // here. Kept module-local so the chat path doesn't change.
 function extractOpenAIMessageText(data: unknown): string {
   const choices = (data as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || choices.length === 0) return '';
+  if (!Array.isArray(choices) || choices.length === 0) return "";
   const first = choices[0] as
     | { message?: { content?: unknown }; text?: unknown }
     | undefined;
-  if (typeof first?.message?.content === 'string') return first.message.content;
-  if (typeof first?.text === 'string') return first.text;
-  return '';
+  if (typeof first?.message?.content === "string") return first.message.content;
+  if (typeof first?.text === "string") return first.text;
+  return "";
 }
 
 export async function testProviderConnection(
   input: ProviderConnectionInput,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
-  const model = String(input.model ?? '');
+  const model = String(input.model ?? "");
   const validated = await validateBaseUrlResolved(input.baseUrl);
   if (validated.error || !validated.parsed) {
-    const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
+    const kind: ConnectionTestKind = validated.forbidden
+      ? "forbidden"
+      : "invalid_base_url";
     return {
       ok: false,
       kind,
       latencyMs: Date.now() - start,
       model,
-      detail: validated.error ?? '',
+      detail: validated.error ?? "",
     };
   }
 
@@ -1213,7 +1296,7 @@ export async function testProviderConnection(
   } catch (err) {
     return {
       ok: false,
-      kind: 'unknown',
+      kind: "unknown",
       latencyMs: Date.now() - start,
       model,
       detail: redactSecrets(err instanceof Error ? err.message : String(err), [
@@ -1227,10 +1310,11 @@ export async function testProviderConnection(
   if (input.signal?.aborted) {
     controller.abort();
   } else {
-    input.signal?.addEventListener('abort', abortFromParent, { once: true });
+    input.signal?.addEventListener("abort", abortFromParent, { once: true });
   }
   const timer = setTimeout(() => controller.abort(), providerTimeoutMs());
-  let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
+  let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null =
+    null;
 
   try {
     proxyDispatcher = proxyDispatcherRequestInit();
@@ -1253,25 +1337,22 @@ export async function testProviderConnection(
 
     const requestInit = {
       ...proxyDispatcher.requestInit,
-      method: 'POST',
+      method: "POST",
       headers: call.headers,
       signal: controller.signal,
-      redirect: 'error' as const,
+      redirect: "error" as const,
     };
     let response = await fetch(call.url, {
       ...requestInit,
       body: JSON.stringify(call.body),
     });
     let latencyMs = Date.now() - start;
-    if (
-      !response.ok &&
-      call.retryBodyOnUnsupportedMaxTokens !== undefined
-    ) {
-      let detailText = '';
+    if (!response.ok && call.retryBodyOnUnsupportedMaxTokens !== undefined) {
+      let detailText = "";
       try {
         detailText = await response.text();
       } catch {
-        detailText = '';
+        detailText = "";
       }
       if (response.status === 400 && isUnsupportedMaxTokensError(detailText)) {
         console.warn(
@@ -1290,10 +1371,10 @@ export async function testProviderConnection(
         const detail =
           redactedDetail ||
           (response.status === 404
-            ? 'HTTP 404 from provider; check the Base URL path.'
-            : '');
+            ? "HTTP 404 from provider; check the Base URL path."
+            : "");
         console.warn(
-          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
+          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ""}`,
         );
         return {
           ok: false,
@@ -1307,7 +1388,7 @@ export async function testProviderConnection(
     }
     if (response.ok) {
       let data: unknown;
-      let rawText = '';
+      let rawText = "";
       try {
         rawText = await response.text();
         data = rawText ? JSON.parse(rawText) : {};
@@ -1317,7 +1398,7 @@ export async function testProviderConnection(
         );
         return {
           ok: false,
-          kind: 'unknown',
+          kind: "unknown",
           latencyMs,
           model,
           status: response.status,
@@ -1334,9 +1415,9 @@ export async function testProviderConnection(
         isLoopbackApiHost(validated.parsed.hostname),
       );
       if (completion.kind) {
-        const detail = redactSecrets(completion.detail ?? '', [input.apiKey]);
+        const detail = redactSecrets(completion.detail ?? "", [input.apiKey]);
         console.warn(
-          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${completion.kind})${detail ? ` ${detail}` : ''}`,
+          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${completion.kind})${detail ? ` ${detail}` : ""}`,
         );
         return {
           ok: false,
@@ -1350,16 +1431,15 @@ export async function testProviderConnection(
       const replyText = call.extractText(data);
       let rawSample = truncateSample(replyText);
       if (rawSample && isLikelyModelErrorText(rawSample)) {
-        const detail = redactSecrets(
-          smokeFailureDetail(rawSample),
-          [input.apiKey],
-        );
+        const detail = redactSecrets(smokeFailureDetail(rawSample), [
+          input.apiKey,
+        ]);
         console.warn(
-          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (not_found_model)${detail ? ` ${detail}` : ''}`,
+          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (not_found_model)${detail ? ` ${detail}` : ""}`,
         );
         return {
           ok: false,
-          kind: 'not_found_model',
+          kind: "not_found_model",
           latencyMs,
           model,
           status: response.status,
@@ -1373,11 +1453,11 @@ export async function testProviderConnection(
           [input.apiKey],
         );
         console.warn(
-          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (unexpected_sample)${detail ? ` ${detail}` : ''}`,
+          `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (unexpected_sample)${detail ? ` ${detail}` : ""}`,
         );
         return {
           ok: false,
-          kind: 'unknown',
+          kind: "unknown",
           latencyMs,
           model,
           status: response.status,
@@ -1385,7 +1465,7 @@ export async function testProviderConnection(
         };
       }
       if (!rawSample && completion.valid) {
-        rawSample = truncateSample(completion.sample ?? 'valid completion');
+        rawSample = truncateSample(completion.sample ?? "valid completion");
       }
       const sample = redactSecrets(rawSample, [input.apiKey]);
       if (rawSample && !isSmokeOkReply(replyText)) {
@@ -1398,7 +1478,7 @@ export async function testProviderConnection(
       );
       return {
         ok: true,
-        kind: 'success',
+        kind: "success",
         latencyMs,
         model,
         status: response.status,
@@ -1406,7 +1486,7 @@ export async function testProviderConnection(
       };
     }
     // Non-2xx: read body for redacted detail, then map status → kind.
-    let detailText = '';
+    let detailText = "";
     try {
       detailText = await response.text();
     } catch {
@@ -1419,10 +1499,10 @@ export async function testProviderConnection(
     const detail =
       redactedDetail ||
       (response.status === 404
-        ? 'HTTP 404 from provider; check the Base URL path.'
-        : '');
+        ? "HTTP 404 from provider; check the Base URL path."
+        : "");
     console.warn(
-      `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ''}`,
+      `[test:provider] ${input.protocol} ${validated.parsed.hostname} model=${input.model} → ${response.status} in ${latencyMs}ms (${kind})${detail ? ` ${detail}` : ""}`,
     );
     return {
       ok: false,
@@ -1448,7 +1528,7 @@ export async function testProviderConnection(
     };
   } finally {
     clearTimeout(timer);
-    input.signal?.removeEventListener('abort', abortFromParent);
+    input.signal?.removeEventListener("abort", abortFromParent);
     await proxyDispatcher?.close();
   }
 }
@@ -1458,8 +1538,8 @@ export async function testProviderConnection(
 // parsers, so the parsers don't notice they're talking to a test rather than
 // the real SSE writer.
 type AgentSinkResult =
-  | { kind: 'text'; text: string }
-  | { kind: 'streamError'; error: Error };
+  | { kind: "text"; text: string }
+  | { kind: "streamError"; error: Error };
 
 interface AgentSink {
   send: (event: string, payload: unknown) => void;
@@ -1473,9 +1553,9 @@ interface AgentSink {
 }
 
 export function createAgentSink(): AgentSink {
-  let buffer = '';
-  let stderrTail = '';
-  let rawStdoutTail = '';
+  let buffer = "";
+  let stderrTail = "";
+  let rawStdoutTail = "";
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveResult!: (value: AgentSinkResult) => void;
   let resolveStreamError!: (value: Error) => void;
@@ -1502,70 +1582,73 @@ export function createAgentSink(): AgentSink {
 
   const publishStreamError = (error: Error) => {
     resolveStreamError(error);
-    resolveResult({ kind: 'streamError', error });
+    resolveResult({ kind: "streamError", error });
   };
 
   const scheduleTextResolution = () => {
     if (settled || buffer.trim().length === 0) return;
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
-      resolveResult({ kind: 'text', text: buffer });
+      resolveResult({ kind: "text", text: buffer });
     }, AGENT_COMPLETION_DEBOUNCE_MS);
     debounceTimer.unref?.();
   };
 
   const consumeText = (text: string) => {
-    if (typeof text !== 'string' || text.length === 0) return;
+    if (typeof text !== "string" || text.length === 0) return;
     buffer += text;
     scheduleTextResolution();
   };
 
   const appendRawStdout = (chunk: string) => {
-    if (typeof chunk === 'string' && chunk.length > 0) {
+    if (typeof chunk === "string" && chunk.length > 0) {
       rawStdoutTail = (rawStdoutTail + chunk).slice(-400);
     }
   };
 
   const send = (event: string, payload: unknown) => {
     const data = (payload ?? {}) as Record<string, unknown>;
-    if (event === 'error') {
+    if (event === "error") {
       const message =
-        typeof data.message === 'string'
+        typeof data.message === "string"
           ? data.message
-          : typeof (data as { error?: { message?: string } }).error?.message === 'string'
+          : typeof (data as { error?: { message?: string } }).error?.message ===
+              "string"
             ? (data as { error: { message: string } }).error.message
-            : 'agent stream error';
+            : "agent stream error";
       publishStreamError(new Error(message));
       return;
     }
-    if (event === 'agent') {
+    if (event === "agent") {
       const type = data.type;
-      if (type === 'error') {
+      if (type === "error") {
         const message =
-          typeof data.message === 'string' ? data.message : 'agent stream error';
+          typeof data.message === "string"
+            ? data.message
+            : "agent stream error";
         publishStreamError(new Error(message));
         return;
       }
       const delta = data.delta;
       const text = data.text;
-      if (type === 'text_delta' && typeof delta === 'string') {
+      if (type === "text_delta" && typeof delta === "string") {
         consumeText(delta);
-      } else if (type === 'text' && typeof text === 'string') {
+      } else if (type === "text" && typeof text === "string") {
         consumeText(text);
       }
       return;
     }
-    if (event === 'stdout') {
+    if (event === "stdout") {
       const chunk = data.chunk;
-      if (typeof chunk === 'string') {
+      if (typeof chunk === "string") {
         appendRawStdout(chunk);
         consumeText(chunk);
       }
       return;
     }
-    if (event === 'stderr') {
+    if (event === "stderr") {
       const chunk = data.chunk;
-      if (typeof chunk === 'string') {
+      if (typeof chunk === "string") {
         stderrTail = (stderrTail + chunk).slice(-400);
       }
       return;
@@ -1600,7 +1683,12 @@ interface AgentSpawnHandle {
 }
 
 function attachAgentStreamHandlers(
-  def: { streamFormat?: string; eventParser?: string; id: string; promptViaStdin?: boolean },
+  def: {
+    streamFormat?: string;
+    eventParser?: string;
+    id: string;
+    promptViaStdin?: boolean;
+  },
   child: ReturnType<typeof spawn>,
   prompt: string,
   cwd: string,
@@ -1612,20 +1700,24 @@ function attachAgentStreamHandlers(
     hasFatalError?: () => boolean;
     completedSuccessfully?: () => boolean;
   } | null = null;
-  child.stdout?.setEncoding('utf8');
-  child.stderr?.setEncoding('utf8');
-  if (def.streamFormat === 'claude-stream-json') {
-    const claude = createClaudeStreamHandler((ev: unknown) => send('agent', ev));
-    child.stdout?.on('data', (chunk: string) => {
+  child.stdout?.setEncoding("utf8");
+  child.stderr?.setEncoding("utf8");
+  if (def.streamFormat === "claude-stream-json") {
+    const claude = createClaudeStreamHandler((ev: unknown) =>
+      send("agent", ev),
+    );
+    child.stdout?.on("data", (chunk: string) => {
       appendRawStdout?.(chunk);
       claude.feed(chunk);
     });
-    child.on('close', () => claude.flush());
-  } else if (def.streamFormat === 'copilot-stream-json') {
-    const copilot = createCopilotStreamHandler((ev: unknown) => send('agent', ev));
-    child.stdout?.on('data', (chunk: string) => copilot.feed(chunk));
-    child.on('close', () => copilot.flush());
-  } else if (def.streamFormat === 'pi-rpc') {
+    child.on("close", () => claude.flush());
+  } else if (def.streamFormat === "copilot-stream-json") {
+    const copilot = createCopilotStreamHandler((ev: unknown) =>
+      send("agent", ev),
+    );
+    child.stdout?.on("data", (chunk: string) => copilot.feed(chunk));
+    child.on("close", () => copilot.flush());
+  } else if (def.streamFormat === "pi-rpc") {
     acpSession = attachPiRpcSession({
       child,
       prompt,
@@ -1634,7 +1726,7 @@ function attachAgentStreamHandlers(
       send,
       imagePaths: [],
     });
-  } else if (def.streamFormat === 'acp-json-rpc') {
+  } else if (def.streamFormat === "acp-json-rpc") {
     acpSession = attachAcpSession({
       child,
       prompt,
@@ -1649,36 +1741,36 @@ function attachAgentStreamHandlers(
       mcpServers: [],
       send,
     });
-  } else if (def.streamFormat === 'json-event-stream') {
+  } else if (def.streamFormat === "json-event-stream") {
     const handler = createJsonEventStreamHandler(
       def.eventParser || def.id,
       (ev: unknown) => {
         const data = (ev ?? {}) as { type?: unknown; message?: unknown };
-        if (data.type === 'error') {
-          send('error', {
+        if (data.type === "error") {
+          send("error", {
             message:
-              typeof data.message === 'string'
+              typeof data.message === "string"
                 ? data.message
-                : 'agent stream error',
+                : "agent stream error",
           });
           return;
         }
-        send('agent', ev);
+        send("agent", ev);
       },
     );
-    child.stdout?.on('data', (chunk: string) => handler.feed(chunk));
-    child.on('close', () => handler.flush());
+    child.stdout?.on("data", (chunk: string) => handler.feed(chunk));
+    child.on("close", () => handler.flush());
   } else {
-    child.stdout?.on('data', (chunk: string) => send('stdout', { chunk }));
+    child.stdout?.on("data", (chunk: string) => send("stdout", { chunk }));
   }
-  child.stderr?.on('data', (chunk: string) => send('stderr', { chunk }));
+  child.stderr?.on("data", (chunk: string) => send("stderr", { chunk }));
   return { child, acpSession };
 }
 
 type AgentChild = ReturnType<typeof spawn>;
 type AgentChildExit =
-  | { kind: 'exit'; code: number | null; signal: NodeJS.Signals | null }
-  | { kind: 'spawnError'; error: Error };
+  | { kind: "exit"; code: number | null; signal: NodeJS.Signals | null }
+  | { kind: "spawnError"; error: Error };
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -1692,19 +1784,19 @@ async function testAgentConnectionInternal(
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model =
-    typeof input.model === 'string' && input.model.trim()
+    typeof input.model === "string" && input.model.trim()
       ? input.model.trim()
-      : 'default';
+      : "default";
   const def = getAgentDef(input.agentId);
   if (!def) {
     return {
       ok: false,
-      kind: 'agent_not_installed',
+      kind: "agent_not_installed",
       latencyMs: Date.now() - start,
       model,
       agentName: input.agentId,
       detail: `Unknown agent id: ${input.agentId}`,
-      diagnostics: { phase: 'binary_resolution' },
+      diagnostics: { phase: "binary_resolution" },
     };
   }
   const configuredAgentEnv = agentCliEnvForAgent(
@@ -1716,15 +1808,15 @@ async function testAgentConnectionInternal(
   if (!resolvedBin || !executableResolution.launchPath) {
     return {
       ok: false,
-      kind: 'agent_not_installed',
+      kind: "agent_not_installed",
       latencyMs: Date.now() - start,
       model,
       agentName: def.name,
-      diagnostics: { phase: 'binary_resolution' },
+      diagnostics: { phase: "binary_resolution" },
     };
   }
 
-  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-'));
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), "od-conn-test-"));
   let child: AgentChild | null = null;
   let childExit: Promise<AgentChildExit> | null = null;
   let childClosed = false;
@@ -1739,7 +1831,7 @@ async function testAgentConnectionInternal(
   // know how far the test got. Phase is mutated at the points where
   // the daemon meaningfully advances (just before spawn, when the
   // child first produces stdout, etc.) — not on every event.
-  let phase: ConnectionTestPhase = 'binary_resolution';
+  let phase: ConnectionTestPhase = "binary_resolution";
   const buildDiagnostics = (
     overrides: Partial<ConnectionTestDiagnostics> = {},
   ): ConnectionTestDiagnostics => {
@@ -1768,18 +1860,16 @@ async function testAgentConnectionInternal(
     const sample = redactSecrets(rawSample);
     if (rawSample && isLikelyModelErrorText(rawSample)) {
       const detail = redactSecrets(smokeFailureDetail(rawSample));
-      console.warn(
-        `[test:agent] ${def.name} → not_found_model: ${detail}`,
-      );
+      console.warn(`[test:agent] ${def.name} → not_found_model: ${detail}`);
       return {
         ok: false,
-        kind: 'not_found_model',
+        kind: "not_found_model",
         latencyMs,
         model,
         agentName: def.name,
         detail,
         diagnostics: buildDiagnostics({
-          phase: 'output_parse',
+          phase: "output_parse",
           ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}),
         }),
       };
@@ -1789,7 +1879,9 @@ async function testAgentConnectionInternal(
         `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
       );
     }
-    console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
+    console.log(
+      `[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`,
+    );
     // resultFromChildExit can route ACP forced shutdown (code === null,
     // signal === 'SIGTERM' + acpCleanCompletion) through this success
     // helper. Hard-coding `exitCode: 0` would silently overwrite the
@@ -1800,15 +1892,19 @@ async function testAgentConnectionInternal(
     // (theoretical text-without-exit path).
     return {
       ok: true,
-      kind: 'success',
+      kind: "success",
       latencyMs,
       model,
       agentName: def.name,
       sample,
       diagnostics: buildDiagnostics(
         exit
-          ? { phase: 'connection_smoke_test', exitCode: exit.code, signal: exit.signal }
-          : { phase: 'connection_smoke_test', exitCode: 0 },
+          ? {
+              phase: "connection_smoke_test",
+              exitCode: exit.code,
+              signal: exit.signal,
+            }
+          : { phase: "connection_smoke_test", exitCode: 0 },
       ),
     };
   };
@@ -1819,11 +1915,11 @@ async function testAgentConnectionInternal(
       error instanceof Error ? error.message : String(error),
     );
     const auth = classifyAgentAuthFailure(input.agentId, detail);
-    if (auth?.status === 'missing') {
+    if (auth?.status === "missing") {
       console.warn(`[test:agent] ${def.name} → auth_required: ${detail}`);
       return {
         ok: false,
-        kind: 'agent_auth_required',
+        kind: "agent_auth_required",
         latencyMs,
         model,
         agentName: def.name,
@@ -1832,25 +1928,21 @@ async function testAgentConnectionInternal(
       };
     }
     if (detail && isLikelyModelErrorText(detail)) {
-      console.warn(
-        `[test:agent] ${def.name} → not_found_model: ${detail}`,
-      );
+      console.warn(`[test:agent] ${def.name} → not_found_model: ${detail}`);
       return {
         ok: false,
-        kind: 'not_found_model',
+        kind: "not_found_model",
         latencyMs,
         model,
         agentName: def.name,
         detail,
-        diagnostics: buildDiagnostics({ phase: 'output_parse' }),
+        diagnostics: buildDiagnostics({ phase: "output_parse" }),
       };
     }
-    console.warn(
-      `[test:agent] ${def.name} → stream_error: ${detail}`,
-    );
+    console.warn(`[test:agent] ${def.name} → stream_error: ${detail}`);
     return {
       ok: false,
-      kind: 'agent_spawn_failed',
+      kind: "agent_spawn_failed",
       latencyMs,
       model,
       agentName: def.name,
@@ -1860,13 +1952,15 @@ async function testAgentConnectionInternal(
   };
 
   const resultFromCancellation = (
-    kind: 'timeout' | 'aborted',
+    kind: "timeout" | "aborted",
   ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
-    console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
+    console.warn(
+      `[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`,
+    );
     return {
       ok: false,
-      kind: 'timeout',
+      kind: "timeout",
       latencyMs,
       model,
       agentName: def.name,
@@ -1892,7 +1986,7 @@ async function testAgentConnectionInternal(
       // ("Always set on local agent test responses") actually holds.
       return {
         ok: false,
-        kind: 'agent_spawn_failed',
+        kind: "agent_spawn_failed",
         latencyMs: Date.now() - start,
         model,
         agentName: def.name,
@@ -1901,7 +1995,9 @@ async function testAgentConnectionInternal(
       };
     }
     const stdinMode =
-      def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      def.promptViaStdin || def.streamFormat === "acp-json-rpc"
+        ? "pipe"
+        : "ignore";
     const baseEnv = spawnEnvForAgent(
       input.agentId,
       {
@@ -1912,22 +2008,30 @@ async function testAgentConnectionInternal(
       undefined,
       { resolvedBin: executableResolution.selectedPath },
     );
-    const mmdRouteLaunchEnv = input.agentId === 'claude'
-      ? await loadMmdRouteLaunchEnv(
-          {
-            ...process.env,
-            ...(def.env || {}),
-            ...configuredAgentEnv,
-          },
-          model,
-        ).catch(() => null)
-      : null;
-    const env = applyAgentLaunchEnv({
-      ...baseEnv,
-      ...(mmdRouteLaunchEnv || {}),
-    }, executableResolution);
-    const auth = await probeAgentAuthStatus(def, executableResolution.launchPath, env);
-    if (auth?.status === 'missing') {
+    const mmdRouteLaunchEnv =
+      input.agentId === "claude"
+        ? await loadMmdRouteLaunchEnv(
+            {
+              ...process.env,
+              ...(def.env || {}),
+              ...configuredAgentEnv,
+            },
+            model,
+          ).catch(() => null)
+        : null;
+    const env = applyAgentLaunchEnv(
+      {
+        ...baseEnv,
+        ...(mmdRouteLaunchEnv || {}),
+      },
+      executableResolution,
+    );
+    const auth = await probeAgentAuthStatus(
+      def,
+      executableResolution.launchPath,
+      env,
+    );
+    if (auth?.status === "missing") {
       // Preflight auth probe runs after binary resolution but before the
       // smoke spawn — phase is still 'binary_resolution'. The smoke
       // sink is empty here (no spawn happened), so the probe itself is
@@ -1935,13 +2039,15 @@ async function testAgentConnectionInternal(
       // probe captured into the diagnostics block; `...overrides` in
       // buildDiagnostics() lets these win over the empty sink tails.
       const probeOverrides: Partial<ConnectionTestDiagnostics> = {};
-      if (auth.stdoutTail) probeOverrides.stdoutTail = redactSecrets(auth.stdoutTail);
-      if (auth.stderrTail) probeOverrides.stderrTail = redactSecrets(auth.stderrTail);
+      if (auth.stdoutTail)
+        probeOverrides.stdoutTail = redactSecrets(auth.stdoutTail);
+      if (auth.stderrTail)
+        probeOverrides.stderrTail = redactSecrets(auth.stderrTail);
       if (auth.exitCode !== undefined) probeOverrides.exitCode = auth.exitCode;
       if (auth.signal !== undefined) probeOverrides.signal = auth.signal;
       return {
         ok: false,
-        kind: 'agent_auth_required',
+        kind: "agent_auth_required",
         latencyMs: Date.now() - start,
         model,
         agentName: def.name,
@@ -1959,22 +2065,22 @@ async function testAgentConnectionInternal(
     // 'spawn' phase rather than 'binary_resolution', so flip the tracker
     // *before* spawning. resultFromAgentText flips it again to
     // 'connection_smoke_test' / 'output_parse' once we get text out.
-    phase = 'spawn';
+    phase = "spawn";
     child = spawn(invocation.command, invocation.args, {
       env,
-      stdio: [stdinMode, 'pipe', 'pipe'],
+      stdio: [stdinMode, "pipe", "pipe"],
       cwd: tempDir,
       shell: false,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
     });
     childExit = new Promise<AgentChildExit>((resolve) => {
-      child!.once('error', (err) => {
+      child!.once("error", (err) => {
         childClosed = true;
-        resolve({ kind: 'spawnError', error: err });
+        resolve({ kind: "spawnError", error: err });
       });
-      child!.once('close', (code, signal) => {
+      child!.once("close", (code, signal) => {
         childClosed = true;
-        resolve({ kind: 'exit', code, signal });
+        resolve({ kind: "exit", code, signal });
       });
     });
 
@@ -1991,7 +2097,7 @@ async function testAgentConnectionInternal(
     const resultFromChildExit = (
       winner: AgentChildExit,
     ): ConnectionTestResponse => {
-      if (winner.kind === 'spawnError') {
+      if (winner.kind === "spawnError") {
         const latencyMs = Date.now() - start;
         const detail = redactSecrets(winner.error.message);
         const guidance = redactSecrets(
@@ -1999,22 +2105,22 @@ async function testAgentConnectionInternal(
             input.agentId,
             executableResolution.configuredOverridePath,
             executableResolution.pathResolvedPath,
-          )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ''}`,
+          )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ""}`,
         );
         const errnoCode = (winner.error as NodeJS.ErrnoException).code;
-        const isMissing = errnoCode === 'ENOENT';
+        const isMissing = errnoCode === "ENOENT";
         console.warn(
           `[test:agent] ${def.name} → spawn_failed: ${detail}${guidance}`,
         );
         return {
           ok: false,
-          kind: isMissing ? 'agent_not_installed' : 'agent_spawn_failed',
+          kind: isMissing ? "agent_not_installed" : "agent_spawn_failed",
           latencyMs,
           model,
           agentName: def.name,
           detail: `${detail}${guidance}`,
           diagnostics: buildDiagnostics({
-            phase: isMissing ? 'binary_resolution' : 'spawn',
+            phase: isMissing ? "binary_resolution" : "spawn",
           }),
         };
       }
@@ -2035,11 +2141,11 @@ async function testAgentConnectionInternal(
       // `agent_spawn_failed`, preserving the existing connection-test
       // failure behavior for genuine post-response problems.
       const acpCleanCompletion =
-        typeof acpSession?.completedSuccessfully === 'function' &&
+        typeof acpSession?.completedSuccessfully === "function" &&
         acpSession.completedSuccessfully();
       const acpForcedShutdown =
         winner.code === null &&
-        winner.signal === 'SIGTERM' &&
+        winner.signal === "SIGTERM" &&
         acpCleanCompletion;
       const exitedCleanly =
         (winner.code === 0 && !winner.signal) || acpForcedShutdown;
@@ -2063,19 +2169,21 @@ async function testAgentConnectionInternal(
           : null,
       ]
         .filter(Boolean)
-        .join(' · ');
+        .join(" · ");
       const auth = classifyAgentAuthFailure(input.agentId, rawDetail);
-      if (auth?.status === 'missing') {
-        console.warn(`[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`);
+      if (auth?.status === "missing") {
+        console.warn(
+          `[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`,
+        );
         return {
           ok: false,
-          kind: 'agent_auth_required',
+          kind: "agent_auth_required",
           latencyMs,
           model,
           agentName: def.name,
           detail: auth.message ?? cursorAuthGuidance(),
           diagnostics: buildDiagnostics({
-            phase: 'connection_smoke_test',
+            phase: "connection_smoke_test",
             exitCode: winner.code,
             signal: winner.signal,
           }),
@@ -2096,69 +2204,68 @@ async function testAgentConnectionInternal(
         );
         return {
           ok: false,
-          kind: 'agent_spawn_failed',
+          kind: "agent_spawn_failed",
           latencyMs,
           model,
           agentName: def.name,
           detail: claudeDiagnostic.detail,
           diagnostics: buildDiagnostics({
-            phase: 'spawn',
+            phase: "spawn",
             exitCode: winner.code,
             signal: winner.signal,
           }),
         };
       }
-      const detail = redactSecrets(
-        rawDetail,
-      );
+      const detail = redactSecrets(rawDetail);
       const guidance = redactSecrets(
         `${codexExecutableGuidance(
           input.agentId,
           executableResolution.configuredOverridePath,
           executableResolution.pathResolvedPath,
-        )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ''}`,
+        )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ""}`,
       );
-      const label = buffered ? 'exit_failed' : 'no_text';
+      const label = buffered ? "exit_failed" : "no_text";
       console.warn(
-        `[test:agent] ${def.name} → ${label} (${detail || 'no detail'}${guidance})`,
+        `[test:agent] ${def.name} → ${label} (${detail || "no detail"}${guidance})`,
       );
       return {
         ok: false,
-        kind: acpFatal || !exitedCleanly ? 'agent_spawn_failed' : 'unknown',
+        kind: acpFatal || !exitedCleanly ? "agent_spawn_failed" : "unknown",
         latencyMs,
         model,
         agentName: def.name,
-        detail:
-          `${detail || 'Agent exited without producing assistant text'}${guidance}`,
+        detail: `${detail || "Agent exited without producing assistant text"}${guidance}`,
         diagnostics: buildDiagnostics({
-          phase: buffered ? 'output_parse' : 'spawn',
+          phase: buffered ? "output_parse" : "spawn",
           exitCode: winner.code,
           signal: winner.signal,
         }),
       };
     };
 
-    if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
-      child.stdin.on('error', (err: NodeJS.ErrnoException) => {
-        if (err.code !== 'EPIPE') {
-          sink.send('error', {
+    if (def.promptViaStdin && child.stdin && def.streamFormat !== "pi-rpc") {
+      child.stdin.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code !== "EPIPE") {
+          sink.send("error", {
             message: `stdin: ${err.message}`,
           });
         }
       });
-      child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), 'utf8');
+      child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), "utf8");
     }
-    const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
-      timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());
-      abortHandler = () => resolve({ kind: 'aborted' });
+    const cancellationPromise = new Promise<
+      { kind: "timeout" } | { kind: "aborted" }
+    >((resolve) => {
+      timer = setTimeout(() => resolve({ kind: "timeout" }), agentTimeoutMs());
+      abortHandler = () => resolve({ kind: "aborted" });
       if (input.signal?.aborted) {
         abortHandler();
       } else {
-        input.signal?.addEventListener('abort', abortHandler, { once: true });
+        input.signal?.addEventListener("abort", abortHandler, { once: true });
       }
     });
     const streamError = sink.streamError.then((error) => ({
-      kind: 'streamError' as const,
+      kind: "streamError" as const,
       error,
     }));
 
@@ -2168,24 +2275,24 @@ async function testAgentConnectionInternal(
       cancellationPromise,
     ]);
 
-    if (winner.kind === 'text') {
+    if (winner.kind === "text") {
       const completion = await Promise.race([
         streamError,
         childExit,
         cancellationPromise,
       ]);
-      if (completion.kind === 'streamError') {
+      if (completion.kind === "streamError") {
         return resultFromStreamError(completion.error);
       }
-      if (completion.kind === 'timeout' || completion.kind === 'aborted') {
+      if (completion.kind === "timeout" || completion.kind === "aborted") {
         return resultFromCancellation(completion.kind);
       }
       return resultFromChildExit(completion);
     }
-    if (winner.kind === 'streamError') {
+    if (winner.kind === "streamError") {
       return resultFromStreamError(winner.error);
     }
-    if (winner.kind === 'timeout' || winner.kind === 'aborted') {
+    if (winner.kind === "timeout" || winner.kind === "aborted") {
       return resultFromCancellation(winner.kind);
     }
     return resultFromChildExit(winner);
@@ -2197,7 +2304,7 @@ async function testAgentConnectionInternal(
     // is safe to call here.
     return {
       ok: false,
-      kind: 'agent_spawn_failed',
+      kind: "agent_spawn_failed",
       latencyMs: Date.now() - start,
       model,
       agentName: def.name,
@@ -2207,12 +2314,12 @@ async function testAgentConnectionInternal(
   } finally {
     if (timer) clearTimeout(timer);
     if (abortHandler) {
-      input.signal?.removeEventListener('abort', abortHandler);
+      input.signal?.removeEventListener("abort", abortHandler);
     }
     sink.dispose();
     if (child && !childClosed) {
       try {
-        child.kill('SIGTERM');
+        child.kill("SIGTERM");
       } catch {
         // Already gone — nothing to do.
       }
@@ -2224,7 +2331,7 @@ async function testAgentConnectionInternal(
         : false;
       if (!closedAfterTerm && !childClosed) {
         try {
-          child.kill('SIGKILL');
+          child.kill("SIGKILL");
         } catch {
           // Already gone — nothing to do.
         }
@@ -2236,11 +2343,9 @@ async function testAgentConnectionInternal(
         }
       }
     }
-    await fsp
-      .rm(tempDir, { recursive: true, force: true })
-      .catch(() => {
-        // Best-effort cleanup; the OS reaps /tmp eventually.
-      });
+    await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => {
+      // Best-effort cleanup; the OS reaps /tmp eventually.
+    });
   }
 }
 
@@ -2249,7 +2354,7 @@ export async function testAgentConnection(
 ): Promise<ConnectionTestResponse> {
   const primaryResult = await testAgentConnectionInternal(input);
   const validatedPrefs = validateAgentCliEnv(input.agentCliEnv);
-  const configuredCodexBin = validatedPrefs?.codex?.CODEX_BIN?.trim() || '';
+  const configuredCodexBin = validatedPrefs?.codex?.CODEX_BIN?.trim() || "";
   const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
   const def = getAgentDef(input.agentId);
   const executableResolution = def
@@ -2259,21 +2364,19 @@ export async function testAgentConnection(
         pathResolvedPath: null,
         selectedPath: null,
         launchPath: null,
-        launchKind: 'selected' as const,
+        launchKind: "selected" as const,
         childPathPrepend: [],
         diagnostic: null,
       };
-  if (
-    input.agentId === 'codex' &&
-    primaryResult.ok &&
-    configuredCodexBin
-  ) {
+  if (input.agentId === "codex" && primaryResult.ok && configuredCodexBin) {
     if (executableResolution.configuredOverridePath) {
       return {
         ...primaryResult,
         configuredExecutablePath: executableResolution.configuredOverridePath,
-        usedExecutablePath: executableResolution.launchPath ?? executableResolution.configuredOverridePath,
-        usedExecutableSource: 'configured',
+        usedExecutablePath:
+          executableResolution.launchPath ??
+          executableResolution.configuredOverridePath,
+        usedExecutableSource: "configured",
         ...(executableResolution.pathResolvedPath
           ? { detectedExecutablePath: executableResolution.pathResolvedPath }
           : {}),
@@ -2289,8 +2392,10 @@ export async function testAgentConnection(
         ...primaryResult,
         configuredExecutablePath: configuredCodexBin,
         detectedExecutablePath: executableResolution.pathResolvedPath,
-        usedExecutablePath: executableResolution.launchPath ?? executableResolution.pathResolvedPath,
-        usedExecutableSource: 'fallback_invalid',
+        usedExecutablePath:
+          executableResolution.launchPath ??
+          executableResolution.pathResolvedPath,
+        usedExecutableSource: "fallback_invalid",
         detail: redactSecrets(
           codexInvalidConfiguredPathFallbackDetail(
             configuredCodexBin,
@@ -2301,21 +2406,24 @@ export async function testAgentConnection(
     }
   }
   if (
-    input.agentId !== 'codex' ||
+    input.agentId !== "codex" ||
     primaryResult.ok ||
-    !new Set<ConnectionTestKind>(['agent_spawn_failed', 'agent_not_installed', 'unknown']).has(primaryResult.kind) ||
+    !new Set<ConnectionTestKind>([
+      "agent_spawn_failed",
+      "agent_not_installed",
+      "unknown",
+    ]).has(primaryResult.kind) ||
     !executableResolution.configuredOverridePath ||
     !executableResolution.pathResolvedPath ||
-    executableResolution.configuredOverridePath === executableResolution.pathResolvedPath
+    executableResolution.configuredOverridePath ===
+      executableResolution.pathResolvedPath
   ) {
     return primaryResult;
   }
-  const fallbackResult = await testAgentConnectionInternal(
-    {
-      ...input,
-      agentCliEnv: stripCodexBinOverride(validatedPrefs),
-    },
-  );
+  const fallbackResult = await testAgentConnectionInternal({
+    ...input,
+    agentCliEnv: stripCodexBinOverride(validatedPrefs),
+  });
   if (!fallbackResult.ok) {
     return primaryResult;
   }
@@ -2323,8 +2431,9 @@ export async function testAgentConnection(
     ...fallbackResult,
     configuredExecutablePath: executableResolution.configuredOverridePath,
     detectedExecutablePath: executableResolution.pathResolvedPath,
-    usedExecutablePath: executableResolution.launchPath ?? executableResolution.pathResolvedPath,
-    usedExecutableSource: 'fallback_failed',
+    usedExecutablePath:
+      executableResolution.launchPath ?? executableResolution.pathResolvedPath,
+    usedExecutableSource: "fallback_failed",
     detail: redactSecrets(
       codexExecutableFallbackSuccessDetail(
         executableResolution.configuredOverridePath,

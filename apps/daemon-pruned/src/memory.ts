@@ -20,16 +20,16 @@
 // last-writer-wins on a per-file basis; the daemon only ever has one
 // chat run at a time touching memory so we don't need locking yet.
 
-import { promises as fsp } from 'node:fs';
-import path from 'node:path';
-import { EventEmitter } from 'node:events';
-import { parseFrontmatter } from './frontmatter.js';
+import { promises as fsp } from "node:fs";
+import path from "node:path";
+import { EventEmitter } from "node:events";
+import { parseFrontmatter } from "./frontmatter.js";
 // Imported lazily through the memory-extractions module by the call
 // sites below so a future test-only build of memory.ts that stubs the
 // store can still tree-shake the ring buffer. We use a static import
 // here because memory.ts is the chat hot path — a dynamic import per
 // turn would add a microtask hop for no real benefit.
-import { recordHeuristic, recordSkip } from './memory-extractions.js';
+import { recordHeuristic, recordSkip } from "./memory-extractions.js";
 
 // Tiny in-process bus. The HTTP layer (`/api/memory/events`) subscribes
 // to this and forwards events to any open SSE client; the storage
@@ -40,11 +40,11 @@ export const memoryEvents = new EventEmitter();
 memoryEvents.setMaxListeners(64);
 
 export type MemoryChangeKind =
-  | 'upsert'
-  | 'delete'
-  | 'index'
-  | 'config'
-  | 'extract';
+  | "upsert"
+  | "delete"
+  | "index"
+  | "config"
+  | "extract";
 
 export interface MemoryChangeEvent {
   kind: MemoryChangeKind;
@@ -58,19 +58,19 @@ export interface MemoryChangeEvent {
   // pass. Lets the toast say "Memory updated (3 new)" instead of three
   // separate toasts.
   count?: number;
-  source?: 'heuristic' | 'llm' | 'manual';
+  source?: "heuristic" | "llm" | "manual";
   enabled?: boolean;
   at: number;
 }
 
-function emitChange(event: Omit<MemoryChangeEvent, 'at'>): void {
-  memoryEvents.emit('change', { ...event, at: Date.now() });
+function emitChange(event: Omit<MemoryChangeEvent, "at">): void {
+  memoryEvents.emit("change", { ...event, at: Date.now() });
 }
 
-const INDEX_FILE = 'MEMORY.md';
-const CONFIG_FILE = '.config.json';
+const INDEX_FILE = "MEMORY.md";
+const CONFIG_FILE = ".config.json";
 
-const VALID_TYPES = new Set(['user', 'feedback', 'project', 'reference']);
+const VALID_TYPES = new Set(["user", "feedback", "project", "reference"]);
 
 const DEFAULT_INDEX = `# Memory
 
@@ -82,7 +82,7 @@ back if you change your mind.
 `;
 
 export function memoryDir(dataDir) {
-  return path.join(dataDir, 'memory');
+  return path.join(dataDir, "memory");
 }
 
 async function ensureDir(dir) {
@@ -90,7 +90,7 @@ async function ensureDir(dir) {
 }
 
 function isValidType(t) {
-  return typeof t === 'string' && VALID_TYPES.has(t);
+  return typeof t === "string" && VALID_TYPES.has(t);
 }
 
 // Slug rules: lowercase, alphanumeric + underscore. Strip everything
@@ -100,12 +100,12 @@ function isValidType(t) {
 // we hash the raw name so two distinct Chinese memories don't collide
 // on the `<type>_note` fallback.
 export function deriveMemoryId(type, name) {
-  const safeType = isValidType(type) ? type : 'user';
-  const raw = String(name || '');
+  const safeType = isValidType(type) ? type : "user";
+  const raw = String(name || "");
   const cleaned = raw
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
     .slice(0, 48);
   if (cleaned.length > 0) return `${safeType}_${cleaned}`;
   // FNV-1a 32-bit on the original name. Tiny, deterministic, no
@@ -123,8 +123,8 @@ export function deriveMemoryId(type, name) {
 function entryPath(dataDir, id) {
   // Defence in depth: the id arrives from the network. Reject anything
   // that could escape the memory dir or break the .md convention.
-  if (typeof id !== 'string' || !/^[a-z0-9_]+$/.test(id) || id.length > 96) {
-    throw new Error('invalid memory id');
+  if (typeof id !== "string" || !/^[a-z0-9_]+$/.test(id) || id.length > 96) {
+    throw new Error("invalid memory id");
   }
   return path.join(memoryDir(dataDir), `${id}.md`);
 }
@@ -142,28 +142,28 @@ function configPath(dataDir) {
 // arbitrary user-supplied keys (e.g. a typo'd field that quietly breaks
 // the extractor on the next restart).
 const VALID_EXTRACTION_PROVIDERS = new Set([
-  'anthropic',
-  'openai',
-  'azure',
-  'google',
-  'ollama',
+  "anthropic",
+  "openai",
+  "azure",
+  "google",
+  "ollama",
 ]);
 
 function normalizeExtractionPatch(input) {
-  if (!input || typeof input !== 'object') return null;
+  if (!input || typeof input !== "object") return null;
   const provider = input.provider;
   if (!VALID_EXTRACTION_PROVIDERS.has(provider)) return null;
   const out = { provider };
-  if (typeof input.model === 'string' && input.model.trim()) {
+  if (typeof input.model === "string" && input.model.trim()) {
     out.model = input.model.trim();
   }
-  if (typeof input.baseUrl === 'string' && input.baseUrl.trim()) {
+  if (typeof input.baseUrl === "string" && input.baseUrl.trim()) {
     out.baseUrl = input.baseUrl.trim();
   }
-  if (typeof input.apiKey === 'string' && input.apiKey.trim()) {
+  if (typeof input.apiKey === "string" && input.apiKey.trim()) {
     out.apiKey = input.apiKey.trim();
   }
-  if (typeof input.apiVersion === 'string' && input.apiVersion.trim()) {
+  if (typeof input.apiVersion === "string" && input.apiVersion.trim()) {
     out.apiVersion = input.apiVersion.trim();
   }
   return out;
@@ -171,7 +171,7 @@ function normalizeExtractionPatch(input) {
 
 export async function readMemoryConfig(dataDir) {
   try {
-    const raw = await fsp.readFile(configPath(dataDir), 'utf8');
+    const raw = await fsp.readFile(configPath(dataDir), "utf8");
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed?.enabled !== false,
@@ -195,29 +195,30 @@ export async function writeMemoryConfig(dataDir, patch) {
   const current = await readMemoryConfig(dataDir);
   const next = {
     enabled:
-      typeof patch?.enabled === 'boolean' ? patch.enabled : current.enabled,
+      typeof patch?.enabled === "boolean" ? patch.enabled : current.enabled,
     chatExtractionEnabled:
-      typeof patch?.chatExtractionEnabled === 'boolean'
+      typeof patch?.chatExtractionEnabled === "boolean"
         ? patch.chatExtractionEnabled
         : current.chatExtractionEnabled,
     extraction: current.extraction,
   };
-  if (Object.prototype.hasOwnProperty.call(patch || {}, 'extraction')) {
-    next.extraction = patch.extraction === null
-      ? null
-      : normalizeExtractionPatch(patch.extraction);
+  if (Object.prototype.hasOwnProperty.call(patch || {}, "extraction")) {
+    next.extraction =
+      patch.extraction === null
+        ? null
+        : normalizeExtractionPatch(patch.extraction);
   }
-  if (typeof next.enabled !== 'boolean') next.enabled = true;
-  if (typeof next.chatExtractionEnabled !== 'boolean') {
+  if (typeof next.enabled !== "boolean") next.enabled = true;
+  if (typeof next.chatExtractionEnabled !== "boolean") {
     next.chatExtractionEnabled = true;
   }
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(configPath(dataDir), JSON.stringify(next, null, 2));
   if (
-    current.enabled !== next.enabled
-    || current.chatExtractionEnabled !== next.chatExtractionEnabled
+    current.enabled !== next.enabled ||
+    current.chatExtractionEnabled !== next.chatExtractionEnabled
   ) {
-    emitChange({ kind: 'config', enabled: next.enabled });
+    emitChange({ kind: "config", enabled: next.enabled });
   }
   // We don't emit a separate change event for extraction overrides — the
   // chat hot path doesn't need to react, and the settings panel re-reads
@@ -231,21 +232,21 @@ export async function writeMemoryConfig(dataDir, patch) {
 // "•••• abcd" affordances without round-tripping through writeConfig.
 export function maskMemoryExtractionConfig(extraction) {
   if (!extraction) return null;
-  const apiKey = typeof extraction.apiKey === 'string' ? extraction.apiKey : '';
+  const apiKey = typeof extraction.apiKey === "string" ? extraction.apiKey : "";
   return {
     provider: extraction.provider,
-    model: typeof extraction.model === 'string' ? extraction.model : '',
-    baseUrl: typeof extraction.baseUrl === 'string' ? extraction.baseUrl : '',
+    model: typeof extraction.model === "string" ? extraction.model : "",
+    baseUrl: typeof extraction.baseUrl === "string" ? extraction.baseUrl : "",
     apiVersion:
-      typeof extraction.apiVersion === 'string' ? extraction.apiVersion : '',
-    apiKeyTail: apiKey ? apiKey.slice(-4) : '',
+      typeof extraction.apiVersion === "string" ? extraction.apiVersion : "",
+    apiKeyTail: apiKey ? apiKey.slice(-4) : "",
     apiKeyConfigured: Boolean(apiKey),
   };
 }
 
 export async function readMemoryIndex(dataDir) {
   try {
-    return await fsp.readFile(indexPath(dataDir), 'utf8');
+    return await fsp.readFile(indexPath(dataDir), "utf8");
   } catch {
     return DEFAULT_INDEX;
   }
@@ -253,22 +254,23 @@ export async function readMemoryIndex(dataDir) {
 
 export async function writeMemoryIndex(dataDir, body, options) {
   await ensureDir(memoryDir(dataDir));
-  await fsp.writeFile(indexPath(dataDir), String(body ?? ''));
-  if (!options?.silent) emitChange({ kind: 'index' });
+  await fsp.writeFile(indexPath(dataDir), String(body ?? ""));
+  if (!options?.silent) emitChange({ kind: "index" });
 }
 
 function summarize(id, raw, mtime) {
   const { data, body } = parseFrontmatter(raw);
-  const type = isValidType(data?.type) ? data.type : 'user';
+  const type = isValidType(data?.type) ? data.type : "user";
   return {
     summary: {
       id,
-      name: typeof data?.name === 'string' && data.name ? data.name : id,
-      description: typeof data?.description === 'string' ? data.description : '',
+      name: typeof data?.name === "string" && data.name ? data.name : id,
+      description:
+        typeof data?.description === "string" ? data.description : "",
       type,
       updatedAt: mtime,
     },
-    body: typeof body === 'string' ? body.trimStart() : '',
+    body: typeof body === "string" ? body.trimStart() : "",
   };
 }
 
@@ -282,14 +284,14 @@ export async function listMemoryEntries(dataDir) {
   }
   const out = [];
   for (const name of names) {
-    if (!name.endsWith('.md')) continue;
+    if (!name.endsWith(".md")) continue;
     if (name === INDEX_FILE) continue;
     const id = name.slice(0, -3);
     if (!/^[a-z0-9_]+$/.test(id)) continue;
     try {
       const filePath = path.join(dir, name);
       const [raw, stat] = await Promise.all([
-        fsp.readFile(filePath, 'utf8'),
+        fsp.readFile(filePath, "utf8"),
         fsp.stat(filePath),
       ]);
       const { summary } = summarize(id, raw, stat.mtimeMs);
@@ -304,14 +306,14 @@ export async function listMemoryEntries(dataDir) {
   return out;
 }
 
-const MEMORY_TREE_TYPES = ['user', 'feedback', 'project', 'reference'];
+const MEMORY_TREE_TYPES = ["user", "feedback", "project", "reference"];
 
 function memoryTreeFolderId(type) {
   return `folder:${type}`;
 }
 
 function memoryTreeScopeForType(type) {
-  return type === 'project' ? 'project' : 'global';
+  return type === "project" ? "project" : "global";
 }
 
 function toIsoTime(ms) {
@@ -320,9 +322,9 @@ function toIsoTime(ms) {
 
 function extractAutomationRefs(body, label) {
   const refs = new Set();
-  const re = new RegExp(`^${label}:\\s*([A-Za-z0-9_-]+)\\s*$`, 'gim');
+  const re = new RegExp(`^${label}:\\s*([A-Za-z0-9_-]+)\\s*$`, "gim");
   let match;
-  while ((match = re.exec(String(body || ''))) !== null) {
+  while ((match = re.exec(String(body || ""))) !== null) {
     if (match[1]) refs.add(match[1]);
   }
   return Array.from(refs);
@@ -352,7 +354,7 @@ export async function buildMemoryTree(dataDir) {
       path: `/${type}`,
       name: capitalize(type),
       description: `${capitalize(type)} memory`,
-      kind: 'folder',
+      kind: "folder",
       type,
       scope: memoryTreeScopeForType(type),
       sourcePacketIds: [],
@@ -363,18 +365,18 @@ export async function buildMemoryTree(dataDir) {
     });
     for (const entry of children) {
       const detail = await readMemoryEntry(dataDir, entry.id);
-      const detailBody = detail?.body ?? '';
+      const detailBody = detail?.body ?? "";
       nodes.push({
         id: entry.id,
         parentId: folderId,
         path: `/${type}/${entry.id}`,
         name: entry.name,
         description: entry.description,
-        kind: 'entry',
+        kind: "entry",
         type: entry.type,
         scope: memoryTreeScopeForType(entry.type),
-        sourcePacketIds: extractAutomationRefs(detailBody, 'Source packet'),
-        proposalIds: extractAutomationRefs(detailBody, 'Proposal'),
+        sourcePacketIds: extractAutomationRefs(detailBody, "Source packet"),
+        proposalIds: extractAutomationRefs(detailBody, "Proposal"),
         createdAt: toIsoTime(entry.updatedAt),
         updatedAt: toIsoTime(entry.updatedAt),
         childrenCount: 0,
@@ -390,7 +392,7 @@ export async function readMemoryEntry(dataDir, id) {
   try {
     const filePath = entryPath(dataDir, id);
     [raw, stat] = await Promise.all([
-      fsp.readFile(filePath, 'utf8'),
+      fsp.readFile(filePath, "utf8"),
       fsp.stat(filePath),
     ]);
   } catch {
@@ -401,43 +403,48 @@ export async function readMemoryEntry(dataDir, id) {
 }
 
 function renderEntryFile(name, description, type, body) {
-  const safeName = String(name || 'Untitled').replace(/\r?\n/g, ' ').trim();
-  const safeDesc = String(description || '').replace(/\r?\n/g, ' ').trim();
-  const safeType = isValidType(type) ? type : 'user';
-  const trimmedBody = String(body || '').replace(/^\s+/, '');
+  const safeName = String(name || "Untitled")
+    .replace(/\r?\n/g, " ")
+    .trim();
+  const safeDesc = String(description || "")
+    .replace(/\r?\n/g, " ")
+    .trim();
+  const safeType = isValidType(type) ? type : "user";
+  const trimmedBody = String(body || "").replace(/^\s+/, "");
   return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\n---\n\n${trimmedBody}\n`;
 }
 
 export async function updateMemoryTreeNode(dataDir, id, patch) {
-  if (typeof id !== 'string' || id.startsWith('folder:')) {
-    throw new Error('memory tree folders are derived and cannot be edited');
+  if (typeof id !== "string" || id.startsWith("folder:")) {
+    throw new Error("memory tree folders are derived and cannot be edited");
   }
   const current = await readMemoryEntry(dataDir, id);
-  if (!current) throw new Error('memory not found');
+  if (!current) throw new Error("memory not found");
   const nextType = isValidType(patch?.type) ? patch.type : current.type;
   return upsertMemoryEntry(dataDir, {
     id,
     name:
-      typeof patch?.name === 'string' && patch.name.trim()
+      typeof patch?.name === "string" && patch.name.trim()
         ? patch.name
         : current.name,
     description:
-      typeof patch?.description === 'string'
+      typeof patch?.description === "string"
         ? patch.description
         : current.description,
     type: nextType,
-    body: typeof patch?.body === 'string' ? patch.body : current.body,
+    body: typeof patch?.body === "string" ? patch.body : current.body,
   });
 }
 
 export async function upsertMemoryEntry(dataDir, input, options) {
   const { name, description, type, body } = input || {};
   if (!name || !isValidType(type)) {
-    throw new Error('memory entry requires `name` and a valid `type`');
+    throw new Error("memory entry requires `name` and a valid `type`");
   }
-  const id = input?.id && /^[a-z0-9_]+$/.test(input.id)
-    ? input.id
-    : deriveMemoryId(type, name);
+  const id =
+    input?.id && /^[a-z0-9_]+$/.test(input.id)
+      ? input.id
+      : deriveMemoryId(type, name);
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(
     entryPath(dataDir, id),
@@ -445,15 +452,15 @@ export async function upsertMemoryEntry(dataDir, input, options) {
   );
   await ensureIndexHasEntry(dataDir, id, name, description);
   const entry = await readMemoryEntry(dataDir, id);
-  if (!entry) throw new Error('failed to read memory entry after write');
+  if (!entry) throw new Error("failed to read memory entry after write");
   if (!options?.silent) {
     emitChange({
-      kind: 'upsert',
+      kind: "upsert",
       id: entry.id,
       name: entry.name,
       description: entry.description,
       type: entry.type,
-      source: options?.source ?? 'manual',
+      source: options?.source ?? "manual",
     });
   }
   return entry;
@@ -466,7 +473,7 @@ export async function deleteMemoryEntry(dataDir, id) {
     // Already gone — fine. Caller doesn't care.
   }
   await removeIndexLine(dataDir, id);
-  emitChange({ kind: 'delete', id });
+  emitChange({ kind: "delete", id });
 }
 
 // ----- Index maintenance --------------------------------------------------
@@ -482,11 +489,11 @@ const INDEX_LINK_RE = /^\s*-\s+\[([^\]]+)\]\(([^)]+)\)(\s+—\s+(.*))?$/;
 // lines, `MEMORY.md` itself).
 function parseIndexLinkIds(indexBody: string): Set<string> {
   const ids = new Set<string>();
-  for (const line of String(indexBody ?? '').split(/\r?\n/)) {
+  for (const line of String(indexBody ?? "").split(/\r?\n/)) {
     const m = INDEX_LINK_RE.exec(line);
     if (!m) continue;
-    const target = typeof m[2] === 'string' ? m[2] : '';
-    if (!target.endsWith('.md')) continue;
+    const target = typeof m[2] === "string" ? m[2] : "";
+    if (!target.endsWith(".md")) continue;
     if (target === INDEX_FILE) continue;
     const id = target.slice(0, -3);
     if (/^[a-z0-9_]+$/.test(id)) ids.add(id);
@@ -498,13 +505,15 @@ async function ensureIndexHasEntry(dataDir, id, name, description) {
   const current = await readMemoryIndex(dataDir);
   const lines = current.split(/\r?\n/);
   const link = `${id}.md`;
-  const desc = String(description || '').replace(/\r?\n/g, ' ').trim();
+  const desc = String(description || "")
+    .replace(/\r?\n/g, " ")
+    .trim();
   const newLine = desc
     ? `- [${name}](${link}) — ${desc}`
     : `- [${name}](${link})`;
   let replaced = false;
   for (let i = 0; i < lines.length; i++) {
-    const m = INDEX_LINK_RE.exec(lines[i] ?? '');
+    const m = INDEX_LINK_RE.exec(lines[i] ?? "");
     if (m && m[2] === link) {
       lines[i] = newLine;
       replaced = true;
@@ -512,12 +521,12 @@ async function ensureIndexHasEntry(dataDir, id, name, description) {
     }
   }
   if (!replaced) {
-    if (lines.length > 0 && lines[lines.length - 1] !== '') lines.push('');
+    if (lines.length > 0 && lines[lines.length - 1] !== "") lines.push("");
     lines.push(newLine);
   }
   // Silent: the upsert path emits its own change event, so a redundant
   // 'index' event would just cause the frontend to re-fetch twice.
-  await writeMemoryIndex(dataDir, lines.join('\n'), { silent: true });
+  await writeMemoryIndex(dataDir, lines.join("\n"), { silent: true });
 }
 
 async function removeIndexLine(dataDir, id) {
@@ -527,7 +536,7 @@ async function removeIndexLine(dataDir, id) {
     const m = INDEX_LINK_RE.exec(line);
     return !m || m[2] !== link;
   });
-  await writeMemoryIndex(dataDir, lines.join('\n'), { silent: true });
+  await writeMemoryIndex(dataDir, lines.join("\n"), { silent: true });
 }
 
 // ----- System-prompt body -------------------------------------------------
@@ -545,43 +554,44 @@ async function removeIndexLine(dataDir, id) {
 // kept reading every entry file and the index editor was cosmetic only.
 export async function composeMemoryBody(dataDir) {
   const cfg = await readMemoryConfig(dataDir);
-  if (!cfg.enabled) return '';
+  if (!cfg.enabled) return "";
   const allEntries = await listMemoryEntries(dataDir);
-  if (allEntries.length === 0) return '';
+  if (allEntries.length === 0) return "";
   const indexBody = await readMemoryIndex(dataDir);
   const linkedIds = parseIndexLinkIds(indexBody);
   const entries = allEntries.filter((e) => linkedIds.has(e.id));
-  if (entries.length === 0) return '';
+  if (entries.length === 0) return "";
   const grouped = new Map();
   for (const e of entries) {
     const list = grouped.get(e.type) ?? [];
     list.push(e);
     grouped.set(e.type, list);
   }
-  const ordered = ['user', 'feedback', 'project', 'reference']
-    .filter((t) => grouped.has(t));
+  const ordered = ["user", "feedback", "project", "reference"].filter((t) =>
+    grouped.has(t),
+  );
   const parts = [];
   for (const type of ordered) {
     parts.push(`### ${capitalize(type)}`);
     for (const e of grouped.get(type) ?? []) {
       const body = await readEntryBodyById(dataDir, e.id);
       if (!body) continue;
-      parts.push(`- **${e.name}** — ${e.description || '(no description)'}`);
+      parts.push(`- **${e.name}** — ${e.description || "(no description)"}`);
       const indented = body
         .trim()
         .split(/\r?\n/)
         .map((l) => `  ${l}`)
-        .join('\n');
+        .join("\n");
       if (indented.length > 0) parts.push(indented);
     }
-    parts.push('');
+    parts.push("");
   }
-  return parts.join('\n').trim();
+  return parts.join("\n").trim();
 }
 
 async function readEntryBodyById(dataDir, id) {
   const entry = await readMemoryEntry(dataDir, id);
-  return entry?.body ?? '';
+  return entry?.body ?? "";
 }
 
 function capitalize(s) {
@@ -617,7 +627,7 @@ function capitalize(s) {
 // other under one shared `用户身份` slot.
 interface ExtractionPattern {
   re: RegExp;
-  type: 'user' | 'feedback' | 'project' | 'reference';
+  type: "user" | "feedback" | "project" | "reference";
   name: string;
   descriptionTemplate: string;
   bodyTemplate: string;
@@ -627,34 +637,34 @@ const REMEMBER_PATTERNS: ExtractionPattern[] = [
   // English
   {
     re: /(?:^|\b)(?:please\s+)?remember(?:\s+that)?[:\s]+([^\n]{4,400})/i,
-    type: 'feedback',
-    name: 'Remembered note',
-    descriptionTemplate: 'User asked to remember: $1',
+    type: "feedback",
+    name: "Remembered note",
+    descriptionTemplate: "User asked to remember: $1",
     bodyTemplate:
-      '- Remembered: $1\n\nWhen to apply: keep this in mind for future replies.',
+      "- Remembered: $1\n\nWhen to apply: keep this in mind for future replies.",
   },
   {
     re: /(?:^|\b)note\s+to\s+self[:\s]+([^\n]{4,400})/i,
-    type: 'feedback',
-    name: 'Note to self',
-    descriptionTemplate: 'Note: $1',
-    bodyTemplate: '- Note: $1',
+    type: "feedback",
+    name: "Note to self",
+    descriptionTemplate: "Note: $1",
+    bodyTemplate: "- Note: $1",
   },
   {
     re: /(?:^|\b)i(?:'m|\s+am)\s+(?:a|an|the)\s+([^.\n]{3,200})/i,
-    type: 'user',
-    name: 'User role',
-    descriptionTemplate: 'User is a $1',
+    type: "user",
+    name: "User role",
+    descriptionTemplate: "User is a $1",
     bodyTemplate:
-      '- Role / identity: $1\n\nWhen to apply: any chat — frame examples and recommendations around this background.',
+      "- Role / identity: $1\n\nWhen to apply: any chat — frame examples and recommendations around this background.",
   },
   {
     re: /(?:^|\b)i\s+prefer\s+([^.\n]{3,200})/i,
-    type: 'feedback',
-    name: 'User preference',
-    descriptionTemplate: 'User prefers $1',
+    type: "feedback",
+    name: "User preference",
+    descriptionTemplate: "User prefers $1",
     bodyTemplate:
-      '- Preference: $1\n\nWhen to apply: factor this in whenever a relevant choice comes up.',
+      "- Preference: $1\n\nWhen to apply: factor this in whenever a relevant choice comes up.",
   },
   // "I'm in Berlin", "I live in Amsterdam", "I'm based in Lisbon" — pin
   // the user's location so future replies can localise time/currency/
@@ -662,19 +672,19 @@ const REMEMBER_PATTERNS: ExtractionPattern[] = [
   // ("I am a/an/the …") so this doesn't double-fire on the same line.
   {
     re: /(?:^|\b)i(?:'m|\s+am)\s+(?:in|based\s+in|located\s+in|living\s+in)\s+([^.\n,]{2,80})/i,
-    type: 'user',
-    name: 'User location',
-    descriptionTemplate: 'User is based in $1',
+    type: "user",
+    name: "User location",
+    descriptionTemplate: "User is based in $1",
     bodyTemplate:
-      '- Location: $1\n\nWhen to apply: localise time-of-day phrasing, currency, and cultural references.',
+      "- Location: $1\n\nWhen to apply: localise time-of-day phrasing, currency, and cultural references.",
   },
   {
     re: /(?:^|\b)i\s+live\s+in\s+([^.\n,]{2,80})/i,
-    type: 'user',
-    name: 'User location',
-    descriptionTemplate: 'User lives in $1',
+    type: "user",
+    name: "User location",
+    descriptionTemplate: "User lives in $1",
     bodyTemplate:
-      '- Location: $1\n\nWhen to apply: localise time-of-day phrasing, currency, and cultural references.',
+      "- Location: $1\n\nWhen to apply: localise time-of-day phrasing, currency, and cultural references.",
   },
   // "I want to ship a course", "I'd like to redesign the dashboard" —
   // long-running goals that change how the assistant frames every
@@ -682,41 +692,41 @@ const REMEMBER_PATTERNS: ExtractionPattern[] = [
   // up the body.
   {
     re: /(?:^|\b)i(?:'d\s+like|\s+would\s+like|\s+want|\s+wanna|\s+hope)\s+to\s+([^.\n]{4,200})/i,
-    type: 'project',
-    name: 'User goal',
-    descriptionTemplate: 'User wants to $1',
+    type: "project",
+    name: "User goal",
+    descriptionTemplate: "User wants to $1",
     bodyTemplate:
-      '- Goal: $1\n\nWhen to apply: surface relevance to this goal whenever the conversation drifts close to it.',
+      "- Goal: $1\n\nWhen to apply: surface relevance to this goal whenever the conversation drifts close to it.",
   },
   // Chinese
   {
     re: /记住[:：\s]+([^\n。]{2,200})/,
-    type: 'feedback',
-    name: '重要备忘',
-    descriptionTemplate: '用户要求记住：$1',
-    bodyTemplate: '- 备忘：$1\n\n何时适用：在后续对话里始终保持这一前提。',
+    type: "feedback",
+    name: "重要备忘",
+    descriptionTemplate: "用户要求记住：$1",
+    bodyTemplate: "- 备忘：$1\n\n何时适用：在后续对话里始终保持这一前提。",
   },
   {
     re: /我是\s*([^\n。，]{2,80})/,
-    type: 'user',
-    name: '用户身份',
-    descriptionTemplate: '用户的身份/职业：$1',
+    type: "user",
+    name: "用户身份",
+    descriptionTemplate: "用户的身份/职业：$1",
     bodyTemplate:
-      '- 身份 / 角色：$1\n\n何时适用：在所有对话里把用户的背景纳入考虑（举例、措辞、深度）。',
+      "- 身份 / 角色：$1\n\n何时适用：在所有对话里把用户的背景纳入考虑（举例、措辞、深度）。",
   },
   {
     re: /我喜欢\s*([^\n。，]{2,200})/,
-    type: 'feedback',
-    name: '用户偏好',
-    descriptionTemplate: '用户喜欢：$1',
-    bodyTemplate: '- 偏好：$1\n\n何时适用：在涉及该选择时优先采用这一倾向。',
+    type: "feedback",
+    name: "用户偏好",
+    descriptionTemplate: "用户喜欢：$1",
+    bodyTemplate: "- 偏好：$1\n\n何时适用：在涉及该选择时优先采用这一倾向。",
   },
   {
     re: /我偏好\s*([^\n。，]{2,200})/,
-    type: 'feedback',
-    name: '用户偏好',
-    descriptionTemplate: '用户偏好：$1',
-    bodyTemplate: '- 偏好：$1\n\n何时适用：在涉及该选择时优先采用这一倾向。',
+    type: "feedback",
+    name: "用户偏好",
+    descriptionTemplate: "用户偏好：$1",
+    bodyTemplate: "- 偏好：$1\n\n何时适用：在涉及该选择时优先采用这一倾向。",
   },
   // 我在 / 我住在 — 用户所在地。用 [在再] 同时容忍输入法常见的把
   // "在" 错按成 "再" 的拼写：用户原文 "我再德国，我希望基于…" 在过去
@@ -724,41 +734,41 @@ const REMEMBER_PATTERNS: ExtractionPattern[] = [
   // 命中所在地与目标。
   {
     re: /我[在再]\s*([^\n。，！？!?,]{2,80})/,
-    type: 'user',
-    name: '用户所在地',
-    descriptionTemplate: '用户所在地：$1',
+    type: "user",
+    name: "用户所在地",
+    descriptionTemplate: "用户所在地：$1",
     bodyTemplate:
-      '- 所在地：$1\n\n何时适用：在时区、货币、文化语境相关的回答里把这一点纳入考虑。',
+      "- 所在地：$1\n\n何时适用：在时区、货币、文化语境相关的回答里把这一点纳入考虑。",
   },
   {
     re: /我住在\s*([^\n。，！？!?,]{2,80})/,
-    type: 'user',
-    name: '用户所在地',
-    descriptionTemplate: '用户居住在：$1',
+    type: "user",
+    name: "用户所在地",
+    descriptionTemplate: "用户居住在：$1",
     bodyTemplate:
-      '- 所在地：$1\n\n何时适用：在时区、货币、文化语境相关的回答里把这一点纳入考虑。',
+      "- 所在地：$1\n\n何时适用：在时区、货币、文化语境相关的回答里把这一点纳入考虑。",
   },
   // 我想 / 我希望 / 我打算 — 长期目标，常常贯穿多次对话。和"记住"
   // 这种命令式不同，这些表述往往伴随项目本身，所以归到 project 类。
   {
     re: /我(?:想|希望|打算|计划)\s*([^\n。！？!?]{4,200})/,
-    type: 'project',
-    name: '用户目标',
-    descriptionTemplate: '用户希望：$1',
+    type: "project",
+    name: "用户目标",
+    descriptionTemplate: "用户希望：$1",
     bodyTemplate:
-      '- 目标：$1\n\n何时适用：当对话靠近这一目标时主动呼应它，并把建议与目标对齐。',
+      "- 目标：$1\n\n何时适用：当对话靠近这一目标时主动呼应它，并把建议与目标对齐。",
   },
   {
     re: /备忘[:：\s]+([^\n]{2,200})/,
-    type: 'reference',
-    name: '速记备忘',
-    descriptionTemplate: '$1',
-    bodyTemplate: '- $1',
+    type: "reference",
+    name: "速记备忘",
+    descriptionTemplate: "$1",
+    bodyTemplate: "- $1",
   },
 ];
 
 function applyTemplate(template, captured) {
-  return String(template || '').replace(/\$1/g, String(captured));
+  return String(template || "").replace(/\$1/g, String(captured));
 }
 
 export async function extractFromMessage(dataDir, userMessage) {
@@ -767,13 +777,17 @@ export async function extractFromMessage(dataDir, userMessage) {
   // record. Without this, a turn with memory disabled or an empty
   // message produces no row at all and the user can't tell whether the
   // hook ran.
-  if (typeof userMessage !== 'string' || userMessage.trim().length === 0) {
-    recordSkip({ userMessage: userMessage ?? '', reason: 'empty-message', kind: 'heuristic' });
+  if (typeof userMessage !== "string" || userMessage.trim().length === 0) {
+    recordSkip({
+      userMessage: userMessage ?? "",
+      reason: "empty-message",
+      kind: "heuristic",
+    });
     return [];
   }
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) {
-    recordSkip({ userMessage, reason: 'memory-disabled', kind: 'heuristic' });
+    recordSkip({ userMessage, reason: "memory-disabled", kind: "heuristic" });
     return [];
   }
   if (!cfg.chatExtractionEnabled) {
@@ -784,7 +798,7 @@ export async function extractFromMessage(dataDir, userMessage) {
   for (const pattern of REMEMBER_PATTERNS) {
     const m = pattern.re.exec(userMessage);
     if (!m) continue;
-    const captured = (m[1] || '').trim();
+    const captured = (m[1] || "").trim();
     if (captured.length < 3) continue;
     // Cap captured length so a runaway sentence doesn't blow up the
     // description / body. The regex already bounds it but we want a
@@ -819,7 +833,7 @@ export async function extractFromMessage(dataDir, userMessage) {
         },
         // Silence the per-entry upsert event so the batched 'extract'
         // emit below produces exactly one frontend toast.
-        { silent: true, source: 'heuristic' },
+        { silent: true, source: "heuristic" },
       );
       changed.push({
         id: entry.id,
@@ -829,14 +843,14 @@ export async function extractFromMessage(dataDir, userMessage) {
         updatedAt: entry.updatedAt,
       });
     } catch (err) {
-      console.warn('[memory] auto-extract write failed', err);
+      console.warn("[memory] auto-extract write failed", err);
     }
   }
   if (changed.length > 0) {
     emitChange({
-      kind: 'extract',
+      kind: "extract",
       count: changed.length,
-      source: 'heuristic',
+      source: "heuristic",
     });
   }
   // Always log the heuristic attempt — even when no pattern matched —

@@ -43,34 +43,31 @@
 // — produces a record in `memory-extractions.ts` so the settings panel
 // can show running / skipped / success / failed states in real time.
 
-import {
-  composeMemoryBody,
-  listMemoryEntries,
-  readMemoryConfig,
-  upsertMemoryEntry,
-  memoryEvents,
-} from './memory.js';
-import {
-  startExtraction,
-  recordSkip,
-  markProvider,
-  markSkipped,
-  markProposed,
-  markSuccess,
-  markFailed,
-} from './memory-extractions.js';
-import { resolveProviderConfig } from './media-config.js';
-import { AIHUBMIX_APP_CODE } from './aihubmix.js';
-import { spawn } from 'node:child_process';
-import { createCommandInvocation } from '@open-design/platform';
+import { createCommandInvocation } from "@open-design/platform";
+import { spawn } from "node:child_process";
 import {
   applyAgentLaunchEnv,
   getAgentDef,
   resolveAgentLaunch,
   spawnEnvForAgent,
-} from './agents.js';
-import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
-import { createJsonEventStreamHandler } from './json-event-stream.js';
+} from "./agents.js";
+import { agentCliEnvForAgent, readAppConfig } from "./app-config.js";
+import { createJsonEventStreamHandler } from "./json-event-stream.js";
+import {
+  markFailed,
+  markProposed,
+  markProvider,
+  markSuccess,
+  recordSkip,
+  startExtraction,
+} from "./memory-extractions.js";
+import {
+  composeMemoryBody,
+  listMemoryEntries,
+  memoryEvents,
+  readMemoryConfig,
+  upsertMemoryEntry,
+} from "./memory.js";
 
 const SYSTEM_PROMPT = `You are a memory extractor for a personal AI design assistant.
 
@@ -114,21 +111,21 @@ Type rules:
 // override doesn't crash with `undefined` when accessed.
 const PROVIDER_DEFAULTS = {
   anthropic: {
-    model: 'claude-haiku-4-5',
-    baseUrl: 'https://api.anthropic.com',
+    model: "claude-haiku-4-5",
+    baseUrl: "https://api.anthropic.com",
   },
   openai: {
-    model: 'gpt-4o-mini',
-    baseUrl: 'https://api.openai.com',
+    model: "gpt-4o-mini",
+    baseUrl: "https://api.openai.com",
   },
   azure: {
-    model: 'gpt-4o-mini',
-    baseUrl: '',
-    apiVersion: '2024-10-21',
+    model: "gpt-4o-mini",
+    baseUrl: "",
+    apiVersion: "2024-10-21",
   },
   google: {
-    model: 'gemini-2.0-flash',
-    baseUrl: 'https://generativelanguage.googleapis.com',
+    model: "gemini-2.0-flash",
+    baseUrl: "https://generativelanguage.googleapis.com",
   },
   // Ollama Cloud speaks OpenAI-compatible chat-completions, so the
   // extractor just routes through callOpenAI with the ollama base URL
@@ -137,8 +134,8 @@ const PROVIDER_DEFAULTS = {
   // for users who haven't customised the picker; users who care can
   // pick anything off the picker's `Custom...` list.
   ollama: {
-    model: 'gemma3:4b',
-    baseUrl: 'https://ollama.com',
+    model: "gemma3:4b",
+    baseUrl: "https://ollama.com",
   },
   // SenseAudio's chat API is OpenAI-compatible (POST /v1/chat/completions,
   // Bearer auth), so the extractor falls through to callOpenAI with this
@@ -146,15 +143,8 @@ const PROVIDER_DEFAULTS = {
   // small/fast variant so auto-pick stays cheap; users can swap in
   // senseaudio-s2 or any gateway model via the picker.
   senseaudio: {
-    model: 'senseaudio-s2-flash',
-    baseUrl: 'https://api.senseaudio.cn',
-  },
-  // AIHubMix is OpenAI-wire-compatible, so the extractor falls through to
-  // callOpenAI with this base URL and the user's AIHubMix key (plus the fixed
-  // APP-Code header callOpenAI injects). Default to a small/fast model.
-  aihubmix: {
-    model: 'gpt-4o-mini',
-    baseUrl: 'https://aihubmix.com/v1',
+    model: "senseaudio-s2-flash",
+    baseUrl: "https://api.senseaudio.cn",
   },
 };
 
@@ -164,40 +154,34 @@ const PROVIDER_DEFAULTS = {
 // AZURE_OPENAI_API_KEY convention; google uses GOOGLE_API_KEY (matching
 // the gemini SDK's expectation, with GEMINI_API_KEY as a secondary).
 function envKeyFor(provider) {
-  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY?.trim() || '';
-  if (provider === 'openai') return process.env.OPENAI_API_KEY?.trim() || '';
-  if (provider === 'azure') {
+  if (provider === "anthropic")
+    return process.env.ANTHROPIC_API_KEY?.trim() || "";
+  if (provider === "openai") return process.env.OPENAI_API_KEY?.trim() || "";
+  if (provider === "azure") {
     return (
-      process.env.AZURE_OPENAI_API_KEY?.trim()
-      || process.env.AZURE_API_KEY?.trim()
-      || ''
+      process.env.AZURE_OPENAI_API_KEY?.trim() ||
+      process.env.AZURE_API_KEY?.trim() ||
+      ""
     );
   }
-  if (provider === 'google') {
+  if (provider === "google") {
     return (
-      process.env.GOOGLE_API_KEY?.trim()
-      || process.env.GEMINI_API_KEY?.trim()
-      || ''
+      process.env.GOOGLE_API_KEY?.trim() ||
+      process.env.GEMINI_API_KEY?.trim() ||
+      ""
     );
   }
-  if (provider === 'ollama') {
-    return process.env.OLLAMA_API_KEY?.trim() || '';
+  if (provider === "ollama") {
+    return process.env.OLLAMA_API_KEY?.trim() || "";
   }
-  if (provider === 'senseaudio') {
+  if (provider === "senseaudio") {
     return (
-      process.env.OD_SENSEAUDIO_API_KEY?.trim()
-      || process.env.SENSEAUDIO_API_KEY?.trim()
-      || ''
+      process.env.OD_SENSEAUDIO_API_KEY?.trim() ||
+      process.env.SENSEAUDIO_API_KEY?.trim() ||
+      ""
     );
   }
-  if (provider === 'aihubmix') {
-    return (
-      process.env.OD_AIHUBMIX_API_KEY?.trim()
-      || process.env.AIHUBMIX_API_KEY?.trim()
-      || ''
-    );
-  }
-  return '';
+  return "";
 }
 
 // Map a chat agent id to the API protocol family it speaks under the
@@ -210,30 +194,30 @@ function envKeyFor(provider) {
 // recognise stays unconstrained (returns null) so the legacy
 // cross-provider fallback can still kick in for setups we don't model.
 function chatProtocolFromAgentId(agentId) {
-  if (!agentId || typeof agentId !== 'string') return null;
+  if (!agentId || typeof agentId !== "string") return null;
   const id = agentId.trim().toLowerCase();
-  if (id === 'claude') return 'anthropic';
-  if (id === 'gemini' || id === 'antigravity') return 'google';
+  if (id === "claude") return "anthropic";
+  if (id === "gemini" || id === "antigravity") return "google";
   // Codex, OpenCode, Qwen, DeepSeek, Kimi, Copilot, Pi, Kiro, Kilo,
   // Vibe, Devin, Hermes, Cursor-Agent, Qoder all use the OpenAI chat-
   // completions wire format.
   if (
-    id === 'codex'
-    || id === 'opencode'
-    || id === 'qwen'
-    || id === 'deepseek'
-    || id === 'kimi'
-    || id === 'copilot'
-    || id === 'pi'
-    || id === 'kiro'
-    || id === 'kilo'
-    || id === 'vibe'
-    || id === 'devin'
-    || id === 'hermes'
-    || id === 'cursor-agent'
-    || id === 'qoder'
+    id === "codex" ||
+    id === "opencode" ||
+    id === "qwen" ||
+    id === "deepseek" ||
+    id === "kimi" ||
+    id === "copilot" ||
+    id === "pi" ||
+    id === "kiro" ||
+    id === "kilo" ||
+    id === "vibe" ||
+    id === "devin" ||
+    id === "hermes" ||
+    id === "cursor-agent" ||
+    id === "qoder"
   ) {
-    return 'openai';
+    return "openai";
   }
   return null;
 }
@@ -241,11 +225,11 @@ function chatProtocolFromAgentId(agentId) {
 function canUseLocalCliForMemory(agentId, provider) {
   // Keep this allowlist explicit: each entry below has a headless one-shot
   // mode that accepts stdin and a parser we can reduce back to assistant text.
-  if (agentId === 'claude' && provider === 'anthropic') return true;
-  if (agentId === 'codex' && provider === 'openai') return true;
-  if (agentId === 'opencode' && provider === 'openai') return true;
-  if (agentId === 'gemini' && provider === 'google') return true;
-  if (agentId === 'antigravity' && provider === 'google') return true;
+  if (agentId === "claude" && provider === "anthropic") return true;
+  if (agentId === "codex" && provider === "openai") return true;
+  if (agentId === "opencode" && provider === "openai") return true;
+  if (agentId === "gemini" && provider === "google") return true;
+  if (agentId === "antigravity" && provider === "google") return true;
   return false;
 }
 
@@ -253,11 +237,11 @@ function localCliProviderFor(agentId, provider, model) {
   if (!canUseLocalCliForMemory(agentId, provider)) return null;
   return {
     kind: provider,
-    model: (typeof model === 'string' && model.trim()) || 'default',
-    baseUrl: 'local-cli',
-    apiVersion: '',
-    credentialSource: 'chat-cli',
-    transport: 'chat-cli',
+    model: (typeof model === "string" && model.trim()) || "default",
+    baseUrl: "local-cli",
+    apiVersion: "",
+    credentialSource: "chat-cli",
+    transport: "chat-cli",
     agentId,
   };
 }
@@ -303,10 +287,16 @@ function localCliProviderFor(agentId, provider, model) {
 // through from the web app on a per-call basis (the daemon never
 // persists BYOK creds, so this is the only signal we have for that
 // mode).
-async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, chatModel) {
+async function pickProvider(
+  projectRoot,
+  dataDir,
+  chatAgentId,
+  chatProvider,
+  chatModel,
+) {
   const chatProtocol = chatProtocolFromAgentId(chatAgentId);
   const normalizedChatAgentId =
-    typeof chatAgentId === 'string' ? chatAgentId.trim().toLowerCase() : '';
+    typeof chatAgentId === "string" ? chatAgentId.trim().toLowerCase() : "";
   let override = null;
   if (dataDir) {
     try {
@@ -314,7 +304,7 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       if (cfg?.extraction?.provider) override = cfg.extraction;
     } catch (err) {
       console.warn(
-        '[memory-llm] failed to read memory config override',
+        "[memory-llm] failed to read memory config override",
         err?.message ?? err,
       );
     }
@@ -322,33 +312,17 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   if (override) {
     const defaults = PROVIDER_DEFAULTS[override.provider];
     const explicitKey =
-      typeof override.apiKey === 'string' && override.apiKey.trim()
+      typeof override.apiKey === "string" && override.apiKey.trim()
         ? override.apiKey.trim()
-        : '';
+        : "";
     const envKey = envKeyFor(override.provider);
     let resolvedKey = explicitKey || envKey;
     let credentialSource = explicitKey
-      ? 'memory-config'
-      : (envKey ? 'env' : null);
-    // Last-chance: an openai-shaped override (openai or azure) with no
-    // explicit/env key can still borrow the media-config OpenAI key the
-    // user already typed. Anthropic / google have no media counterpart
-    // today.
-    if (
-      !resolvedKey
-      && (override.provider === 'openai' || override.provider === 'azure')
-      && projectRoot
-    ) {
-      try {
-        const cred = await resolveProviderConfig(projectRoot, 'openai');
-        if (cred?.apiKey?.trim()) {
-          resolvedKey = cred.apiKey.trim();
-          credentialSource = 'media-config';
-        }
-      } catch {
-        // Ignore — we'll record a no-provider skip below.
-      }
-    }
+      ? "memory-config"
+      : envKey
+        ? "env"
+        : null;
+
     if (!resolvedKey) {
       const localCliProvider = localCliProviderFor(
         normalizedChatAgentId,
@@ -359,9 +333,9 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       return null;
     }
     const baseUrl =
-      (typeof override.baseUrl === 'string' && override.baseUrl.trim())
-      || defaults.baseUrl;
-    if (override.provider === 'azure' && !baseUrl) {
+      (typeof override.baseUrl === "string" && override.baseUrl.trim()) ||
+      defaults.baseUrl;
+    if (override.provider === "azure" && !baseUrl) {
       // Azure with no resource URL is unrecoverable — bail rather than
       // logging a confusing 404 from `https:///openai/deployments/...`.
       return null;
@@ -370,19 +344,20 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       kind: override.provider,
       apiKey: resolvedKey,
       model:
-        (typeof override.model === 'string' && override.model.trim())
-        || defaults.model,
+        (typeof override.model === "string" && override.model.trim()) ||
+        defaults.model,
       baseUrl,
       apiVersion:
-        override.provider === 'azure'
-          ? (typeof override.apiVersion === 'string' && override.apiVersion.trim())
-          || PROVIDER_DEFAULTS.azure.apiVersion
-          : '',
+        override.provider === "azure"
+          ? (typeof override.apiVersion === "string" &&
+              override.apiVersion.trim()) ||
+            PROVIDER_DEFAULTS.azure.apiVersion
+          : "",
       credentialSource,
     };
   }
 
-  const envOverrideModel = (process.env.OD_MEMORY_MODEL || '').trim();
+  const envOverrideModel = (process.env.OD_MEMORY_MODEL || "").trim();
 
   // Chat-protocol-constrained branch (path 1). Only run when we know
   // which CLI is in use AND it maps to one of the four providers; we
@@ -406,40 +381,14 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
         apiKey: envKey,
         model: envOverrideModel || defaults.model,
         baseUrl:
-          (chatProtocol === 'anthropic' && process.env.ANTHROPIC_BASE_URL)
-          || (chatProtocol === 'openai' && process.env.OPENAI_BASE_URL)
-          || defaults.baseUrl,
-        apiVersion: chatProtocol === 'azure' ? defaults.apiVersion : '',
-        credentialSource: 'env',
+          (chatProtocol === "anthropic" && process.env.ANTHROPIC_BASE_URL) ||
+          (chatProtocol === "openai" && process.env.OPENAI_BASE_URL) ||
+          defaults.baseUrl,
+        apiVersion: chatProtocol === "azure" ? defaults.apiVersion : "",
+        credentialSource: "env",
       };
     }
-    // Secondary fallback for openai-compatible CLIs: the user already
-    // typed an OpenAI key under Settings → Media providers, so we can
-    // borrow it for memory extraction without making them paste it
-    // twice. We do NOT try this for anthropic/google chats because the
-    // media-config table only has openai-shaped credentials today.
-    if (chatProtocol === 'openai' && projectRoot) {
-      try {
-        const cred = await resolveProviderConfig(projectRoot, 'openai');
-        if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
-          return {
-            kind: 'openai',
-            apiKey: cred.apiKey.trim(),
-            model:
-              envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
-            baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
-              || PROVIDER_DEFAULTS.openai.baseUrl,
-            apiVersion: '',
-            credentialSource: 'media-config',
-          };
-        }
-      } catch (err) {
-        console.warn(
-          '[memory-llm] media-config lookup failed (chat-constrained)',
-          err?.message ?? err,
-        );
-      }
-    }
+
     // The chat protocol is known but no key for it is available. Bail
     // out instead of wandering — recording 'skipped: no-provider' is
     // strictly more useful than silently running on a foreign vendor.
@@ -456,36 +405,37 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
   // cheap haiku/mini call. The caller can opt into using the chat
   // model verbatim by setting `chatProvider.model`.
   if (
-    chatProvider
-    && chatProvider.provider
-    && PROVIDER_DEFAULTS[chatProvider.provider]
+    chatProvider &&
+    chatProvider.provider &&
+    PROVIDER_DEFAULTS[chatProvider.provider]
   ) {
     const apiKey =
-      typeof chatProvider.apiKey === 'string' ? chatProvider.apiKey.trim() : '';
+      typeof chatProvider.apiKey === "string" ? chatProvider.apiKey.trim() : "";
     if (apiKey) {
       const defaults = PROVIDER_DEFAULTS[chatProvider.provider];
       const baseUrl =
-        (typeof chatProvider.baseUrl === 'string' && chatProvider.baseUrl.trim())
-        || defaults.baseUrl;
+        (typeof chatProvider.baseUrl === "string" &&
+          chatProvider.baseUrl.trim()) ||
+        defaults.baseUrl;
       // Azure with no resource URL is unrecoverable — same guard as
       // the override path above.
-      if (chatProvider.provider !== 'azure' || baseUrl) {
+      if (chatProvider.provider !== "azure" || baseUrl) {
         const explicitModel =
-          typeof chatProvider.model === 'string' && chatProvider.model.trim()
+          typeof chatProvider.model === "string" && chatProvider.model.trim()
             ? chatProvider.model.trim()
-            : '';
+            : "";
         return {
           kind: chatProvider.provider,
           apiKey,
           model: envOverrideModel || explicitModel || defaults.model,
           baseUrl,
           apiVersion:
-            chatProvider.provider === 'azure'
-              ? (typeof chatProvider.apiVersion === 'string'
-                && chatProvider.apiVersion.trim())
-              || PROVIDER_DEFAULTS.azure.apiVersion
-              : '',
-          credentialSource: 'chat-byok',
+            chatProvider.provider === "azure"
+              ? (typeof chatProvider.apiVersion === "string" &&
+                  chatProvider.apiVersion.trim()) ||
+                PROVIDER_DEFAULTS.azure.apiVersion
+              : "",
+          credentialSource: "chat-byok",
         };
       }
     }
@@ -493,72 +443,48 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
 
   if (process.env.ANTHROPIC_API_KEY) {
     return {
-      kind: 'anthropic',
+      kind: "anthropic",
       apiKey: process.env.ANTHROPIC_API_KEY,
       model: envOverrideModel || PROVIDER_DEFAULTS.anthropic.model,
       baseUrl:
         process.env.ANTHROPIC_BASE_URL || PROVIDER_DEFAULTS.anthropic.baseUrl,
-      credentialSource: 'env',
+      credentialSource: "env",
     };
   }
   if (process.env.OPENAI_API_KEY) {
     return {
-      kind: 'openai',
+      kind: "openai",
       apiKey: process.env.OPENAI_API_KEY,
       model: envOverrideModel || PROVIDER_DEFAULTS.openai.model,
       baseUrl: process.env.OPENAI_BASE_URL || PROVIDER_DEFAULTS.openai.baseUrl,
-      credentialSource: 'env',
+      credentialSource: "env",
     };
   }
-  // Fallback: reuse the OpenAI key the user already configured for media
-  // generation. Most Local-CLI Claude users don't have an
-  // ANTHROPIC_API_KEY in the daemon's environment (Claude Code logs in
-  // via OAuth) but they often have an OpenAI key in Settings → Media
-  // providers. Without this fallback the LLM extraction stage stays dark
-  // for them and only the regex-based heuristic ever runs.
-  if (projectRoot) {
-    try {
-      const cred = await resolveProviderConfig(projectRoot, 'openai');
-      if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
-        return {
-          kind: 'openai',
-          apiKey: cred.apiKey.trim(),
-          model:
-            envOverrideModel || cred.model || PROVIDER_DEFAULTS.openai.model,
-          baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
-            || PROVIDER_DEFAULTS.openai.baseUrl,
-          credentialSource: 'media-config',
-        };
-      }
-    } catch (err) {
-      console.warn(
-        '[memory-llm] failed to read media-config for fallback',
-        err?.message ?? err,
-      );
-    }
-  }
+
   return null;
 }
 
 function renderUserPayload({ userMessage, assistantMessage, currentMemory }) {
-  const parts = [];
-  parts.push('## Existing memory');
-  parts.push(currentMemory && currentMemory.trim().length > 0
-    ? currentMemory
-    : '(empty)');
-  parts.push('');
-  parts.push('## User message');
-  parts.push(String(userMessage || '').slice(0, 4000));
+  const parts: string[] = [];
+  parts.push("## Existing memory");
+  parts.push(
+    currentMemory && currentMemory.trim().length > 0
+      ? currentMemory
+      : "(empty)",
+  );
+  parts.push("");
+  parts.push("## User message");
+  parts.push(String(userMessage || "").slice(0, 4000));
   if (assistantMessage && assistantMessage.trim().length > 0) {
-    parts.push('');
-    parts.push('## Assistant reply');
+    parts.push("");
+    parts.push("## Assistant reply");
     parts.push(String(assistantMessage).slice(0, 4000));
   }
-  parts.push('');
+  parts.push("");
   parts.push(
-    'Return ONLY the JSON object described in the system prompt — no prose, no fences.',
+    "Return ONLY the JSON object described in the system prompt — no prose, no fences.",
   );
-  return parts.join('\n');
+  return parts.join("\n");
 }
 
 // 30s ceiling. The chat run has long since finished and the user is
@@ -579,7 +505,7 @@ const FETCH_TIMEOUT_MS = 30_000;
 // differently and don't need it.
 function appendVersionedApiPath(baseUrl, suffix) {
   const url = new URL(baseUrl);
-  const pathname = url.pathname.replace(/\/+$/, '');
+  const pathname = url.pathname.replace(/\/+$/, "");
   url.pathname = /\/v\d+(\/|$)/.test(pathname)
     ? `${pathname}${suffix}`
     : `${pathname}/v1${suffix}`;
@@ -590,7 +516,10 @@ function appendVersionedApiPath(baseUrl, suffix) {
 // stalled provider call surfaces as a 'failed' record instead of
 // hanging the attempt indefinitely.
 function withTimeout(ms) {
-  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+  if (
+    typeof AbortSignal !== "undefined" &&
+    typeof AbortSignal.timeout === "function"
+  ) {
     return AbortSignal.timeout(ms);
   }
   const controller = new AbortController();
@@ -613,18 +542,20 @@ function describeFetchError(err) {
   const head = err?.message || String(err);
   const cause = err?.cause;
   if (!cause) return head;
-  const codeRaw = cause.code ? String(cause.code) : '';
+  const codeRaw = cause.code ? String(cause.code) : "";
   const msgRaw =
-    cause.message && cause.message !== head ? String(cause.message) : '';
+    cause.message && cause.message !== head ? String(cause.message) : "";
   // Prefer the OS error code on its own when the cause's message just
   // wraps it (the common case for ECONNRESET / ENOTFOUND / ETIMEDOUT).
   // Fall back to the message when there's no code, or when the message
   // adds detail beyond the code (e.g. "Hostname/IP does not match
   // certificate's altnames").
-  let detail = '';
+  let detail = "";
   if (codeRaw && msgRaw) {
     const m = msgRaw.toLowerCase();
-    detail = m.includes(codeRaw.toLowerCase()) ? codeRaw : `${codeRaw}: ${msgRaw}`;
+    detail = m.includes(codeRaw.toLowerCase())
+      ? codeRaw
+      : `${codeRaw}: ${msgRaw}`;
   } else {
     detail = codeRaw || msgRaw;
   }
@@ -632,8 +563,8 @@ function describeFetchError(err) {
   // Most of these are six identical DNS errors, so dedupe aggressively.
   if (!detail && Array.isArray(cause.errors)) {
     for (const inner of cause.errors) {
-      const innerCode = inner?.code ? String(inner.code) : '';
-      const innerMsg = inner?.message ? String(inner.message) : '';
+      const innerCode = inner?.code ? String(inner.code) : "";
+      const innerMsg = inner?.message ? String(inner.message) : "";
       const candidate = innerCode || innerMsg;
       if (candidate) {
         detail = candidate;
@@ -647,18 +578,18 @@ function describeFetchError(err) {
 async function callAnthropic(provider, system, user) {
   let resp;
   try {
-    resp = await fetch(appendVersionedApiPath(provider.baseUrl, '/messages'), {
-      method: 'POST',
+    resp = await fetch(appendVersionedApiPath(provider.baseUrl, "/messages"), {
+      method: "POST",
       headers: {
-        'content-type': 'application/json',
-        'x-api-key': provider.apiKey,
-        'anthropic-version': '2023-06-01',
+        "content-type": "application/json",
+        "x-api-key": provider.apiKey,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
         model: provider.model,
         max_tokens: 1024,
         system,
-        messages: [{ role: 'user', content: user }],
+        messages: [{ role: "user", content: user }],
       }),
       signal: withTimeout(FETCH_TIMEOUT_MS),
     });
@@ -666,35 +597,32 @@ async function callAnthropic(provider, system, user) {
     throw new Error(describeFetchError(err));
   }
   if (!resp.ok) {
-    throw new Error(`anthropic ${resp.status}: ${await resp.text().catch(() => '')}`);
+    throw new Error(
+      `anthropic ${resp.status}: ${await resp.text().catch(() => "")}`,
+    );
   }
   const json = await resp.json();
-  const block = (json?.content || []).find((b) => b?.type === 'text');
-  return block?.text ?? '';
+  const block = (json?.content || []).find((b) => b?.type === "text");
+  return block?.text ?? "";
 }
 
 async function callOpenAI(provider, system, user) {
   let resp;
   try {
     resp = await fetch(
-      appendVersionedApiPath(provider.baseUrl, '/chat/completions'),
+      appendVersionedApiPath(provider.baseUrl, "/chat/completions"),
       {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'content-type': 'application/json',
+          "content-type": "application/json",
           authorization: `Bearer ${provider.apiKey}`,
-          // AIHubMix routes through this same OpenAI-compatible path but wants
-          // the fixed APP-Code attribution header on every request.
-          ...(provider.kind === 'aihubmix' && AIHUBMIX_APP_CODE
-            ? { 'APP-Code': AIHUBMIX_APP_CODE }
-            : {}),
         },
         body: JSON.stringify({
           model: provider.model,
-          response_format: { type: 'json_object' },
+          response_format: { type: "json_object" },
           messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
+            { role: "system", content: system },
+            { role: "user", content: user },
           ],
         }),
         signal: withTimeout(FETCH_TIMEOUT_MS),
@@ -704,10 +632,12 @@ async function callOpenAI(provider, system, user) {
     throw new Error(describeFetchError(err));
   }
   if (!resp.ok) {
-    throw new Error(`openai ${resp.status}: ${await resp.text().catch(() => '')}`);
+    throw new Error(
+      `openai ${resp.status}: ${await resp.text().catch(() => "")}`,
+    );
   }
   const json = await resp.json();
-  return json?.choices?.[0]?.message?.content ?? '';
+  return json?.choices?.[0]?.message?.content ?? "";
 }
 
 // Azure OpenAI speaks the same chat-completions JSON as OpenAI, but on
@@ -716,7 +646,7 @@ async function callOpenAI(provider, system, user) {
 // into the model field — that's what the chat picker calls "Deployment
 // (Model)" too), not the underlying model family.
 async function callAzure(provider, system, user) {
-  const base = String(provider.baseUrl || '').replace(/\/+$/, '');
+  const base = String(provider.baseUrl || "").replace(/\/+$/, "");
   const deployment = encodeURIComponent(provider.model);
   const apiVersion = encodeURIComponent(
     provider.apiVersion || PROVIDER_DEFAULTS.azure.apiVersion,
@@ -725,16 +655,16 @@ async function callAzure(provider, system, user) {
   let resp;
   try {
     resp = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'content-type': 'application/json',
-        'api-key': provider.apiKey,
+        "content-type": "application/json",
+        "api-key": provider.apiKey,
       },
       body: JSON.stringify({
-        response_format: { type: 'json_object' },
+        response_format: { type: "json_object" },
         messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
+          { role: "system", content: system },
+          { role: "user", content: user },
         ],
       }),
       signal: withTimeout(FETCH_TIMEOUT_MS),
@@ -743,10 +673,12 @@ async function callAzure(provider, system, user) {
     throw new Error(describeFetchError(err));
   }
   if (!resp.ok) {
-    throw new Error(`azure ${resp.status}: ${await resp.text().catch(() => '')}`);
+    throw new Error(
+      `azure ${resp.status}: ${await resp.text().catch(() => "")}`,
+    );
   }
   const json = await resp.json();
-  return json?.choices?.[0]?.message?.content ?? '';
+  return json?.choices?.[0]?.message?.content ?? "";
 }
 
 // Google Gemini's REST surface uses a different request shape:
@@ -755,18 +687,18 @@ async function callAzure(provider, system, user) {
 // parameter rather than a header. `responseMimeType: application/json`
 // gets us the strict JSON output the parser expects.
 async function callGoogle(provider, system, user) {
-  const base = String(provider.baseUrl || '').replace(/\/+$/, '');
+  const base = String(provider.baseUrl || "").replace(/\/+$/, "");
   const model = encodeURIComponent(provider.model);
   const url = `${base}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(provider.apiKey)}`;
   let resp;
   try {
     resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { role: 'system', parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { responseMimeType: 'application/json' },
+        systemInstruction: { role: "system", parts: [{ text: system }] },
+        contents: [{ role: "user", parts: [{ text: user }] }],
+        generationConfig: { responseMimeType: "application/json" },
       }),
       signal: withTimeout(FETCH_TIMEOUT_MS),
     });
@@ -774,42 +706,51 @@ async function callGoogle(provider, system, user) {
     throw new Error(describeFetchError(err));
   }
   if (!resp.ok) {
-    throw new Error(`google ${resp.status}: ${await resp.text().catch(() => '')}`);
+    throw new Error(
+      `google ${resp.status}: ${await resp.text().catch(() => "")}`,
+    );
   }
   const json = await resp.json();
   const parts = json?.candidates?.[0]?.content?.parts;
   if (Array.isArray(parts)) {
-    return parts.map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('');
+    return parts
+      .map((p) => (p && typeof p.text === "string" ? p.text : ""))
+      .join("");
   }
-  return '';
+  return "";
 }
 
 const LOCAL_CLI_TIMEOUT_MS = 60_000;
 
 function extractJsonEventText(kind, raw, agentName) {
   const events = [];
-  const handler = createJsonEventStreamHandler(kind, (event) => events.push(event));
+  const handler = createJsonEventStreamHandler(kind, (event) =>
+    events.push(event),
+  );
   handler.feed(raw);
   handler.flush();
 
-  const errorEvent = events.find((event) => event?.type === 'error');
+  const errorEvent = events.find((event) => event?.type === "error");
   if (errorEvent) {
     const message =
-      typeof errorEvent.message === 'string' && errorEvent.message.trim()
+      typeof errorEvent.message === "string" && errorEvent.message.trim()
         ? errorEvent.message.trim()
-        : 'unknown error';
+        : "unknown error";
     throw new Error(`${agentName} CLI error: ${message}`);
   }
 
   return events
-    .filter((event) => event?.type === 'text_delta' && typeof event.delta === 'string')
+    .filter(
+      (event) =>
+        event?.type === "text_delta" && typeof event.delta === "string",
+    )
     .map((event) => event.delta)
-    .join('')
+    .join("")
     .trim();
 }
 
 async function callLocalCli(provider, system, user, options) {
-  if (typeof options?.localCliRunner === 'function') {
+  if (typeof options?.localCliRunner === "function") {
     return options.localCliRunner({
       agentId: provider.agentId,
       model: provider.model,
@@ -827,7 +768,9 @@ async function callLocalCli(provider, system, user, options) {
 
   let configuredAgentEnv = {};
   try {
-    const appConfig = options?.dataDir ? await readAppConfig(options.dataDir) : {};
+    const appConfig = options?.dataDir
+      ? await readAppConfig(options.dataDir)
+      : {};
     configuredAgentEnv = agentCliEnvForAgent(appConfig.agentCliEnv, def.id);
   } catch {
     configuredAgentEnv = {};
@@ -839,35 +782,30 @@ async function callLocalCli(provider, system, user, options) {
   }
 
   const cwd =
-    typeof options?.projectRoot === 'string' && options.projectRoot.trim()
+    typeof options?.projectRoot === "string" && options.projectRoot.trim()
       ? options.projectRoot
       : process.cwd();
   const prompt = [
     system,
-    '',
-    'You are running as a background memory extractor. Do not use tools. Return strict JSON only.',
-    '',
+    "",
+    "You are running as a background memory extractor. Do not use tools. Return strict JSON only.",
+    "",
     user,
-  ].join('\n');
+  ].join("\n");
 
   let args;
   let stdinText = prompt;
   let parseStdout = (raw) => raw.trim();
-  if (provider.agentId === 'claude') {
-    args = ['-p', '--input-format', 'text', '--output-format', 'text'];
-    if (provider.model && provider.model !== 'default') {
-      args.push('--model', provider.model);
+  if (provider.agentId === "claude") {
+    args = ["-p", "--input-format", "text", "--output-format", "text"];
+    if (provider.model && provider.model !== "default") {
+      args.push("--model", provider.model);
     }
-  } else if (provider.agentId === 'codex') {
-    args = def.buildArgs(
-      '',
-      [],
-      [],
-      { model: provider.model },
-      { cwd },
-    );
-    parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
-  } else if (provider.agentId === 'opencode' || provider.agentId === 'gemini') {
+  } else if (provider.agentId === "codex") {
+    args = def.buildArgs("", [], [], { model: provider.model }, { cwd });
+    parseStdout = (raw) =>
+      extractJsonEventText(def.eventParser || def.id, raw, def.name);
+  } else if (provider.agentId === "opencode" || provider.agentId === "gemini") {
     // Deliver the prompt on stdin, matching the chat-run path
     // (def.promptViaStdin). `opencode run`'s `-f, --file` is a yargs array
     // option that greedily consumes every trailing non-flag token, so
@@ -875,25 +813,16 @@ async function callLocalCli(provider, system, user, options) {
     // text as a second attachment and exit with "File not found". Bare
     // `opencode run --format json` reads the message from stdin instead.
     // Gemini behaves similarly: it reads from stdin when `-p` is omitted.
-    args = def.buildArgs(
-      '',
-      [],
-      [],
-      { model: provider.model },
-      { cwd },
-    );
-    parseStdout = (raw) => extractJsonEventText(def.eventParser || def.id, raw, def.name);
-  } else if (provider.agentId === 'antigravity') {
-    args = def.buildArgs(
-      '',
-      [],
-      [],
-      { model: provider.model },
-      { cwd },
-    );
+    args = def.buildArgs("", [], [], { model: provider.model }, { cwd });
+    parseStdout = (raw) =>
+      extractJsonEventText(def.eventParser || def.id, raw, def.name);
+  } else if (provider.agentId === "antigravity") {
+    args = def.buildArgs("", [], [], { model: provider.model }, { cwd });
     parseStdout = (raw) => raw.trim();
   } else {
-    throw new Error(`Local CLI execution is not supported for ${provider.agentId}`);
+    throw new Error(
+      `Local CLI execution is not supported for ${provider.agentId}`,
+    );
   }
 
   const env = applyAgentLaunchEnv(
@@ -913,13 +842,13 @@ async function callLocalCli(provider, system, user, options) {
   });
 
   return await new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
+    let stdout = "";
+    let stderr = "";
     let settled = false;
     let closed = false;
     const child = spawn(invocation.command, invocation.args, {
       env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
       cwd,
       shell: false,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments,
@@ -934,27 +863,31 @@ async function callLocalCli(provider, system, user, options) {
     };
 
     const timeout = setTimeout(() => {
-      child.kill('SIGTERM');
+      child.kill("SIGTERM");
       setTimeout(() => {
-        if (!closed) child.kill('SIGKILL');
+        if (!closed) child.kill("SIGKILL");
       }, 2_000).unref?.();
-      finish(new Error(`${def.name} CLI timed out after ${Math.round(LOCAL_CLI_TIMEOUT_MS / 1000)}s`));
+      finish(
+        new Error(
+          `${def.name} CLI timed out after ${Math.round(LOCAL_CLI_TIMEOUT_MS / 1000)}s`,
+        ),
+      );
     }, LOCAL_CLI_TIMEOUT_MS);
     timeout.unref?.();
 
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
       stdout = `${stdout}${chunk}`.slice(-64_000);
     });
-    child.stderr.on('data', (chunk) => {
+    child.stderr.on("data", (chunk) => {
       stderr = `${stderr}${chunk}`.slice(-8_000);
     });
-    child.once('error', (err) => finish(err));
-    child.once('close', (code, signal) => {
+    child.once("error", (err) => finish(err));
+    child.once("close", (code, signal) => {
       closed = true;
       if (code === 0) {
-        let text = '';
+        let text = "";
         try {
           text = parseStdout(stdout);
         } catch (err) {
@@ -966,12 +899,15 @@ async function callLocalCli(provider, system, user, options) {
           return;
         }
       }
-      const detail = (stderr.trim() || stdout.trim() || 'no output').slice(0, 1000);
+      const detail = (stderr.trim() || stdout.trim() || "no output").slice(
+        0,
+        1000,
+      );
       const status = signal ? `signal ${signal}` : `exit ${code}`;
       finish(new Error(`${def.name} CLI ${status}: ${detail}`));
     });
-    child.stdin.on('error', (err) => {
-      if (err.code !== 'EPIPE') finish(err);
+    child.stdin.on("error", (err) => {
+      if (err.code !== "EPIPE") finish(err);
     });
     child.stdin.end(stdinText);
   });
@@ -980,10 +916,13 @@ async function callLocalCli(provider, system, user, options) {
 // Tolerant JSON parse — the model occasionally wraps output in ```json
 // fences even when told not to. Strip those defensively.
 function parseEntries(rawText) {
-  if (typeof rawText !== 'string') return [];
+  if (typeof rawText !== "string") return [];
   let text = rawText.trim();
-  if (text.startsWith('```')) {
-    text = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  if (text.startsWith("```")) {
+    text = text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
   }
   let parsed;
   try {
@@ -999,16 +938,16 @@ function parseEntries(rawText) {
     }
   }
   const list = Array.isArray(parsed?.entries) ? parsed.entries : [];
-  const validTypes = new Set(['user', 'feedback', 'project', 'reference']);
+  const validTypes = new Set(["user", "feedback", "project", "reference"]);
   return list
     .filter(
       (e) =>
         e &&
-        typeof e === 'object' &&
+        typeof e === "object" &&
         validTypes.has(e.type) &&
-        typeof e.name === 'string' &&
+        typeof e.name === "string" &&
         e.name.trim().length > 0 &&
-        typeof e.body === 'string' &&
+        typeof e.body === "string" &&
         e.body.trim().length > 0,
     )
     .slice(0, 6); // hard cap so a confused model can't flood the store
@@ -1026,7 +965,9 @@ function toMemoryDraft(candidate) {
   return {
     type: candidate.type,
     name: String(candidate.name).trim().slice(0, 80),
-    description: String(candidate.description || '').trim().slice(0, 200),
+    description: String(candidate.description || "")
+      .trim()
+      .slice(0, 200),
     body: String(candidate.body).trim(),
   };
 }
@@ -1035,9 +976,9 @@ async function collectProposedEntries(dataDir, input, options) {
   const projectRoot = options?.projectRoot ?? null;
   const chatAgentId = options?.chatAgentId ?? null;
   const chatModel = options?.chatModel ?? null;
-  const extractionKind = options?.kind ?? 'llm';
+  const extractionKind = options?.kind ?? "llm";
   const systemPrompt =
-    typeof options?.systemPrompt === 'string' && options.systemPrompt.trim()
+    typeof options?.systemPrompt === "string" && options.systemPrompt.trim()
       ? options.systemPrompt.trim()
       : SYSTEM_PROMPT;
   // BYOK chat-config snapshot — only present for API-mode calls
@@ -1046,19 +987,38 @@ async function collectProposedEntries(dataDir, input, options) {
   // pickProvider() can run "Same as chat" extraction against the
   // user's actual chat provider.
   const chatProvider = options?.chatProvider ?? null;
-  const userMessage = String(input?.userMessage || '').trim();
+  const userMessage = String(input?.userMessage || "").trim();
 
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) {
-    recordSkip({ userMessage, reason: 'memory-disabled', kind: extractionKind });
-    return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+    recordSkip({
+      userMessage,
+      reason: "memory-disabled",
+      kind: extractionKind,
+    });
+    return {
+      status: "skipped",
+      attemptId: null,
+      proposed: [],
+      existingEntries: [],
+    };
   }
-  if (extractionKind !== 'connector' && !cfg.chatExtractionEnabled) {
-    return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+  if (extractionKind !== "connector" && !cfg.chatExtractionEnabled) {
+    return {
+      status: "skipped",
+      attemptId: null,
+      proposed: [],
+      existingEntries: [],
+    };
   }
   if (userMessage.length === 0) {
-    recordSkip({ userMessage, reason: 'empty-message', kind: extractionKind });
-    return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+    recordSkip({ userMessage, reason: "empty-message", kind: extractionKind });
+    return {
+      status: "skipped",
+      attemptId: null,
+      proposed: [],
+      existingEntries: [],
+    };
   }
 
   const provider = await pickProvider(
@@ -1069,8 +1029,13 @@ async function collectProposedEntries(dataDir, input, options) {
     chatModel,
   );
   if (!provider) {
-    recordSkip({ userMessage, reason: 'no-provider', kind: extractionKind });
-    return { status: 'skipped', attemptId: null, proposed: [], existingEntries: [] };
+    recordSkip({ userMessage, reason: "no-provider", kind: extractionKind });
+    return {
+      status: "skipped",
+      attemptId: null,
+      proposed: [],
+      existingEntries: [],
+    };
   }
 
   // Past this point we have a provider committed and an actual model
@@ -1083,7 +1048,7 @@ async function collectProposedEntries(dataDir, input, options) {
     credentialSource: provider.credentialSource,
   });
 
-  let currentMemory = '';
+  let currentMemory = "";
   let existingEntries = [];
   try {
     [currentMemory, existingEntries] = await Promise.all([
@@ -1100,19 +1065,19 @@ async function collectProposedEntries(dataDir, input, options) {
     currentMemory,
   });
 
-  let raw = '';
+  let raw = "";
   try {
-    if (provider.transport === 'chat-cli') {
+    if (provider.transport === "chat-cli") {
       raw = await callLocalCli(provider, systemPrompt, userPayload, {
         dataDir,
         projectRoot,
         localCliRunner: options?.localCliRunner,
       });
-    } else if (provider.kind === 'anthropic') {
+    } else if (provider.kind === "anthropic") {
       raw = await callAnthropic(provider, systemPrompt, userPayload);
-    } else if (provider.kind === 'azure') {
+    } else if (provider.kind === "azure") {
       raw = await callAzure(provider, systemPrompt, userPayload);
-    } else if (provider.kind === 'google') {
+    } else if (provider.kind === "google") {
       raw = await callGoogle(provider, systemPrompt, userPayload);
     } else {
       // openai or ollama — both speak the OpenAI chat-completions
@@ -1124,15 +1089,18 @@ async function collectProposedEntries(dataDir, input, options) {
     // err.message is already pre-formatted by describeFetchError() when
     // the call layer caught a network error. For HTTP-level failures
     // (`anthropic 401: …`) the message is already user-facing too.
-    console.warn(`[memory-llm] ${provider.kind} call failed`, err?.message ?? err);
+    console.warn(
+      `[memory-llm] ${provider.kind} call failed`,
+      err?.message ?? err,
+    );
     markFailed(attemptId, err);
-    return { status: 'failed', attemptId, proposed: [], existingEntries };
+    return { status: "failed", attemptId, proposed: [], existingEntries };
   }
 
   let proposed;
   try {
     proposed = parseEntries(raw);
-    if (typeof options?.candidateFilter === 'function') {
+    if (typeof options?.candidateFilter === "function") {
       proposed = proposed.filter((candidate) => {
         try {
           return options.candidateFilter(candidate);
@@ -1143,15 +1111,15 @@ async function collectProposedEntries(dataDir, input, options) {
     }
   } catch (err) {
     markFailed(attemptId, err);
-    return { status: 'failed', attemptId, proposed: [], existingEntries };
+    return { status: "failed", attemptId, proposed: [], existingEntries };
   }
   markProposed(attemptId, proposed.length);
-  return { status: 'ok', attemptId, proposed, existingEntries };
+  return { status: "ok", attemptId, proposed, existingEntries };
 }
 
 export async function suggestWithLLM(dataDir, input, options) {
   const result = await collectProposedEntries(dataDir, input, options);
-  if (result.status !== 'ok') return [];
+  if (result.status !== "ok") return [];
 
   const suggestions = result.proposed
     .filter((cand) => !alreadyKnown(result.existingEntries, cand))
@@ -1166,9 +1134,9 @@ export async function suggestWithLLM(dataDir, input, options) {
 }
 
 export async function extractWithLLM(dataDir, input, options) {
-  const changeSource = options?.source ?? 'llm';
+  const changeSource = options?.source ?? "llm";
   const result = await collectProposedEntries(dataDir, input, options);
-  if (result.status !== 'ok') return [];
+  if (result.status !== "ok") return [];
   const { attemptId, proposed, existingEntries } = result;
 
   if (proposed.length === 0) {
@@ -1195,13 +1163,13 @@ export async function extractWithLLM(dataDir, input, options) {
         updatedAt: entry.updatedAt,
       });
     } catch (err) {
-      console.warn('[memory-llm] write failed', err?.message ?? err);
+      console.warn("[memory-llm] write failed", err?.message ?? err);
     }
   }
 
   if (written.length > 0) {
-    memoryEvents.emit('change', {
-      kind: 'extract',
+    memoryEvents.emit("change", {
+      kind: "extract",
       count: written.length,
       source: changeSource,
       at: Date.now(),
@@ -1244,22 +1212,28 @@ export async function callLlmOnce(params) {
     chatModel,
   );
 
-  console.log("provider", params)
+  console.log("provider", params);
 
   if (!provider) {
     throw Object.assign(
       new Error(
-        'No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY, or use API-key mode.',
+        "No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY, or use API-key mode.",
       ),
-      { code: 'NO_AI_PROVIDER' },
+      { code: "NO_AI_PROVIDER" },
     );
   }
 
-  if (provider.transport === 'chat-cli') {
-    return callLocalCli(provider, systemPrompt, userPrompt, { projectRoot, dataDir });
+  if (provider.transport === "chat-cli") {
+    return callLocalCli(provider, systemPrompt, userPrompt, {
+      projectRoot,
+      dataDir,
+    });
   }
-  if (provider.kind === 'anthropic') return callAnthropic(provider, systemPrompt, userPrompt);
-  if (provider.kind === 'azure') return callAzure(provider, systemPrompt, userPrompt);
-  if (provider.kind === 'google') return callGoogle(provider, systemPrompt, userPrompt);
+  if (provider.kind === "anthropic")
+    return callAnthropic(provider, systemPrompt, userPrompt);
+  if (provider.kind === "azure")
+    return callAzure(provider, systemPrompt, userPrompt);
+  if (provider.kind === "google")
+    return callGoogle(provider, systemPrompt, userPrompt);
   return callOpenAI(provider, systemPrompt, userPrompt);
 }

@@ -1,27 +1,29 @@
 import type {
   ConnectionTestKind,
   ConnectionTestProtocol,
-} from '@open-design/contracts/api/connectionTest';
+} from "@open-design/contracts/api/connectionTest";
 import type {
   ProviderModelOption,
   ProviderModelsRequest,
   ProviderModelsResponse,
-} from '@open-design/contracts/api/providerModels';
-import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets, validateBaseUrlResolved } from './connectionTest.js';
-import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
-import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
+} from "@open-design/contracts/api/providerModels";
+import { isLoopbackApiHost } from "@open-design/contracts/api/connectionTest";
+import { redactSecrets, validateBaseUrlResolved } from "./connectionTest.js";
+import {
+  googleProviderModelsUrl,
+  normalizeGoogleModelId,
+} from "./google-models.js";
 
 type ProviderModelsInput = ProviderModelsRequest & {
   signal?: AbortSignal;
-  requestInit?: Pick<RequestInit, 'dispatcher'>;
+  requestInit?: Pick<RequestInit, "dispatcher">;
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
   const url = new URL(baseUrl);
-  const pathname = url.pathname.replace(/\/+$/, '');
+  const pathname = url.pathname.replace(/\/+$/, "");
   url.pathname = /\/v\d+(\/|$)/.test(pathname)
     ? `${pathname}${suffix}`
     : `${pathname}/v1${suffix}`;
@@ -29,47 +31,47 @@ function appendVersionedApiPath(baseUrl: string, suffix: string): string {
 }
 
 function statusToKind(status: number): ConnectionTestKind {
-  if (status === 401) return 'auth_failed';
-  if (status === 403) return 'forbidden';
-  if (status === 404) return 'invalid_base_url';
-  if (status === 429) return 'rate_limited';
-  if (status >= 500) return 'upstream_unavailable';
-  return 'unknown';
+  if (status === 401) return "auth_failed";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "invalid_base_url";
+  if (status === 429) return "rate_limited";
+  if (status >= 500) return "upstream_unavailable";
+  return "unknown";
 }
 
 function extractProviderErrorDetail(data: unknown, rawText: string): string {
-  const obj = data && typeof data === 'object' ? data : null;
+  const obj = data && typeof data === "object" ? data : null;
   const error = obj ? (obj as { error?: unknown }).error : null;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object') {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
     const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string' && message.trim()) return message;
+    if (typeof message === "string" && message.trim()) return message;
   }
   const message = obj ? (obj as { message?: unknown }).message : null;
-  if (typeof message === 'string' && message.trim()) return message;
+  if (typeof message === "string" && message.trim()) return message;
   return rawText.trim().slice(0, 240);
 }
 
 function networkErrorToKind(err: unknown): ConnectionTestKind {
   if (err instanceof Error) {
-    if (err.name === 'AbortError') return 'timeout';
+    if (err.name === "AbortError") return "timeout";
     const cause = (err as { cause?: { code?: string } }).cause;
     const code = cause?.code;
     if (
-      code === 'ENOTFOUND' ||
-      code === 'EAI_AGAIN' ||
-      code === 'ECONNREFUSED' ||
-      code === 'ECONNRESET' ||
-      code === 'ETIMEDOUT' ||
-      code === 'EHOSTUNREACH' ||
-      code === 'ENETUNREACH' ||
-      code === 'CERT_HAS_EXPIRED' ||
-      code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+      code === "ENOTFOUND" ||
+      code === "EAI_AGAIN" ||
+      code === "ECONNREFUSED" ||
+      code === "ECONNRESET" ||
+      code === "ETIMEDOUT" ||
+      code === "EHOSTUNREACH" ||
+      code === "ENETUNREACH" ||
+      code === "CERT_HAS_EXPIRED" ||
+      code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE"
     ) {
-      return 'invalid_base_url';
+      return "invalid_base_url";
     }
   }
-  return 'unknown';
+  return "unknown";
 }
 
 function uniqueModels(models: ProviderModelOption[]): ProviderModelOption[] {
@@ -90,7 +92,7 @@ function extractOpenAiModels(data: unknown): ProviderModelOption[] {
   return uniqueModels(
     items
       .map((item) => (item as { id?: unknown })?.id)
-      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
       .map((id) => ({ id, label: id })),
   );
 }
@@ -101,14 +103,19 @@ function extractAnthropicModels(data: unknown): ProviderModelOption[] {
   return uniqueModels(
     items
       .map((item) => {
-        const obj = item && typeof item === 'object'
-          ? item as { id?: unknown; display_name?: unknown; displayName?: unknown }
-          : null;
-        const id = typeof obj?.id === 'string' ? obj.id : '';
+        const obj =
+          item && typeof item === "object"
+            ? (item as {
+                id?: unknown;
+                display_name?: unknown;
+                displayName?: unknown;
+              })
+            : null;
+        const id = typeof obj?.id === "string" ? obj.id : "";
         const label =
-          typeof obj?.display_name === 'string'
+          typeof obj?.display_name === "string"
             ? obj.display_name
-            : typeof obj?.displayName === 'string'
+            : typeof obj?.displayName === "string"
               ? obj.displayName
               : id;
         return id ? { id, label } : null;
@@ -118,18 +125,23 @@ function extractAnthropicModels(data: unknown): ProviderModelOption[] {
 }
 
 function googleModelId(rawName: unknown, rawBaseModelId: unknown): string {
-  if (typeof rawBaseModelId === 'string' && rawBaseModelId.trim()) {
+  if (typeof rawBaseModelId === "string" && rawBaseModelId.trim()) {
     return normalizeGoogleModelId(rawBaseModelId);
   }
-  if (typeof rawName !== 'string') return '';
+  if (typeof rawName !== "string") return "";
   return normalizeGoogleModelId(rawName);
 }
 
 function supportsGoogleGenerateContent(item: unknown): boolean {
-  const methods = (item as { supportedGenerationMethods?: unknown; supported_actions?: unknown })
-    ?.supportedGenerationMethods
-    ?? (item as { supported_actions?: unknown })?.supported_actions;
-  return Array.isArray(methods) && methods.includes('generateContent');
+  const methods =
+    (
+      item as {
+        supportedGenerationMethods?: unknown;
+        supported_actions?: unknown;
+      }
+    )?.supportedGenerationMethods ??
+    (item as { supported_actions?: unknown })?.supported_actions;
+  return Array.isArray(methods) && methods.includes("generateContent");
 }
 
 function extractGoogleModels(data: unknown): ProviderModelOption[] {
@@ -139,34 +151,39 @@ function extractGoogleModels(data: unknown): ProviderModelOption[] {
     items
       .filter(supportsGoogleGenerateContent)
       .map((item) => {
-        const obj = item && typeof item === 'object'
-          ? item as { name?: unknown; baseModelId?: unknown; displayName?: unknown }
-          : null;
+        const obj =
+          item && typeof item === "object"
+            ? (item as {
+                name?: unknown;
+                baseModelId?: unknown;
+                displayName?: unknown;
+              })
+            : null;
         const id = googleModelId(obj?.name, obj?.baseModelId);
-        const label = typeof obj?.displayName === 'string' && obj.displayName.trim()
-          ? obj.displayName
-          : id;
+        const label =
+          typeof obj?.displayName === "string" && obj.displayName.trim()
+            ? obj.displayName
+            : id;
         return id ? { id, label } : null;
       })
       .filter((item): item is ProviderModelOption => item != null),
   );
 }
 
-function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, apiKey: string): string {
-  if (protocol === 'aihubmix') {
-    // AIHubMix exposes its chat catalogue on a dedicated endpoint
-    // (GET /api/v1/models?type=llm), not the OpenAI /v1/models route.
-    return aihubmixCatalogUrl(baseUrl, 'llm');
+function providerModelsUrl(
+  protocol: ConnectionTestProtocol,
+  baseUrl: string,
+  apiKey: string,
+): string {
+  if (protocol === "openai" || protocol === "senseaudio") {
+    return appendVersionedApiPath(baseUrl, "/models");
   }
-  if (protocol === 'openai' || protocol === 'senseaudio') {
-    return appendVersionedApiPath(baseUrl, '/models');
-  }
-  if (protocol === 'anthropic') {
-    const url = new URL(appendVersionedApiPath(baseUrl, '/models'));
-    url.searchParams.set('limit', '1000');
+  if (protocol === "anthropic") {
+    const url = new URL(appendVersionedApiPath(baseUrl, "/models"));
+    url.searchParams.set("limit", "1000");
     return url.toString();
   }
-  if (protocol === 'google') {
+  if (protocol === "google") {
     return googleProviderModelsUrl(baseUrl, apiKey);
   }
   throw new Error(`Unsupported protocol: ${protocol}`);
@@ -176,35 +193,32 @@ function providerModelsHeaders(
   protocol: ConnectionTestProtocol,
   apiKey: string,
 ): Record<string, string> {
-  if (protocol === 'openai' || protocol === 'senseaudio') {
+  if (protocol === "openai" || protocol === "senseaudio") {
     return { authorization: `Bearer ${apiKey}` };
   }
-  if (protocol === 'aihubmix') {
-    // The catalogue is public — only attach Bearer auth (+ APP-Code) when the
-    // user actually supplied a key. An empty `Bearer ` would be rejected by
-    // some gateways, so send no headers when the key is blank.
-    return apiKey.trim() ? aihubmixHeaders(apiKey) : {};
-  }
-  if (protocol === 'anthropic') {
+  if (protocol === "anthropic") {
     return {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
     };
   }
   return {};
 }
 
-function extractModels(protocol: ConnectionTestProtocol, data: unknown): ProviderModelOption[] {
+function extractModels(
+  protocol: ConnectionTestProtocol,
+  data: unknown,
+): ProviderModelOption[] {
   // SenseAudio's /v1/models response follows the OpenAI envelope
   // (`{ data: [{ id, ... }] }`), so the same extractor handles both.
   // Chat picker: drop media-generation rows. AIHubMix's `?type=llm` matches any
   // model whose `types` merely contains `llm`, so dual-tagged image models
   // (e.g. gpt-image-2 → "image_generation,llm") would otherwise leak in. Those
   // belong to the dedicated image/video/audio pickers.
-  if (protocol === 'aihubmix') return parseAIHubMixCatalog(data, { chatOnly: true });
-  if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
-  if (protocol === 'anthropic') return extractAnthropicModels(data);
-  if (protocol === 'google') return extractGoogleModels(data);
+  if (protocol === "openai" || protocol === "senseaudio")
+    return extractOpenAiModels(data);
+  if (protocol === "anthropic") return extractAnthropicModels(data);
+  if (protocol === "google") return extractGoogleModels(data);
   return [];
 }
 
@@ -212,12 +226,13 @@ export async function listProviderModels(
   input: ProviderModelsInput,
 ): Promise<ProviderModelsResponse> {
   const start = Date.now();
-  if (input.protocol === 'azure') {
+  if (input.protocol === "azure") {
     return {
       ok: false,
-      kind: 'unsupported_protocol',
+      kind: "unsupported_protocol",
       latencyMs: Date.now() - start,
-      detail: 'Azure OpenAI deployment discovery is not supported from the inference endpoint.',
+      detail:
+        "Azure OpenAI deployment discovery is not supported from the inference endpoint.",
     };
   }
 
@@ -225,9 +240,9 @@ export async function listProviderModels(
   if (validated.error || !validated.parsed) {
     return {
       ok: false,
-      kind: validated.forbidden ? 'forbidden' : 'invalid_base_url',
+      kind: validated.forbidden ? "forbidden" : "invalid_base_url",
       latencyMs: Date.now() - start,
-      detail: validated.error ?? '',
+      detail: validated.error ?? "",
     };
   }
 
@@ -237,7 +252,7 @@ export async function listProviderModels(
   } catch (err) {
     return {
       ok: false,
-      kind: 'unsupported_protocol',
+      kind: "unsupported_protocol",
       latencyMs: Date.now() - start,
       detail: err instanceof Error ? err.message : String(err),
     };
@@ -248,17 +263,20 @@ export async function listProviderModels(
   if (input.signal?.aborted) {
     controller.abort();
   } else {
-    input.signal?.addEventListener('abort', abortFromParent, { once: true });
+    input.signal?.addEventListener("abort", abortFromParent, { once: true });
   }
-  const timer = setTimeout(() => controller.abort(), PROVIDER_MODELS_TIMEOUT_MS);
+  const timer = setTimeout(
+    () => controller.abort(),
+    PROVIDER_MODELS_TIMEOUT_MS,
+  );
 
   try {
     const response = await fetch(url, {
-      method: 'GET',
+      method: "GET",
       headers: providerModelsHeaders(input.protocol, input.apiKey),
       ...input.requestInit,
       signal: controller.signal,
-      redirect: 'error',
+      redirect: "error",
     });
     const latencyMs = Date.now() - start;
     const rawText = await response.text();
@@ -286,7 +304,7 @@ export async function listProviderModels(
     if (parseError) {
       return {
         ok: false,
-        kind: 'unknown',
+        kind: "unknown",
         latencyMs,
         status: response.status,
         detail: redactSecrets(parseError, [input.apiKey]),
@@ -300,15 +318,15 @@ export async function listProviderModels(
     if (models.length === 0) {
       return {
         ok: false,
-        kind: 'no_models',
+        kind: "no_models",
         latencyMs,
         status: response.status,
-        detail: 'Provider returned no usable text-generation models.',
+        detail: "Provider returned no usable text-generation models.",
       };
     }
     return {
       ok: true,
-      kind: 'success',
+      kind: "success",
       latencyMs,
       status: response.status,
       models,
@@ -318,7 +336,7 @@ export async function listProviderModels(
     const kind = networkErrorToKind(err);
     const message = err instanceof Error ? err.message : String(err);
     const host = validated.parsed.hostname;
-    const scope = isLoopbackApiHost(host) ? 'local' : 'remote';
+    const scope = isLoopbackApiHost(host) ? "local" : "remote";
     console.warn(
       `[provider:models] ${input.protocol} ${scope} ${host} → ${kind} in ${latencyMs}ms ${redactSecrets(message, [input.apiKey])}`,
     );
@@ -330,6 +348,6 @@ export async function listProviderModels(
     };
   } finally {
     clearTimeout(timer);
-    input.signal?.removeEventListener('abort', abortFromParent);
+    input.signal?.removeEventListener("abort", abortFromParent);
   }
 }

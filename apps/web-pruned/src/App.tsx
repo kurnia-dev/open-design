@@ -17,7 +17,7 @@ import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts'
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
-import { PluginDetailView } from './components/PluginDetailView';
+const PluginDetailView = (props: any) => null;
 import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { Toast } from './components/Toast';
@@ -1654,13 +1654,11 @@ function AppInner() {
     section: SettingsSection = 'execution',
     opts?: { highlight?: SettingsHighlight },
   ) => {
-    if (section === 'composio' || section === 'mcpClient' || section === 'integrations') {
+    if (section === 'mcpClient' || section === 'integrations') {
       setIntegrationInitialTab(
-        section === 'composio'
-          ? 'connectors'
-          : section === 'mcpClient'
-            ? 'mcp'
-            : 'use-everywhere',
+        section === 'mcpClient'
+          ? 'mcp'
+          : 'use-everywhere',
       );
       navigate({ kind: 'home', view: 'integrations' });
       return;
@@ -1686,7 +1684,7 @@ function AppInner() {
   // The composer "+" menu's "add plugin" / "add connector" rows route to the
   // home plugin-registry / connector-integration surfaces.
   const openPluginRegistry = useCallback(() => {
-    navigate({ kind: 'home', view: 'plugins' });
+    navigate({ kind: 'home', view: 'home' });
   }, []);
 
   const openConnectorIntegrations = useCallback(() => {
@@ -1805,7 +1803,7 @@ function AppInner() {
         }}
         onSystemsRefresh={refreshDesignSystems}
         config={config}
-        onOpenConnectorsTab={() => openSettings('composio')}
+        onOpenConnectorsTab={() => openSettings('integrations')}
         onOpenSettings={openSettings}
       />
     );
@@ -1892,7 +1890,6 @@ function AppInner() {
         projectsLoading={projectsLoading}
         promptTemplatesLoading={promptTemplatesLoading}
         onCreateProject={handleCreateProject}
-        onCreatePluginShareProject={handleCreatePluginShareProject}
         onImportClaudeDesign={handleImportClaudeDesign}
         onImportFolder={handleImportFolder}
         onImportFolderResponse={handleImportFolderResponse}

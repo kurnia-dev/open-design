@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   ConnectorDetail,
-  InstalledPluginRecord,
   McpServerConfig,
 } from '@open-design/contracts';
 import { useT } from '../i18n';
@@ -14,11 +13,7 @@ export interface ComposerPlusMenuProps {
   /** Opens the connector integration surface; omit to hide the add row. */
   onAddConnector?: () => void;
 
-  /** Installed plugin options shown under the "Plugins" submenu. */
-  plugins: InstalledPluginRecord[];
-  onPickPlugin: (plugin: InstalledPluginRecord) => void;
-  /** Opens the plugin registry; omit to hide the add row. */
-  onAddPlugin?: () => void;
+
 
   /** Enabled MCP servers shown under the "MCP" submenu. */
   mcpServers: McpServerConfig[];
@@ -50,10 +45,7 @@ export interface ComposerPlusMenuProps {
   onOpen?: () => void;
 }
 
-function pluginMatches(plugin: InstalledPluginRecord, needle: string): boolean {
-  if (!needle) return true;
-  return `${plugin.title} ${plugin.id}`.toLowerCase().includes(needle);
-}
+
 
 function mcpMatches(server: McpServerConfig, needle: string): boolean {
   if (!needle) return true;
@@ -70,9 +62,7 @@ export function ComposerPlusMenu({
   connectors,
   onPickConnector,
   onAddConnector,
-  plugins,
-  onPickPlugin,
-  onAddPlugin,
+
   mcpServers,
   onPickMcp,
   onAddMcp,
@@ -86,7 +76,7 @@ export function ComposerPlusMenu({
   const t = useT();
   const [open, setOpen] = useState(false);
   const [submenu, setSubmenu] = useState<
-    'connectors' | 'plugins' | 'mcp' | 'toolbox' | null
+    'connectors' | 'mcp' | 'toolbox' | null
   >(null);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -127,9 +117,7 @@ export function ComposerPlusMenu({
   }, [open, submenu]);
 
   const needle = query.trim().toLowerCase();
-  const filteredPlugins = needle
-    ? plugins.filter((p) => pluginMatches(p, needle))
-    : plugins;
+
   const filteredMcp = needle
     ? mcpServers.filter((s) => mcpMatches(s, needle))
     : mcpServers;
@@ -225,62 +213,7 @@ export function ComposerPlusMenu({
               </>
             ) : null}
           </PlusSubmenuRow>
-          <PlusSubmenuRow
-            label={t('entry.navPlugins')}
-            icon="sparkles"
-            open={submenu === 'plugins'}
-            onOpen={() => setSubmenu('plugins')}
-            onClose={() => setSubmenu(null)}
-          >
-            <div className="plus-menu__search">
-              <Icon name="search" size={13} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('entry.navPlugins')}
-                aria-label={t('entry.navPlugins')}
-              />
-            </div>
-            <div className="plus-menu__list">
-              {filteredPlugins.length === 0 ? (
-                <div className="plus-menu__empty">{t('homeHero.noPlugins')}</div>
-              ) : (
-                filteredPlugins.map((plugin) => (
-                  <button
-                    key={plugin.id}
-                    type="button"
-                    role="menuitem"
-                    className="plus-menu__item"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      close();
-                      onPickPlugin(plugin);
-                    }}
-                  >
-                    <Icon name="sparkles" size={15} className="plus-menu__item-icon" />
-                    <span>{plugin.title}</span>
-                  </button>
-                ))
-              )}
-            </div>
-            {onAddPlugin ? (
-              <>
-                <div className="plus-menu__divider" />
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="plus-menu__item"
-                  onClick={() => {
-                    close();
-                    onAddPlugin();
-                  }}
-                >
-                  <Icon name="plus" size={15} className="plus-menu__item-icon" />
-                  <span>{t('homeHero.addPlugin')}</span>
-                </button>
-              </>
-            ) : null}
-          </PlusSubmenuRow>
+
           <PlusSubmenuRow
             label="MCP"
             icon="link"

@@ -19,7 +19,6 @@ export type EntryView =
   | 'onboarding'
   | 'projects'
   | 'tasks'
-  | 'plugins'
   | 'design-systems'
   | 'integrations';
 
@@ -168,15 +167,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
         >
           <Icon name="blocks" size={18} />
         </NavButton>
-        <NavButton
-          active={view === 'plugins'}
-          ariaLabel={t('entry.navPlugins')}
-          tooltip={t('entry.navPlugins')}
-          onClick={() => selectView('plugins')}
-          testId="entry-nav-plugins"
-        >
-          <Icon name="grid" size={18} />
-        </NavButton>
+
         <NavButton
           active={view === 'integrations'}
           ariaLabel={t('entry.navIntegrations')}

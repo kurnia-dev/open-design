@@ -1,105 +1,31 @@
-// Daemon plugin module barrel. Re-exports the surface that server.ts and
-// cli.ts need so the rest of the daemon never reaches into individual files
-// and accidentally bypasses the snapshot writer (spec §8.2.1).
-export * from './atoms.js';
-export * from './apply.js';
-export {
-  validatePluginFolder,
-  flattenValidationDiagnostics,
-  type ValidatePluginFolderInput,
-  type ValidatePluginFolderResult,
-} from './validate.js';
-export {
-  packPlugin,
-  PackPluginError,
-  type PackPluginInput,
-  type PackPluginResult,
-} from './pack.js';
-export {
-  searchInstalledPlugins,
-  type SearchInstalledPluginsInput,
-  type SearchInstalledPluginsResult,
-  type SearchInstalledPluginsResultEntry,
-} from './search.js';
-export {
-  diffPlugins,
-  type DiffPluginsInput,
-  type PluginDiffReport,
-  type PluginDiffEntry,
-} from './diff.js';
-export {
-  diffSnapshots,
-  type DiffSnapshotsInput,
-  type SnapshotDiffReport,
-  type SnapshotDiffEntry,
-} from './snapshot-diff.js';
-export {
-  pluginInventoryStats,
-  pluginSourceBuckets,
-  snapshotInventoryStats,
-  type PluginInventoryStats,
-  type PluginSourceBucket,
-  type PluginSourceBucketsResult,
-  type SnapshotInventoryStats,
-  type SnapshotStatsRow,
-} from './stats.js';
-export {
-  simulatePipeline,
-  parseSignalKv,
-  type SimulatePipelineInput,
-  type SimulatePipelineResult,
-  type SimulateStageOutcome,
-  type StageSignalProvider,
-} from './simulate.js';
-export {
-  verifyPlugin,
-  type VerifyConfig,
-  type VerifyInput,
-  type VerifyReport,
-  type VerifyCheckOutcome,
-  type VerifyCheckId,
-} from './verify.js';
-export {
-  recordPluginEvent,
-  pluginEventSnapshot,
-  subscribePluginEvents,
-  pluginEventBufferSize,
-  summarisePluginEvents,
-  purgePluginEventBuffer,
-  type PluginEvent,
-  type PluginEventKind,
-  type PluginEventStats,
-  type PurgePluginEventBufferResult,
-} from './events.js';
-export * from './atoms/build-test.js';
-export * from './atoms/built-ins.js';
-export * from './atoms/code-import.js';
-export * from './atoms/design-extract.js';
-export * from './atoms/diff-review.js';
-export * from './atoms/diff-review-genui-bridge.js';
-export * from './atoms/figma-extract.js';
-export * from './atoms/handoff.js';
-export * from './atoms/patch-edit.js';
-export * from './atoms/registry.js';
-export * from './atoms/rewrite-plan.js';
-export * from './atoms/token-map.js';
-export * from './bundled.js';
-export * from './connector-gate.js';
-export * from './connector-probe.js';
-export * from './export.js';
-export * from './doctor.js';
-export * from './installer.js';
-export * from './lockfile.js';
-export * from './persistence.js';
-export * from './marketplaces.js';
-export * from './pipeline.js';
-export * from './pipeline-runner.js';
-export * from './publish.js';
-export * from './registry.js';
-export * from './scaffold.js';
-export * from './gc.js';
-export * from './resolve-snapshot.js';
-export * from './snapshots.js';
-export * from './skill-candidates.js';
-export * from './trust.js';
-export * from './until.js';
+export const FIRST_PARTY_ATOMS: any[] = [];
+export async function applyDiffReviewDecisionToCwd() {}
+export async function applyPlugin() { return { ok: true }; }
+export function buildConnectorProbe() { return {}; }
+export function defaultBundledRoot() { return ''; }
+export function detectSkillPluginCandidate() {}
+export function dismissSkillPluginCandidate() {}
+export async function doctorPlugin() {}
+export function generateSkillPluginDraft() {}
+export function getInstalledPlugin() { return null; }
+export function getSnapshot() { return null; }
+export async function installFromLocalFolder() { return { id: '' }; }
+export async function installPlugin() { return { id: '' }; }
+export function insertSkillPluginCandidate() {}
+export function isDiffReviewSurfaceId() { return false; }
+export function listSkillPluginCandidates() { return []; }
+export function listInstalledPlugins() { return []; }
+export function listIterationsForRun() { return []; }
+export class MissingInputError extends Error {}
+export function pluginPromptBlock() { return ''; }
+export function pruneExpiredSnapshots() {}
+export function readPluginLockfile() { return null; }
+export function registerBuiltInAtomWorkers() {}
+export function registerBundledPlugins() {}
+export function registryRootsForDataDir() { return []; }
+export function restoreProjectSnapshotLink() {}
+export function resolvePluginSnapshot() { return { ok: true, status: 200, body: {} }; }
+export function runPipelineForRun() {}
+export function runStageWithRegistry() {}
+export function startSnapshotGc() {}
+export async function uninstallPlugin() {}

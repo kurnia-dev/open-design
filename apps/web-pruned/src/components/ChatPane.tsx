@@ -43,7 +43,7 @@ import {
   type ChatSendMeta,
 } from './ChatComposer';
 import { listDesignArtifactCandidates } from './design-files/designArtifacts';
-import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
+
 import { Icon, type IconName } from './Icon';
 import { repoConnectCopy } from './design-system-github-evidence';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
@@ -462,7 +462,7 @@ interface Props {
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
-    action: PluginFolderAgentAction,
+    action: any,
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
@@ -2228,7 +2228,7 @@ function ChatRows({
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginDetails?: (pluginId: string) => void;
   onRequestDesignSystemDetails?: (system: DesignSystemSummary) => void;
-  onRequestPluginFolderAgentAction?: (relativePath: string, action: PluginFolderAgentAction) => void;
+  onRequestPluginFolderAgentAction?: (relativePath: string, action: any) => void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
   onShareToOpenDesign?: () => void;

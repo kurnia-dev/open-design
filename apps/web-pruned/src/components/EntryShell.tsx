@@ -19,10 +19,8 @@ import {
   type SetStateAction,
 } from 'react';
 import {
-  defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type ConnectorDetail,
-  type InstalledPluginRecord,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import type { DesignSystemGenerateSnapshot } from './DesignSystemFlow';
@@ -83,12 +81,7 @@ import {
   useDiscordPresence,
 } from './useDiscordPresence';
 import { HomeView } from './HomeView';
-import {
-  createPluginAuthoringHandoff,
-  createPluginUseHandoff,
-  type HomePromptHandoff,
-} from './home-hero/plugin-authoring';
-import type { PluginUseAction } from './plugins-home/useActions';
+
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
@@ -99,13 +92,7 @@ import {
   type EntrySettingsSection,
 } from './EntrySettingsMenu';
 import { NewProjectModal } from './NewProjectModal';
-import { PluginsView } from './PluginsView';
 import type { CreateInput, CreateTab, ImportClaudeDesignOutcome } from './NewProjectPanel';
-import type { PluginLoopSubmit } from './PluginLoopHome';
-import type {
-  PluginShareAction,
-  PluginShareProjectOutcome,
-} from '../state/projects';
 import { TasksView } from './TasksView';
 import {
   API_KEY_PLACEHOLDERS,
@@ -187,83 +174,7 @@ const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'glm-5.1', label: 'GLM 5.1' },
 ];
 
-function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
-  return defaultScenarioPluginIdForProjectMetadata(metadata);
-}
 
-function defaultPluginInputsForCreate(
-  input: CreateInput,
-  pluginId: string | null,
-): Record<string, unknown> | null {
-  const kind = input.metadata.kind;
-  const projectName = input.name.trim();
-
-  if (pluginId === 'example-web-prototype' || pluginId === 'example-web-prototype-wireframe') {
-    return {
-      artifactKind: input.metadata.includeLandingPage
-        ? 'landing page'
-        : 'web prototype',
-      fidelity: input.metadata.fidelity ?? 'high-fidelity',
-      audience: 'product evaluators',
-      designSystem: 'the active project design system',
-      template: input.metadata.templateLabel ?? 'the bundled web prototype seed',
-    };
-  }
-
-  if (pluginId === 'example-simple-deck') {
-    return {
-      deckType: 'pitch deck',
-      topic: projectName || 'the user brief',
-      audience: 'decision makers',
-      slideCount: '10-15 pages',
-      speakerNotes: input.metadata.speakerNotes
-        ? 'include speaker notes'
-        : 'no speaker notes',
-      designSystem: 'the active project design system',
-    };
-  }
-
-  if (pluginId === 'od-new-generation') {
-    const templateLabel = input.metadata.templateLabel?.trim();
-    const artifactKind =
-      kind === 'template'
-        ? 'artifact based on a saved template'
-        : kind === 'other'
-          ? 'custom design artifact'
-          : `${kind} artifact`;
-    return {
-      artifactKind,
-      audience: 'product and design reviewers',
-      topic: templateLabel || projectName || 'the user brief',
-    };
-  }
-
-  if (pluginId !== 'od-media-generation') return null;
-  if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return null;
-
-  const promptTemplate = input.metadata.promptTemplate;
-  const subject =
-    promptTemplate?.prompt?.trim()
-    || projectName
-    || promptTemplate?.title?.trim()
-    || `${kind} concept`;
-  const style =
-    promptTemplate?.summary?.trim()
-    || 'cinematic, high-quality, on-brand';
-  const aspect =
-    kind === 'image'
-      ? input.metadata.imageAspect
-      : kind === 'video'
-        ? input.metadata.videoAspect
-        : undefined;
-
-  return {
-    mediaKind: kind,
-    subject,
-    style,
-    ...(aspect ? { aspect } : {}),
-  };
-}
 
 interface Props {
   skills: SkillSummary[];
@@ -306,19 +217,11 @@ interface Props {
   onCreateProject: (
     input: CreateInput & {
       pendingPrompt?: string;
-      pluginId?: string;
-      appliedPluginSnapshotId?: string;
-      pluginInputs?: Record<string, unknown>;
       conversationMode?: ChatSessionMode;
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
   ) => Promise<boolean> | boolean | void;
-  onCreatePluginShareProject: (
-    pluginId: string,
-    action: PluginShareAction,
-    locale?: string,
-  ) => Promise<PluginShareProjectOutcome>;
   onImportClaudeDesign: (
     file: File,
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
@@ -353,7 +256,6 @@ function navElementForView(
   | 'home'
   | 'projects'
   | 'automations'
-  | 'plugins'
   | 'design_systems'
   | 'integrations'
   | null {
@@ -364,8 +266,6 @@ function navElementForView(
       return 'projects';
     case 'tasks':
       return 'automations';
-    case 'plugins':
-      return 'plugins';
     case 'design-systems':
       return 'design_systems';
     case 'integrations':
@@ -417,7 +317,6 @@ export function EntryShell({
   onRefreshAgents,
   onThemeChange,
   onCreateProject,
-  onCreatePluginShareProject,
   onImportClaudeDesign,
   onImportFolder,
   onImportFolderResponse,
@@ -468,7 +367,7 @@ export function EntryShell({
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
-  const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
+
   const entryMainScrollRef = useRef<HTMLElement | null>(null);
   const analytics = useAnalytics();
   const discordOnlineLabel = discordPresence
@@ -491,37 +390,9 @@ export function EntryShell({
     navigate({ kind: 'home', view: next });
   }
 
-  function startPluginAuthoring(goal?: string) {
-    setHomePromptHandoff(
-      createPluginAuthoringHandoff(Date.now(), goal),
-    );
-    changeView('home');
-  }
 
-  function usePluginFromLibrary(
-    record: InstalledPluginRecord,
-    action: PluginUseAction = 'use',
-  ) {
-    setHomePromptHandoff(
-      createPluginUseHandoff(Date.now(), record.id, { action }),
-    );
-    changeView('home');
-  }
 
-  useEffect(() => {
-    if (view !== 'home' || !homePromptHandoff) return;
-    const frame = window.requestAnimationFrame(() => {
-      const scrollContainer = entryMainScrollRef.current;
-      if (!scrollContainer) return;
-      if (typeof scrollContainer.scrollTo === 'function') {
-        scrollContainer.scrollTo({ top: 0, left: 0 });
-        return;
-      }
-      scrollContainer.scrollTop = 0;
-      scrollContainer.scrollLeft = 0;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [homePromptHandoff?.id, view]);
+
 
   useEffect(() => {
     setIntegrationTab(integrationInitialTab);
@@ -543,20 +414,7 @@ export function EntryShell({
   );
 
   function handleCreate(input: CreateInput) {
-    // The NewProjectModal no longer asks the user to pick a plugin.
-    // Each project kind is silently bound to its default scenario
-    // pipeline at creation time so the user lands in a running flow
-    // without having to reason about pipeline internals. The mapping
-    // is intentionally explicit so future kind-specific scenarios
-    // (e.g. a deck- or image-specialized pipeline) can take over a
-    // single row without touching the form.
-    const pluginId = defaultPluginIdForMetadata(input.metadata);
-    const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
-    return onCreateProject({
-      ...input,
-      ...(pluginId ? { pluginId } : {}),
-      ...(pluginInputs ? { pluginInputs } : {}),
-    });
+    return onCreateProject(input);
   }
 
   // Plan §3.F5 — the home prompt-loop submit path. The user picks a
@@ -573,21 +431,15 @@ export function EntryShell({
   // submits now arrive with the hidden od-default router plugin and
   // projectKind='other', so the agent asks for the exact task type
   // before continuing.
-  function handlePluginLoopSubmit(payload: PluginLoopSubmit) {
+  function handlePluginLoopSubmit(payload: any) {
     const head = payload.prompt.trim().split(/\s+/).slice(0, 8).join(' ');
     const firstAttachmentName = payload.attachments?.[0]?.name ?? '';
     const fallbackName = head.length > 0 ? head : firstAttachmentName || 'Untitled';
-    const name =
-      payload.pluginTitle && payload.pluginTitle.trim().length > 0
-        ? payload.pluginTitle.trim()
-        : fallbackName;
+    const name = fallbackName;
     const metadata: ProjectMetadata = {
       ...(payload.projectMetadata ?? {}),
       kind: payload.projectKind ?? payload.projectMetadata?.kind ?? 'prototype',
       nameSource: 'prompt',
-      ...(payload.contextPlugins && payload.contextPlugins.length > 0
-        ? { contextPlugins: payload.contextPlugins }
-        : {}),
       ...(payload.contextMcpServers && payload.contextMcpServers.length > 0
         ? { contextMcpServers: payload.contextMcpServers }
         : {}),
@@ -595,11 +447,6 @@ export function EntryShell({
         ? { contextConnectors: payload.contextConnectors }
         : {}),
       ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
-      ...(payload.examplePromptContext ? {
-        examplePrompt: true,
-        examplePromptTitle: payload.examplePromptContext.title,
-        examplePromptBrief: payload.examplePromptContext.brief,
-      } : {}),
     };
     onCreateProject({
       name,
@@ -607,11 +454,6 @@ export function EntryShell({
       designSystemId: payload.designSystemId ?? null,
       metadata,
       pendingPrompt: payload.prompt,
-      ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
-      ...(payload.appliedPluginSnapshotId
-        ? { appliedPluginSnapshotId: payload.appliedPluginSnapshotId }
-        : {}),
-      ...(payload.pluginInputs ? { pluginInputs: payload.pluginInputs } : {}),
       ...(payload.conversationMode ? { conversationMode: payload.conversationMode } : {}),
       ...(payload.attachments && payload.attachments.length > 0
         ? { pendingFiles: payload.attachments }
@@ -761,13 +603,11 @@ export function EntryShell({
                 onSubmit={handlePluginLoopSubmit}
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
-                onBrowseRegistry={() => changeView('plugins')}
                 onOpenIntegrations={() => openIntegrationTab('connectors')}
                 onOpenMcp={() => openIntegrationTab('mcp')}
                 onOpenNewProject={(tab) => {
                   openNewProject(tab);
                 }}
-                promptHandoff={homePromptHandoff}
                 skills={skills}
                 skillsLoading={skillsLoading}
                 connectors={connectors}
@@ -803,13 +643,7 @@ export function EntryShell({
                 connectorsLoading={connectorsLoading}
               />
             </div>
-            <div data-testid="entry-view-plugins" data-active={view === 'plugins' ? 'true' : 'false'} {...inactiveViewProps(view === 'plugins')}>
-              <PluginsView
-                onCreatePlugin={startPluginAuthoring}
-                onUsePlugin={usePluginFromLibrary}
-                onCreatePluginShareProject={onCreatePluginShareProject}
-              />
-            </div>
+
             <div data-testid="entry-view-design-systems" data-active={view === 'design-systems' ? 'true' : 'false'} {...inactiveViewProps(view === 'design-systems')}>
               {designSystemsLoading ? (
                 <CenteredLoader label={t('common.loading')} />

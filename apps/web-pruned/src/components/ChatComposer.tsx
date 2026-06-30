@@ -12,7 +12,8 @@ import {
 import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import { useI18n, useT } from '../i18n';
-import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+const localizePluginTitle = (locale: string, record: any) => record?.title ?? '';
+const localizePluginDescription = (locale: string, record: any) => record?.description ?? '';
 import type { Dict, Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
@@ -45,8 +46,15 @@ import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../co
 import { Icon, type IconName } from "./Icon";
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
-import { PluginDetailsModal } from "./PluginDetailsModal";
-import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
+type PluginsSectionHandle = any;
+const PluginDetailsModal = (props: any) => null;
+const PluginsSection = forwardRef((props: any, ref: any) => {
+  useImperativeHandle(ref, () => ({
+    clear: () => {},
+    applyById: async () => {},
+  }));
+  return null;
+});
 import {
   inlineMentionToken,
   type InlineMentionEntity,
@@ -597,13 +605,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // the full installed list available even when the project was created
     // from a pinned plugin, so users can switch or layer different plugin
     // context from the tools menu and @ picker.
-    const pluginsForComposer = useMemo<InstalledPluginRecord[]>(() => {
-      const allowedKinds = new Set(['skill', 'scenario', 'bundle']);
-      return installedPlugins.filter((p) => {
-        const k = p.manifest?.od?.kind;
-        return !k || allowedKinds.has(k);
-      });
-    }, [installedPlugins]);
+    const pluginsForComposer = useMemo<any[]>(() => [], []);
 
     const enabledMcpServers = useMemo(
       () => mcpServers.filter((s) => s.enabled),
@@ -1608,7 +1610,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setMention(null);
     }
 
-    async function insertPluginMention(record: InstalledPluginRecord) {
+    async function insertPluginMention(record: any) {
       editorRef.current?.insertMention({
         token: inlineMentionToken(record.title),
         entity: { id: record.id, kind: 'plugin', label: record.title },
@@ -1843,7 +1845,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               ref={pluginsSectionRef}
               projectId={projectId}
               showRail={false}
-              onApplied={(brief, applied) => {
+              onApplied={(brief: any, applied: any) => {
                 setActiveAppliedPlugin(applied.appliedPlugin);
                 // Use functional setState so stale closures from the @-mention
                 // flow (which awaits applyById after setDraft) still see the
@@ -2013,9 +2015,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               connectors={connectors}
               onPickConnector={insertConnectorMention}
               onAddConnector={onOpenConnectors}
-              plugins={pluginsForComposer}
-              onPickPlugin={(record) => void insertPluginMention(record)}
-              onAddPlugin={onBrowsePlugins}
+
               mcpServers={enabledMcpServers}
               onPickMcp={insertMcpMention}
               onAddMcp={onOpenMcpSettings}
@@ -2098,7 +2098,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           <PluginDetailsModal
             record={detailsRecord}
             onClose={() => setDetailsRecord(null)}
-            onUse={async (record) => {
+            onUse={async (record: any) => {
               await pluginsSectionRef.current?.applyById(record.id, record);
               setDetailsRecord(null);
             }}

@@ -13,13 +13,7 @@ import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems, readDesignSystemPackageInfo } from './design-systems.js';
 import { startDevScript, getDevServerUrl, stopDevScript } from './dev-server.js';
-import {
-  FIRST_PARTY_ATOMS,
-  buildConnectorProbe,
-  getInstalledPlugin,
-  listInstalledPlugins,
-  resolvePluginSnapshot,
-} from './plugins/index.js';
+
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
@@ -1393,45 +1387,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       skills: skills.map((s) => ({ id: s.id, title: s.name, description: s.description })),
       designSystems: designSystems.map((d) => ({ id: d.id, title: d.title })),
       craft: [],
-      atoms: FIRST_PARTY_ATOMS.map((a) => ({ id: a.id, label: a.label })),
-      scenarios: collectBundledScenarios(),
+      atoms: [],
+      scenarios: [],
     };
   }
 
-  function collectBundledScenarios() {
-    type ScenarioEntry = {
-      id: string;
-      taskKind: 'new-generation' | 'figma-migration' | 'code-migration' | 'tune-collab';
-      pipeline: NonNullable<NonNullable<PluginManifest['od']>['pipeline']>;
-    };
-    const byTaskKind = new Map<ScenarioEntry['taskKind'], ScenarioEntry>();
-    try {
-      const all = listInstalledPlugins(db);
-      for (const row of all) {
-        if (row.sourceKind !== 'bundled') continue;
-        const od = row.manifest.od;
-        if (!od || od.kind !== 'scenario') continue;
-        if (!od.pipeline || !Array.isArray(od.pipeline.stages) || od.pipeline.stages.length === 0) continue;
-        const taskKind = (od.taskKind ?? 'new-generation') as ScenarioEntry['taskKind'];
-        if (
-          taskKind !== 'new-generation' &&
-          taskKind !== 'figma-migration' &&
-          taskKind !== 'code-migration' &&
-          taskKind !== 'tune-collab'
-        ) {
-          continue;
-        }
-        const entry: ScenarioEntry = { id: row.id, taskKind, pipeline: od.pipeline };
-        const existing = byTaskKind.get(taskKind);
-        if (!existing || entry.id === `od-${taskKind}`) {
-          byTaskKind.set(taskKind, entry);
-        }
-      }
-    } catch {
-      return [];
-    }
-    return Array.from(byTaskKind.values());
-  }
+
 
   async function configuredProjectLocations() {
     const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
@@ -1915,46 +1876,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         createdAt: now,
         updatedAt: now,
       });
-      const explicitPlugin =
-        typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
-          ? true
-          : typeof req.body?.appliedPluginSnapshotId === 'string'
-          && req.body.appliedPluginSnapshotId.trim().length > 0;
-      let resolveBody =
-        explicitPlugin ? (req.body as Record<string, unknown>) : null;
-      if (!resolveBody && initialSessionMode === 'design') {
-        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
-        if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
-          resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
-        }
-      }
-      let resolvedSnapshot = null;
-      if (resolveBody) {
-        const registry = await loadPluginRegistryView();
-        const resolved = resolvePluginSnapshot({
-          db,
-          body: resolveBody,
-          projectId: id,
-          conversationId: cid,
-          registry,
-          activeProjectDesignSystem:
-            typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
-              ? { id: normalizedDesignSystemId }
-              : undefined,
-          connectorProbe: buildConnectorProbe(connectorService),
-        });
-        if (resolved && !resolved.ok) {
-          if (!explicitPlugin) {
-            console.warn(
-              `[plugins] default-scenario fallback skipped for project ${id}: ${resolved.body?.error?.code ?? 'unknown'}`,
-            );
-          } else {
-            return res.status(resolved.status).json(resolved.body);
-          }
-        } else {
-          resolvedSnapshot = resolved;
-        }
-      }
       // For "from template" projects, seed the chosen template's snapshot
       // HTML into the new project folder so the agent can Read/edit files
       // on disk (the system prompt also embeds them, but a real on-disk
@@ -1994,11 +1915,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */
       const body = {
-        project: resolvedSnapshot?.ok ? getProject(db, id) ?? project : project,
+        project,
         conversationId: cid,
-        ...(resolvedSnapshot?.ok
-          ? { appliedPluginSnapshotId: resolvedSnapshot.snapshotId }
-          : {}),
       };
       res.json(body);
     } catch (err: any) {

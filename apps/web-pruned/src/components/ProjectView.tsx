@@ -182,8 +182,8 @@ import { HandoffButton } from './HandoffButton';
 import { Icon } from './Icon';
 import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { CenteredLoader, Spinner } from './Loading';
-import { PluginDetailsModal } from './PluginDetailsModal';
 import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
+const PluginDetailsModal = (props: any) => null;
 import { parseSubmittedAnswers } from './QuestionForm';
 import type { SettingsSection } from './SettingsDialog';
 import {
@@ -197,9 +197,7 @@ import {
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedHtml,
 } from './auto-open-file';
-import {
-  type PluginFolderAgentAction,
-} from './design-files/pluginFolderActions';
+type PluginFolderAgentAction = any;
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { SHARE_TO_COMMUNITY_PROMPT } from './share-to-community/shareToCommunityPrompt';
 
@@ -4820,7 +4818,7 @@ export function ProjectView({
         nonce: Date.now(),
       });
     } else {
-      onOpenSettings('composio');
+      onOpenSettings('integrations');
     }
   }, [githubConnected, onOpenSettings, designSystemProject, projectFiles]);
 

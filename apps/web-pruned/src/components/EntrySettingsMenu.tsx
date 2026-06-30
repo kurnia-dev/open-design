@@ -29,8 +29,6 @@ const X_URL = 'https://x.com/nexudotio';
 export type EntrySettingsSection =
   | 'execution'
   | 'media'
-  | 'composio'
-  | 'orbit'
   | 'integrations'
   | 'mcpClient'
   | 'language'

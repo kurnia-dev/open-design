@@ -40,24 +40,25 @@ import {
 } from './home-hero/chips';
 import {
   filterPluginsBySubChip,
-  isSubChipParent,
   subChipsForChip,
   type HomeHeroSubChip,
 } from './home-hero/sub-chips';
+const isSubChipParent = (id: any) => false;
 import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
-import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
   localizeSkillName,
 } from '../i18n/content';
-import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
-import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
-import { inferPluginPreview } from './plugins-home/preview';
+const localizePluginTitle = (locale: string, record: any) => record?.title ?? '';
+const localizePluginDescription = (locale: string, record: any) => record?.description ?? '';
+const PreviewSurface = (props: any) => <div />;
+const curatedPluginPriorityForChip = (record: any, chipId: string) => null as number | null;
+const inferPluginPreview = (record: any) => null as any;
 import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import {
@@ -489,10 +490,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // When a sub-category pill is active, narrow the example-prompt cards to that
   // scene. Because the pills are derived from this very list, the slice is
   // always non-empty for a real selection.
-  const filteredExamplePlugins = useMemo(() => {
-    if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
-    return filterPluginsBySubChip(activeExamplePlugins, activeChipId, selectedSubcategory);
-  }, [activeExamplePlugins, activeChipId, selectedSubcategory]);
+  const filteredExamplePlugins = useMemo(() => [] as any[], []);
   const activePromptExamples = useMemo(
     () => activeChipId && activeExamplePlugins.length === 0
       ? homeHeroChipPromptExamples(activeChipId, locale)
@@ -1160,9 +1158,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               connectors={connectorOptions}
               onPickConnector={pickConnector}
               onAddConnector={onAddConnector}
-              plugins={pluginOptions}
-              onPickPlugin={pickPlugin}
-              onAddPlugin={onAddPlugin}
               mcpServers={mcpOptions}
               onPickMcp={pickMcp}
               onAddMcp={onAddMcp}
@@ -2499,21 +2494,7 @@ function homeHeroExamplePluginsForChip(
   plugins: InstalledPluginRecord[],
   locale: Locale,
 ): InstalledPluginRecord[] {
-  const presets = plugins
-    .filter((plugin) => (
-      pluginMatchesExampleChip(plugin, chipId) ||
-      curatedPluginPriorityForChip(plugin, chipId) !== null
-    ))
-    .filter((plugin) => (
-      Boolean(pluginPresetQuery(plugin, locale)) ||
-      curatedPluginPriorityForChip(plugin, chipId) !== null
-    ))
-    .sort((a, b) => comparePluginPresetOrder(a, b, chipId))
-    .slice(0, 18);
-  if (chipId === 'image') {
-    return movePluginPresetToEnd(presets, 'example-hatch-pet');
-  }
-  return presets;
+  return [];
 }
 
 function comparePluginPresetOrder(

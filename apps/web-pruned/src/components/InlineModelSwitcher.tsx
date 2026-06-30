@@ -71,7 +71,6 @@ interface Props {
     section?:
       | 'execution'
       | 'media'
-      | 'composio'
       | 'language'
       | 'appearance'
       | 'notifications'

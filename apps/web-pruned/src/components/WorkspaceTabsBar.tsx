@@ -148,7 +148,6 @@ function reviveTab(value: unknown): WorkspaceChromeTab | null {
       view === 'home'
       || view === 'projects'
       || view === 'tasks'
-      || view === 'plugins'
       || view === 'design-systems'
       || view === 'integrations'
     ) {
@@ -1121,7 +1120,6 @@ function displayTabFor(
     onboarding: t('settings.welcomeTitle'),
     projects: t('entry.navProjects'),
     tasks: t('entry.navTasks'),
-    plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
     integrations: t('entry.navIntegrations'),
   };
@@ -1130,7 +1128,6 @@ function displayTabFor(
     onboarding: 'sparkles',
     projects: 'folder',
     tasks: 'kanban',
-    plugins: 'grid',
     'design-systems': 'blocks',
     integrations: 'link',
   };

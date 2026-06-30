@@ -9,7 +9,7 @@ import {
   trackPageView,
   trackSettingsConnectorAuthResult,
 } from '../analytics/events';
-import { ConnectorSection } from './SettingsDialog';
+const ConnectorSection = (props: any) => null;
 import { Icon } from './Icon';
 import { McpClientSection } from './McpClientSection';
 import { UseEverywhereGuidePanel } from './UseEverywhereModal';
@@ -128,14 +128,14 @@ export function IntegrationsView({
             setCfg={setLocalConfig}
             composioConfigLoading={composioConfigLoading}
             onPersistComposioKey={onPersistComposioKey}
-            onConnectorsTabClick={(element) =>
+            onConnectorsTabClick={(element: any) =>
               trackIntegrationsConnectorsTabClick(analytics.track, {
                 page_name: 'integrations',
                 area: 'connectors_tab',
                 element,
               })
             }
-            onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
+            onConnectorAuthResult={({ connectorId, action, result, errorCode }: any) =>
               trackSettingsConnectorAuthResult(analytics.track, {
                 page_name: 'settings',
                 area: 'connectors',

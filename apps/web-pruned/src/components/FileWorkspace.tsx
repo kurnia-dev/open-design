@@ -79,7 +79,7 @@ import { QuestionsPanel } from './QuestionsPanel';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { Toast } from './Toast';
-import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
+
 import { designSystemGithubEvidenceState, repoConnectCopy } from './design-system-github-evidence';
 import {
   buildSketchDocument,
@@ -136,7 +136,7 @@ interface Props {
   onRequestBrowserUsePrompt?: (prompt: string) => void;
   onPluginFolderAgentAction?: (
     relativePath: string,
-    action: PluginFolderAgentAction,
+    action: any,
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;

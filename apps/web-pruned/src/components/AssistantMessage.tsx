@@ -35,11 +35,7 @@ import {
 } from "../artifacts/question-form";
 import { parseSubmittedAnswers } from "./QuestionForm";
 import { splitStreamingArtifact, stripArtifact } from "../artifacts/strip";
-import {
-  getPluginFolderCandidates,
-  type PluginFolderCandidate,
-} from "./design-files/pluginFolders";
-import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
+
 import { Icon } from "./Icon";
 import { NextStepActions } from "./NextStepActions";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
@@ -137,7 +133,7 @@ function SkillPluginCandidateCard({
   const disabled = !projectId || busy !== null;
   const description =
     block.description === "Reusable skill material detected from a repository link." ||
-    block.description === "This repo looks like it could work as a plugin."
+      block.description === "This repo looks like it could work as a plugin."
       ? t("skillPluginCandidate.repoDescription")
       : block.description || t("skillPluginCandidate.repoDescription");
 
@@ -308,7 +304,7 @@ interface Props {
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
-    action: PluginFolderAgentAction,
+    action: any,
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
@@ -481,14 +477,14 @@ function AssistantMessageImpl({
   const blocks = useMemo(() => {
     const rawBlocks = liveAuq
       ? (() => {
-          const n = Math.min(Math.max(liveAuq.seq, 0), events.length);
-          return [
-            ...buildBlocks(events.slice(0, n)),
-            { kind: "live-tool", id: liveAuq.id, name: "AskUserQuestion", raw: liveAuq.raw } as Block,
-            ...buildBlocks(events.slice(n)),
-            ...liveCodeBlocks,
-          ];
-        })()
+        const n = Math.min(Math.max(liveAuq.seq, 0), events.length);
+        return [
+          ...buildBlocks(events.slice(0, n)),
+          { kind: "live-tool", id: liveAuq.id, name: "AskUserQuestion", raw: liveAuq.raw } as Block,
+          ...buildBlocks(events.slice(n)),
+          ...liveCodeBlocks,
+        ];
+      })()
       : [...buildBlocks(events), ...liveCodeBlocks];
     return stripTodoToolGroups(
       stripEmptyThinkingBlocks(
@@ -503,12 +499,12 @@ function AssistantMessageImpl({
       produced.length > 0
         ? produced
         : inferProducedFilesFromTurn({
-            message,
-            projectFiles,
-            blocks,
-            fileOps,
-            streaming,
-          }),
+          message,
+          projectFiles,
+          blocks,
+          fileOps,
+          streaming,
+        }),
     [blocks, fileOps, message, produced, projectFiles, streaming],
   );
   // The single artifact the "next step" affordance anchors to: prefer the
@@ -519,12 +515,8 @@ function AssistantMessageImpl({
     [displayedProduced],
   );
   const pluginActionFolders = useMemo(
-    () =>
-      !streaming && isLast && projectId
-        ? pluginFoldersTouchedThisTurn(projectFiles, fileOps, displayedProduced, message.content)
-            .filter((folder) => !hiddenPluginActionPaths.has(folder.path))
-        : [],
-    [displayedProduced, fileOps, hiddenPluginActionPaths, isLast, message.content, projectFiles, projectId, streaming],
+    () => [] as any[],
+    [],
   );
   // Plugin action state lives at the AssistantMessage level (not inside
   // PluginActionPanel) so the success notice survives the unmount/remount
@@ -535,7 +527,7 @@ function AssistantMessageImpl({
   const [pluginBusyKey, setPluginBusyKey] = useState<string | null>(null);
   const [pluginNoticeByFolder, setPluginNoticeByFolder] = useState<Record<string, ActionNotice>>({});
   const runPluginAction = useCallback(
-    async (folder: PluginFolderCandidate, action: PluginFolderAgentAction) => {
+    async (folder: any, action: any) => {
       if (pluginBusyKey || !onRequestPluginFolderAgentAction) return;
       const key = `${action}:${folder.path}`;
       setPluginBusyKey(key);
@@ -762,28 +754,18 @@ function AssistantMessageImpl({
           />
         ) : null}
         {!streaming &&
-        isLast &&
-        projectId &&
-        nextStepArtifactName &&
-        onArtifactShare &&
-        onArtifactChip ? (
+          isLast &&
+          projectId &&
+          nextStepArtifactName &&
+          onArtifactShare &&
+          onArtifactChip ? (
           <NextStepActions
             fileName={nextStepArtifactName}
             onShare={onArtifactShare}
             onChip={onArtifactChip}
           />
         ) : null}
-        {!streaming && projectId && pluginActionFolders.length > 0 ? (
-          <PluginActionPanel
-            folders={pluginActionFolders}
-            notices={pluginNoticeByFolder}
-            busyKey={pluginBusyKey}
-            onRunAction={runPluginAction}
-            onRequestOpenFile={onRequestOpenFile}
-            onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
-            activePluginActionPaths={activePluginActionPaths}
-          />
-        ) : null}
+
         {/*
           Notices for folders that completed an action while the panel was
           unmounted (the parent toggled `hiddenPluginActionPaths` during the
@@ -794,17 +776,17 @@ function AssistantMessageImpl({
          */}
         {!streaming && projectId
           ? Object.entries(pluginNoticeByFolder)
-              .filter(([path]) => !pluginActionFolders.some((folder) => folder.path === path))
-              .map(([path, notice]) => (
-                <div
-                  key={`plugin-orphan-notice-${path}`}
-                  className="plugin-action-orphan-notice"
-                  role="status"
-                  data-testid={`plugin-folder-notice-${path}`}
-                >
-                  <ActionNoticeView notice={notice} />
-                </div>
-              ))
+            .filter(([path]) => !pluginActionFolders.some((folder) => folder.path === path))
+            .map(([path, notice]) => (
+              <div
+                key={`plugin-orphan-notice-${path}`}
+                className="plugin-action-orphan-notice"
+                role="status"
+                data-testid={`plugin-folder-notice-${path}`}
+              >
+                <ActionNoticeView notice={notice} />
+              </div>
+            ))
           : null}
         {!streaming && unfinishedTodos.length > 0 ? (
           <UnfinishedTodosPanel
@@ -1069,8 +1051,8 @@ function AssistantFooter({
   const elapsed = useLiveElapsed(streaming, startedAt, endedAt, usage?.durationMs);
   const formattedCost =
     typeof usage?.costUsd === "number" &&
-    Number.isFinite(usage.costUsd) &&
-    usage.costUsd > 0
+      Number.isFinite(usage.costUsd) &&
+      usage.costUsd > 0
       ? usage.costUsd.toFixed(4)
       : "";
   const costLabel = formattedCost && formattedCost !== "0.0000" ? ` · $${formattedCost}` : "";
@@ -1099,10 +1081,10 @@ function AssistantFooter({
             ? t("assistant.statusPreparing")
             : t("assistant.workingLabel")
           : hasEmptyResponse
-          ? t("assistant.emptyResponseLabel")
-          : hasUnfinishedTodos
-          ? t("assistant.unfinishedLabel")
-          : t("assistant.doneLabel")}
+            ? t("assistant.emptyResponseLabel")
+            : hasUnfinishedTodos
+              ? t("assistant.unfinishedLabel")
+              : t("assistant.doneLabel")}
       </span>
       <span className="assistant-stats">
         {elapsed}
@@ -1604,21 +1586,21 @@ function feedbackReasonOptions(
   const codes: ChatMessageFeedbackReasonCode[] =
     rating === "positive"
       ? [
-          "matched_request",
-          "strong_visual",
-          "useful_structure",
-          "easy_to_continue",
-          ...(hasDesignSystemContext ? (["followed_design_system"] as const) : []),
-          "other",
-        ]
+        "matched_request",
+        "strong_visual",
+        "useful_structure",
+        "easy_to_continue",
+        ...(hasDesignSystemContext ? (["followed_design_system"] as const) : []),
+        "other",
+      ]
       : [
-          "missed_request",
-          "weak_visual",
-          "incomplete_output",
-          "hard_to_use",
-          ...(hasDesignSystemContext ? (["missed_design_system"] as const) : []),
-          "other",
-        ];
+        "missed_request",
+        "weak_visual",
+        "incomplete_output",
+        "hard_to_use",
+        ...(hasDesignSystemContext ? (["missed_design_system"] as const) : []),
+        "other",
+      ];
   return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
 }
 
@@ -1750,134 +1732,7 @@ function ProducedFiles({
 // Pure renderer. State (busyKey, notices) and the action runner live in the
 // AssistantMessage parent so they survive the panel's unmount/remount cycle
 // during install (issue #2876).
-function PluginActionPanel({
-  folders,
-  notices,
-  busyKey,
-  onRunAction,
-  onRequestOpenFile,
-  onRequestPluginFolderAgentAction,
-  activePluginActionPaths = new Set(),
-}: {
-  folders: PluginFolderCandidate[];
-  notices: Record<string, ActionNotice>;
-  busyKey: string | null;
-  onRunAction: (
-    folder: PluginFolderCandidate,
-    action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
-  onRequestOpenFile?: (name: string) => void;
-  onRequestPluginFolderAgentAction?: (
-    relativePath: string,
-    action: PluginFolderAgentAction,
-  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
-  activePluginActionPaths?: Set<string>;
-}) {
-  const noticeByFolder = notices;
-  const runAction = onRunAction;
 
-  return (
-    <div className="plugin-action-panel" aria-label="Plugin next actions">
-      <div className="plugin-action-panel__head">
-        <span className="plugin-action-panel__icon" aria-hidden>
-          <Icon name="sparkles" size={15} />
-        </span>
-        <div>
-          <div className="plugin-action-panel__title">Plugin ready</div>
-          <div className="plugin-action-panel__subtitle">
-            Send the next step to the agent so it can run the od CLI.
-          </div>
-        </div>
-      </div>
-      <div className="plugin-action-panel__list">
-        {folders.map((folder) => {
-          const actionBusy = activePluginActionPaths.has(folder.path);
-          return (
-          <div
-            key={folder.path}
-            className="plugin-action-card"
-            data-testid={`assistant-plugin-actions-${folder.path}`}
-          >
-            <div className="plugin-action-card__main">
-              <span className="plugin-action-card__folder-icon" aria-hidden>
-                <Icon name="folder" size={14} />
-              </span>
-              <div className="plugin-action-card__copy">
-                <code className="plugin-action-card__path">{folder.path}</code>
-                <span>{folder.fileCount} files ready for My plugins</span>
-              </div>
-            </div>
-              <div className="plugin-action-card__actions">
-                <button
-                  type="button"
-                  className="plugin-action-button plugin-action-button--primary"
-                  data-testid={`assistant-plugin-install-${folder.path}`}
-                  disabled={actionBusy || busyKey !== null || !onRequestPluginFolderAgentAction}
-                  onClick={() => void runAction(folder, "install")}
-                >
-                  <Icon
-                    name={actionBusy && busyKey === `install:${folder.path}` ? "spinner" : "plus"}
-                    size={13}
-                  />
-                  <span>
-                    {actionBusy && busyKey === `install:${folder.path}` ? "Sending..." : "Add to My plugins"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="plugin-action-button"
-                  data-testid={`assistant-plugin-publish-${folder.path}`}
-                  disabled={actionBusy || busyKey !== null || !onRequestPluginFolderAgentAction}
-                  onClick={() => void runAction(folder, "publish")}
-                >
-                  <Icon
-                    name={actionBusy && busyKey === `publish:${folder.path}` ? "spinner" : "github"}
-                    size={13}
-                  />
-                  <span>
-                    {actionBusy && busyKey === `publish:${folder.path}` ? "Sending..." : "Publish repo"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="plugin-action-button"
-                  data-testid={`assistant-plugin-contribute-${folder.path}`}
-                  disabled={actionBusy || busyKey !== null || !onRequestPluginFolderAgentAction}
-                  onClick={() => void runAction(folder, "contribute")}
-                >
-                  <Icon
-                    name={actionBusy && busyKey === `contribute:${folder.path}` ? "spinner" : "share"}
-                    size={13}
-                  />
-                  <span>
-                    {actionBusy && busyKey === `contribute:${folder.path}`
-                      ? "Sending..."
-                      : "Open Design PR"}
-                  </span>
-                </button>
-                {onRequestOpenFile ? (
-                  <button
-                    type="button"
-                    className="plugin-action-button"
-                    data-testid={`assistant-plugin-open-manifest-${folder.path}`}
-                    onClick={() => onRequestOpenFile(folder.manifestPath)}
-                  >
-                    <Icon name="file-code" size={13} />
-                    <span>Open manifest</span>
-                  </button>
-                ) : null}
-              </div>
-            {noticeByFolder[folder.path] ? (
-              <div className="plugin-action-card__notice" role="status">
-                <ActionNoticeView notice={noticeByFolder[folder.path] ?? null} />
-              </div>
-            ) : null}
-          </div>
-        )})}
-      </div>
-    </div>
-  );
-}
 
 function kindIconName(
   kind: ProjectFile["kind"]
@@ -1894,65 +1749,6 @@ function humanBytes(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
-
-function pluginFoldersTouchedThisTurn(
-  projectFiles: ProjectFile[],
-  fileOps: FileOpEntry[],
-  produced: ProjectFile[],
-  messageContent: string,
-): PluginFolderCandidate[] {
-  const candidates = getPluginFolderCandidates(projectFiles);
-  if (candidates.length === 0) return [];
-  const directTouchedPaths = [
-    ...fileOps.flatMap((entry) => [entry.path, entry.fullPath]),
-    ...produced.flatMap((file) => [file.name, file.path]),
-  ].filter((path): path is string => typeof path === "string" && path.length > 0);
-  const touchedPaths = [...directTouchedPaths, messageContent].filter(
-    (path): path is string => typeof path === "string" && path.length > 0,
-  );
-  const explicitFolders = candidates.filter((folder) =>
-    touchedPaths.some((path) => pathTouchesFolder(path, folder.path)),
-  );
-  if (explicitFolders.length > 0) return explicitFolders;
-  if (candidates.length !== 1) return [];
-  const candidate = candidates[0];
-  if (!candidate) return [];
-  if (
-    directTouchedPaths.some((path) =>
-      pathMatchesFolderFileBasename(path, candidate, projectFiles),
-    )
-  ) {
-    return [candidate];
-  }
-  return hasPluginFinalActionHint(messageContent) ? [candidate] : [];
-}
-
-function pathTouchesFolder(path: string, folderPath: string): boolean {
-  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
-  if (normalized === folderPath || normalized.startsWith(`${folderPath}/`)) {
-    return true;
-  }
-  return normalized.includes(`/${folderPath}/`) || normalized.includes(`${folderPath}/`);
-}
-
-function pathMatchesFolderFileBasename(
-  path: string,
-  folder: PluginFolderCandidate,
-  projectFiles: ProjectFile[],
-): boolean {
-  const basename = path.replace(/\\/g, "/").split("/").filter(Boolean).pop();
-  if (!basename) return false;
-  return projectFiles.some((file) =>
-    file.name.startsWith(`${folder.path}/`) && file.name.endsWith(`/${basename}`),
-  );
-}
-
-function hasPluginFinalActionHint(content: string): boolean {
-  return /\b(Add to My plugins|Open Design PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
-    content,
-  );
-}
-
 
 function ProseBlock({
   text,
@@ -2548,8 +2344,8 @@ function ToolGroupCard({
           {running
             ? <Icon name="spinner" size={14} />
             : hasError
-            ? <Icon name="close" size={14} />
-            : <Icon name="check" size={14} />
+              ? <Icon name="close" size={14} />
+              : <Icon name="check" size={14} />
           }
         </span>
         <span className={`summary${running ? ' shimmer-text' : ''}`}>
@@ -2637,18 +2433,18 @@ function countLabel(
     family === "edit"
       ? t("assistant.verbEditing")
       : family === "write"
-      ? t("assistant.verbWriting")
-      : family === "read"
-      ? t("assistant.verbReading")
-      : family === "glob" || family === "grep" || family === "search"
-      ? t("assistant.verbSearching")
-      : family === "bash"
-      ? t("assistant.verbRunning")
-      : family === "todo"
-      ? t("assistant.verbTodos")
-      : family === "fetch"
-      ? t("assistant.verbFetching")
-      : t("assistant.verbCalling");
+        ? t("assistant.verbWriting")
+        : family === "read"
+          ? t("assistant.verbReading")
+          : family === "glob" || family === "grep" || family === "search"
+            ? t("assistant.verbSearching")
+            : family === "bash"
+              ? t("assistant.verbRunning")
+              : family === "todo"
+                ? t("assistant.verbTodos")
+                : family === "fetch"
+                  ? t("assistant.verbFetching")
+                  : t("assistant.verbCalling");
   return n > 1 ? `${verb} ×${n}` : verb;
 }
 
@@ -2679,13 +2475,13 @@ type Block =
   | { kind: "tool-group"; items: ToolItem[] }
   | { kind: "live-tool"; id: string; name: string; raw: string }
   | {
-      kind: "plugin-candidate";
-      candidateId: string;
-      title: string;
-      description?: string | undefined;
-      confidence?: number | undefined;
-      draftPath?: string | null | undefined;
-    }
+    kind: "plugin-candidate";
+    candidateId: string;
+    title: string;
+    description?: string | undefined;
+    confidence?: number | undefined;
+    draftPath?: string | null | undefined;
+  }
   | { kind: "status"; label: string; detail?: string | undefined };
 
 /**

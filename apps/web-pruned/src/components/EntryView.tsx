@@ -33,10 +33,7 @@ import {
   listenForConnectorsChanged,
 } from './connectors-events';
 import { fetchConnectorCatalogSnapshot } from './connectors-state';
-import type {
-  PluginShareAction,
-  PluginShareProjectOutcome,
-} from '../state/projects';
+
 
 interface Props {
   // Union of functional skills + design templates — used for id-based
@@ -96,11 +93,7 @@ interface Props {
       pendingFiles?: File[];
     },
   ) => Promise<boolean> | boolean | void;
-  onCreatePluginShareProject: (
-    pluginId: string,
-    action: PluginShareAction,
-    locale?: string,
-  ) => Promise<PluginShareProjectOutcome>;
+
   onImportClaudeDesign: (
     file: File,
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
@@ -115,7 +108,7 @@ interface Props {
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
   onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
-  onOpenSettings: (section?: 'execution' | 'media' | 'composio' | 'orbit' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
+  onOpenSettings: (section?: 'execution' | 'media' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
   onCompleteOnboarding: () => void;
 }
 
@@ -241,7 +234,7 @@ export function EntryView({
   projectsLoading = false,
   promptTemplatesLoading: _promptTemplatesLoading = false,
   onCreateProject,
-  onCreatePluginShareProject,
+
   onImportClaudeDesign,
   onImportFolder,
   onImportFolderResponse,
@@ -353,7 +346,7 @@ export function EntryView({
       onRefreshAgents={onRefreshAgents}
       onThemeChange={onThemeChange}
       onCreateProject={onCreateProject}
-      onCreatePluginShareProject={onCreatePluginShareProject}
+
       onImportClaudeDesign={onImportClaudeDesign}
       {...(onImportFolder ? { onImportFolder } : {})}
       {...(onImportFolderResponse ? { onImportFolderResponse } : {})}

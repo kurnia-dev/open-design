@@ -1,7 +1,6 @@
 // Pure argument parser for `od design-systems rename <id> --title <new>`.
 // Kept out of cli.ts (a top-level dispatch script that runs on import) so it
-// can be unit-tested directly, mirroring research/cli-args.ts.
-//
+// can be unit-tested directly.
 // Accepts the new name either as a `--title <value>` / `--title=<value>` flag
 // or as the trailing positional(s) after the id (so `rename <id> "New name"`
 // works). String flags that take a separate value (`--daemon-url <url>`, etc.)

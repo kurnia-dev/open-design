@@ -1,5 +1,15 @@
 'use client';
 
+import type {
+  AppliedPluginSnapshot,
+  ChatSessionMode,
+  ConnectorDetail,
+  ContextItem,
+  InstalledPluginRecord,
+  PluginSourceKind,
+  RunContextSelection,
+  WorkspaceContextItem,
+} from '@open-design/contracts';
 import {
   forwardRef,
   useEffect,
@@ -10,58 +20,45 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from 'react-dom';
-import { Button } from '@open-design/components';
-import { useI18n, useT } from '../i18n';
-import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
-import type { Dict, Locale } from '../i18n/types';
-import {
-  localizeSkillDescription,
-  localizeSkillName,
-} from '../i18n/content';
-import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
   trackFileUploadResult,
 } from '../analytics/events';
+import { useAnalytics } from '../analytics/provider';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
-import { patchProject } from "../state/projects";
-import { fetchMcpServers } from "../state/mcp";
-import type { McpServerConfig, McpTemplate } from "../state/mcp";
-import { listPlugins } from "../state/projects";
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, Project, ProjectFile, ProjectMetadata, SkillSummary } from "../types";
-import type {
-  ContextItem,
-  AppliedPluginSnapshot,
-  ChatSessionMode,
-  ConnectorDetail,
-  InstalledPluginRecord,
-  PluginSourceKind,
-  ResearchOptions,
-  RunContextSelection,
-  WorkspaceContextItem,
-} from '@open-design/contracts';
 import { buildVisualAnnotationAttachment, commentTargetDisplayName } from '../comments';
-import { Icon, type IconName } from "./Icon";
-import { SessionModeToggle } from './SessionModeToggle';
-import { ComposerPlusMenu } from './ComposerPlusMenu';
-import { PluginDetailsModal } from "./PluginDetailsModal";
-import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
-import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
+import { useI18n, useT } from '../i18n';
+import {
+  localizeSkillDescription,
+  localizeSkillName,
+} from '../i18n/content';
+import type { Dict, Locale } from '../i18n/types';
+import { openFolderDialog, projectRawUrl, uploadProjectFiles } from "../providers/registry";
+import type { McpServerConfig, McpTemplate } from "../state/mcp";
+import { fetchMcpServers } from "../state/mcp";
+import { listPlugins, patchProject } from "../state/projects";
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, Project, ProjectFile, ProjectMetadata, SkillSummary } from "../types";
 import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { ComposerPlusMenu } from './ComposerPlusMenu';
+import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
+import { Icon, type IconName } from "./Icon";
+import { PluginDetailsModal } from "./PluginDetailsModal";
+import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
+import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
+import { SessionModeToggle } from './SessionModeToggle';
+import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
 import {
   LexicalComposerInput,
-  type LexicalComposerInputHandle,
   type CaretRect,
+  type LexicalComposerInputHandle,
 } from './composer/LexicalComposerInput';
-import { CaretFloatingLayer } from './composer/CaretFloatingLayer';
-import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverlay";
-import { DesignSystemSwitchPicker } from "./DesignSystemSwitchPicker";
 import { listenForConnectorsChanged } from './connectors-events';
 import { fetchConnectorCatalogSnapshot } from './connectors-state';
+import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
+import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
@@ -247,7 +244,7 @@ interface Props {
   onAdoptPet?: (petId: string) => void;
   onTogglePet?: () => void;
   onOpenPetSettings?: () => void;
-  researchAvailable?: boolean;
+
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
@@ -323,7 +320,6 @@ export interface ChatComposerHandle {
 
 export interface ChatSendMeta {
   queueOnly?: boolean;
-  research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshot?: AppliedPluginSnapshot;
   appliedPluginSnapshotId?: string;
@@ -368,7 +364,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onAdoptPet,
       onTogglePet,
       onOpenPetSettings,
-      researchAvailable = false,
+
       projectMetadata,
       onProjectMetadataChange,
       activeWorkspaceContext = null,
@@ -682,18 +678,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           argHint: s.label || s.transport,
         });
       }
-      if (researchAvailable) {
-        list.push({
-          id: 'search',
-          label: '/search',
-          insert: '/search ',
-          descKey: 'pet.slashSearch',
-          icon: 'sparkles',
-          argHint: t('pet.slashSearchArg'),
-        });
-      }
       return list;
-    }, [researchAvailable, t, enabledMcpServers, onOpenMcpSettings]);
+    }, [t, enabledMcpServers, onOpenMcpSettings]);
 
     const filteredSlash = useMemo(() => {
       if (!slash) return [] as SlashCommand[];
@@ -751,34 +737,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       return true;
     }
 
-    function expandSearchCommand(input: string): { prompt: string; query: string } | null {
-      const m = /^\/search(?:\s+([\s\S]*))?$/i.exec(input.trim());
-      if (!m) return null;
-      const query = m[1]?.trim() ?? '';
-      if (!query) return null;
-      return {
-        query,
-        prompt: [
-          `Search for: ${query}`,
-          '',
-          'Before answering, your first tool action must be the OD research command for your shell.',
-          'POSIX: "$OD_NODE_BIN" "$OD_BIN" research search --query "<search query>" --max-sources 5',
-          'PowerShell: & $env:OD_NODE_BIN $env:OD_BIN research search --query "<search query>" --max-sources 5',
-          'cmd.exe: "%OD_NODE_BIN%" "%OD_BIN%" research search --query "<search query>" --max-sources 5',
-          'Use the canonical query below as the exact search query, with safe quoting for your shell.',
-          '',
-          'Canonical query:',
-          '',
-          '```text',
-          query.replace(/```/g, '`\u200b`\u200b`'),
-          '```',
-          'If the OD command fails because Tavily is not configured or unavailable, report that error, then use your own search capability as fallback and label the fallback clearly.',
-          'After the command returns JSON or fallback search results, write a reusable Markdown report into Design Files at `research/<safe-query-slug>.md` or another fresh project-relative path.',
-          'The report must include the query, fetched time, short summary, key findings, source list with [1], [2] citations, and a note that source content is external untrusted evidence.',
-          'Then summarize the findings with citations by source index and mention the Markdown report path.',
-        ].join('\n'),
-      };
-    }
 
     // Parse a `/pet [arg]` slash command out of the draft. Recognized
     // forms: `/pet` (toggle wake/tuck), `/pet wake`, `/pet tuck`,
@@ -843,22 +801,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           setStagedSkills(
             ctx?.skillIds
               ? ctx.skillIds
-                  .map((id) => skills.find((s) => s.id === id))
-                  .filter((s): s is SkillSummary => Boolean(s))
+                .map((id) => skills.find((s) => s.id === id))
+                .filter((s): s is SkillSummary => Boolean(s))
               : [],
           );
           setStagedMcpServers(
             ctx?.mcpServerIds
               ? ctx.mcpServerIds
-                  .map((id) => mcpServers.find((s) => s.id === id))
-                  .filter((s): s is McpServerConfig => Boolean(s))
+                .map((id) => mcpServers.find((s) => s.id === id))
+                .filter((s): s is McpServerConfig => Boolean(s))
               : [],
           );
           setStagedConnectors(
             ctx?.connectorIds
               ? ctx.connectorIds
-                  .map((id) => connectors.find((c) => c.id === id))
-                  .filter((c): c is ConnectorDetail => Boolean(c))
+                .map((id) => connectors.find((c) => c.id === id))
+                .filter((c): c is ConnectorDetail => Boolean(c))
               : [],
           );
           setStagedWorkspaceContexts(ctx?.workspaceItems ?? []);
@@ -921,9 +879,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         ...(skillIds.length > 0 ? { skillIds } : {}),
         ...(activeAppliedPlugin
           ? {
-              appliedPluginSnapshot: activeAppliedPlugin,
-              appliedPluginSnapshotId: activeAppliedPlugin.snapshotId,
-            }
+            appliedPluginSnapshot: activeAppliedPlugin,
+            appliedPluginSnapshotId: activeAppliedPlugin.snapshotId,
+          }
           : {}),
         ...(Object.keys(context).length > 0 ? { context } : {}),
       };
@@ -941,13 +899,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       const nextAttachments =
         activeFileContext && !attachments.some((attachment) => attachment.path === activeFileContext)
           ? [
-              {
-                path: activeFileContext,
-                name: activeFileDisplayName ?? activeFileContext,
-                kind: 'file' as const,
-              },
-              ...attachments,
-            ]
+            {
+              path: activeFileContext,
+              name: activeFileDisplayName ?? activeFileContext,
+              kind: 'file' as const,
+            },
+            ...attachments,
+          ]
           : attachments;
       onSend(prompt, nextAttachments, nextCommentAttachments, meta);
       reset();
@@ -1298,18 +1256,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     bounds: detail.bounds,
                     target: detail.target
                       ? {
-                          filePath: detail.target.filePath || detail.filePath || screenshot.path,
-                          elementId: detail.target.elementId,
-                          selector: detail.target.selector,
-                          label: detail.target.label,
-                          text: detail.target.text,
-                          position: detail.target.position,
-                          htmlHint: detail.target.htmlHint,
-                        }
+                        filePath: detail.target.filePath || detail.filePath || screenshot.path,
+                        elementId: detail.target.elementId,
+                        selector: detail.target.selector,
+                        label: detail.target.label,
+                        text: detail.target.text,
+                        position: detail.target.position,
+                        htmlHint: detail.target.htmlHint,
+                      }
                       : {
-                          filePath: detail.filePath || screenshot.path,
-                          position: detail.bounds,
-                        },
+                        filePath: detail.filePath || screenshot.path,
+                        position: detail.bounds,
+                      },
                   };
                 }
               }
@@ -1772,17 +1730,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         reset();
         return;
       }
-      const search = researchAvailable ? expandSearchCommand(prompt) : null;
-      if (search) {
-        if (streaming) return;
-        setStreamingAnnotationSendPending(false);
-        onSend(search.prompt, staged, nextCommentAttachments, {
-          ...contextMeta,
-          research: { enabled: true, query: search.query },
-        });
-        reset();
-        return;
-      }
+
       if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) return;
       sendComposedTurn(prompt, staged, nextCommentAttachments, contextMeta);
     }
@@ -1805,11 +1753,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () =>
         mention
           ? workspaceContexts
-              .filter((item) => {
-                if (!mentionQuery) return true;
-                return workspaceContextSearchText(item).toLowerCase().includes(mentionQuery);
-              })
-              .slice(0, 12)
+            .filter((item) => {
+              if (!mentionQuery) return true;
+              return workspaceContextSearchText(item).toLowerCase().includes(mentionQuery);
+            })
+            .slice(0, 12)
           : [],
       [mention, mentionQuery, workspaceContexts],
     );
@@ -1817,12 +1765,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () =>
         mention
           ? projectFiles
-              .filter((f) => f.type === undefined || f.type === "file")
-              .filter((f) => {
-                const key = f.path ?? f.name;
-                return key.toLowerCase().includes(mentionQuery);
-              })
-              .slice(0, 12)
+            .filter((f) => f.type === undefined || f.type === "file")
+            .filter((f) => {
+              const key = f.path ?? f.name;
+              return key.toLowerCase().includes(mentionQuery);
+            })
+            .slice(0, 12)
           : [],
       [mention, mentionQuery, projectFiles],
     );
@@ -1830,16 +1778,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () =>
         mention
           ? pluginsForComposer
-              .filter((p) => {
-                if (!mentionQuery) return true;
-                return (
-                  p.title.toLowerCase().includes(mentionQuery) ||
-                  p.id.toLowerCase().includes(mentionQuery) ||
-                  (p.manifest?.description ?? '').toLowerCase().includes(mentionQuery) ||
-                  (p.manifest?.tags ?? []).join(' ').toLowerCase().includes(mentionQuery)
-                );
-              })
-              .slice(0, 8)
+            .filter((p) => {
+              if (!mentionQuery) return true;
+              return (
+                p.title.toLowerCase().includes(mentionQuery) ||
+                p.id.toLowerCase().includes(mentionQuery) ||
+                (p.manifest?.description ?? '').toLowerCase().includes(mentionQuery) ||
+                (p.manifest?.tags ?? []).join(' ').toLowerCase().includes(mentionQuery)
+              );
+            })
+            .slice(0, 8)
           : [],
       [mention, mentionQuery, pluginsForComposer],
     );
@@ -1847,20 +1795,20 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () =>
         mention
           ? enabledMcpServers
-              .filter((s) => {
-                if (!mentionQuery) return true;
-                return [
-                  s.id,
-                  s.label ?? '',
-                  s.transport,
-                  s.url ?? '',
-                  s.command ?? '',
-                ]
-                  .join(' ')
-                  .toLowerCase()
-                  .includes(mentionQuery);
-              })
-              .slice(0, 8)
+            .filter((s) => {
+              if (!mentionQuery) return true;
+              return [
+                s.id,
+                s.label ?? '',
+                s.transport,
+                s.url ?? '',
+                s.command ?? '',
+              ]
+                .join(' ')
+                .toLowerCase()
+                .includes(mentionQuery);
+            })
+            .slice(0, 8)
           : [],
       [mention, mentionQuery, enabledMcpServers],
     );
@@ -1868,21 +1816,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () =>
         mention
           ? connectors
-              .filter((connector) => {
-                if (!mentionQuery) return true;
-                return [
-                  connector.id,
-                  connector.name,
-                  connector.provider,
-                  connector.category,
-                  connector.description ?? '',
-                  connector.accountLabel ?? '',
-                ]
-                  .join(' ')
-                  .toLowerCase()
-                  .includes(mentionQuery);
-              })
-              .slice(0, 8)
+            .filter((connector) => {
+              if (!mentionQuery) return true;
+              return [
+                connector.id,
+                connector.name,
+                connector.provider,
+                connector.category,
+                connector.description ?? '',
+                connector.accountLabel ?? '',
+              ]
+                .join(' ')
+                .toLowerCase()
+                .includes(mentionQuery);
+            })
+            .slice(0, 8)
           : [],
       [mention, mentionQuery, connectors],
     );
@@ -2823,54 +2771,53 @@ function ToolsPluginsPanel({
             const pluginTitle = localizePluginTitle(locale, p);
             const pluginDescription = localizePluginDescription(locale, p);
             return (
-            <div
-              key={p.id}
-              className={`composer-tools-row composer-tools-row--plugin${
-                p.id === activePluginId ? ' active' : ''
-              }`}
-            >
-              <button
-                type="button"
-                className="composer-tools-row-main"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={async () => {
-                  setPendingId(p.id);
-                  try {
-                    await onApply(p);
-                  } finally {
-                    setPendingId(null);
-                  }
-                }}
-                disabled={pendingId !== null}
-                aria-busy={pendingId === p.id ? 'true' : undefined}
-                title={pluginDescription || pluginTitle}
+              <div
+                key={p.id}
+                className={`composer-tools-row composer-tools-row--plugin${p.id === activePluginId ? ' active' : ''
+                  }`}
               >
-                <Icon name="sparkles" size={12} />
-                <span className="composer-tools-row-body">
-                  <strong>{pluginTitle}</strong>
-                  {pluginDescription ? (
-                    <span className="composer-tools-row-meta">
-                      {pluginDescription}
-                    </span>
-                  ) : (
-                    <span className="composer-tools-row-meta">{p.id}</span>
-                  )}
-                </span>
-                {pendingId === p.id ? (
-                  <span className="composer-tools-row-pending">Applying…</span>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                className="composer-tools-row-side"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onShowDetails(p)}
-                title={`View details for ${pluginTitle}`}
-                aria-label={`View details for ${pluginTitle}`}
-              >
-                <Icon name="eye" size={12} />
-              </button>
-            </div>
+                <button
+                  type="button"
+                  className="composer-tools-row-main"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={async () => {
+                    setPendingId(p.id);
+                    try {
+                      await onApply(p);
+                    } finally {
+                      setPendingId(null);
+                    }
+                  }}
+                  disabled={pendingId !== null}
+                  aria-busy={pendingId === p.id ? 'true' : undefined}
+                  title={pluginDescription || pluginTitle}
+                >
+                  <Icon name="sparkles" size={12} />
+                  <span className="composer-tools-row-body">
+                    <strong>{pluginTitle}</strong>
+                    {pluginDescription ? (
+                      <span className="composer-tools-row-meta">
+                        {pluginDescription}
+                      </span>
+                    ) : (
+                      <span className="composer-tools-row-meta">{p.id}</span>
+                    )}
+                  </span>
+                  {pendingId === p.id ? (
+                    <span className="composer-tools-row-pending">Applying…</span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  className="composer-tools-row-side"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onShowDetails(p)}
+                  title={`View details for ${pluginTitle}`}
+                  aria-label={`View details for ${pluginTitle}`}
+                >
+                  <Icon name="eye" size={12} />
+                </button>
+              </div>
             );
           })}
         </div>

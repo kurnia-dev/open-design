@@ -3498,7 +3498,6 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
-          research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
@@ -5533,7 +5532,6 @@ export function ProjectView({
               githubAuth={githubAuth}
               onConnectRepo={handleConnectRepo}
               composerDraftSignal={composerDraftSignal}
-              researchAvailable={config.mode === 'daemon'}
               byokApiProtocol={config.apiProtocol}
               byokImageModel={byokImageModelOverride}
               onChangeByokImageModel={setByokImageModelOverride}

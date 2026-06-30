@@ -7,7 +7,6 @@ import type {
   PreviewAnnotationStyle,
   PreviewVisualMarkKind,
 } from './comments';
-import type { ResearchOptions } from './research';
 import type { RunContextSelection } from './context.js';
 import type { MediaExecutionPolicy } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
@@ -40,9 +39,7 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
-  /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
   locale?: string;
-  research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   /**

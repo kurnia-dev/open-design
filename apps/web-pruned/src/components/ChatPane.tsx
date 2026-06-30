@@ -547,7 +547,7 @@ interface Props {
   workspaceContexts?: WorkspaceContextItem[];
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
-  researchAvailable?: boolean;
+
   // Immutable snapshot of the plugin pinned to this project. When set
   // we suppress the in-composer plugin rail (the user already picked a
   // plugin on Home) and render the active plugin as a context chip on
@@ -700,7 +700,7 @@ export function ChatPane({
   workspaceContexts = [],
   currentSkillId = null,
   onProjectSkillChange,
-  researchAvailable,
+
   activePluginSnapshot,
   skills = [],
   byokApiProtocol,
@@ -1634,7 +1634,7 @@ export function ChatPane({
       onOpenMcpSettings={onOpenMcpSettings}
       onBrowsePlugins={onBrowsePlugins}
       onOpenConnectors={onOpenConnectors}
-      researchAvailable={researchAvailable}
+
       projectMetadata={projectMetadata}
       onProjectMetadataChange={onProjectMetadataChange}
       activeWorkspaceContext={activeWorkspaceContext}

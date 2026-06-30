@@ -3508,7 +3508,6 @@ export function ProjectView({
           sessionMode: runSessionMode,
           appliedPluginSnapshotId:
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
-          research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
@@ -5547,7 +5546,6 @@ export function ProjectView({
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}
               onOpenPetSettings={onOpenPetSettings}
-              researchAvailable={config.mode === 'daemon'}
               byokApiProtocol={config.apiProtocol}
               byokImageModel={byokImageModelOverride}
               onChangeByokImageModel={setByokImageModelOverride}

@@ -304,7 +304,6 @@ import {
 } from "./projects.js";
 import { buildPromptStackTelemetry } from "./prompt-telemetry.js";
 import { listPromptTemplates, readPromptTemplate } from "./prompt-templates.js";
-import { renderResearchCommandContract } from "./prompts/research-contract.js";
 import {
   composeSystemPrompt,
   renderCodexImagegenOverride,
@@ -473,18 +472,6 @@ function renderPluginBriefTemplate(
   });
 }
 
-export function resolveResearchCommandContract(research: any, message: any) {
-  if (!research || !research.enabled) return "";
-  const researchQuery =
-    typeof research.query === "string" && research.query.trim()
-      ? research.query
-      : message;
-  return renderResearchCommandContract({
-    query: researchQuery,
-    maxSources:
-      typeof research.maxSources === "number" ? research.maxSources : undefined,
-  });
-}
 
 export function resolveCodexGeneratedImagesDir(
   agentId: any,
@@ -9084,7 +9071,6 @@ export async function startServer({
       model,
       reasoning,
       locale,
-      research,
       context,
     } = chatBody;
     const chatProjectForSkill =
@@ -9468,10 +9454,7 @@ export async function startServer({
       extraAllowedDirs,
       mediaExecution: run?.mediaExecution,
     });
-    const researchCommandContract = resolveResearchCommandContract(
-      research,
-      message,
-    );
+
     // Resume-capable adapters continue their own upstream session so they
     // keep working memory across turns. Decide once per run; reuse for the
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
@@ -9526,8 +9509,8 @@ export async function startServer({
       currentStableHash,
     );
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, systemPrompt]
-      : [researchCommandContract, runContextPrompt];
+      ? [runContextPrompt, systemPrompt]
+      : [runContextPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === "string" ? part.trim() : ""))
       .filter(Boolean)
@@ -9598,7 +9581,6 @@ export async function startServer({
         // model when diagnosing Langfuse traces.
         { kind: "daemonSystemPrompt", content: daemonSystemPrompt },
         { kind: "runtimeToolPrompt", content: runtimeToolPrompt },
-        { kind: "researchCommandContract", content: researchCommandContract },
         { kind: "runContextPrompt", content: runContextPrompt },
         { kind: "clientSystemPrompt", content: clientInstructionPrompt },
         { kind: "echoGuard", content: ECHO_GUARD },

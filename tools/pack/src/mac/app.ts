@@ -117,6 +117,7 @@ async function buildPrebundledStandaloneRuntime(
     `--target=${MAC_PREBUNDLE_ESBUILD_TARGET}`,
     `--banner:js=${MAC_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER}`,
     ...MAC_PREBUNDLE_POLICIES.daemonSidecar.externals.map((dependency) => `--external:${dependency}`),
+    ...(config.pruned ? ["--external:./plugins/*"] : []),
     `--outdir=${paths.daemonPrebundleRoot}`,
     "--entry-names=[name]",
     "--chunk-names=chunks/[name]-[hash]",

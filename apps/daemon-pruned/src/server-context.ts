@@ -100,7 +100,6 @@ export interface ServerContext {
   appConfig: any;
   orbit: any;
   nativeDialogs: any;
-  research: any;
   mcp: any;
   resources: ResourceDeps;
   projectPreviewScopes: ProjectPreviewScopeDeps;

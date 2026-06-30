@@ -24,7 +24,6 @@ import type {
   DaemonAgentPayload,
   AmrModelsResponse,
   MediaExecutionPolicy,
-  ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
 } from '@open-design/contracts';
@@ -234,7 +233,6 @@ export interface DaemonStreamOptions {
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
-  research?: ResearchOptions;
   context?: RunContextSelection;
   appliedPluginSnapshotId?: string | null;
   mediaExecution?: MediaExecutionPolicy;
@@ -518,7 +516,6 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
-  research,
   context,
   appliedPluginSnapshotId,
   mediaExecution,
@@ -556,7 +553,6 @@ export async function streamViaDaemon({
     locale,
     ...(appliedPluginSnapshotId ? { appliedPluginSnapshotId } : {}),
     ...(context ? { context } : {}),
-    ...(research ? { research } : {}),
     ...(mediaExecution ? { mediaExecution } : {}),
     ...(analyticsHints ? { analyticsHints } : {}),
   };

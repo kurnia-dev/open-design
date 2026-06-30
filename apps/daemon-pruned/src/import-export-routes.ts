@@ -1,17 +1,34 @@
-import type { Express } from 'express';
-import nodePath from 'node:path';
-import type { RouteDeps } from './server-context.js';
+import type { Express } from "express";
+import nodePath from "node:path";
+import type { RouteDeps } from "./server-context.js";
 import {
   InlineAssetsLimitError,
   MAX_INLINE_OWNER_BYTES,
   inlineRelativeAssets,
   type InlineAssetReader,
-} from './inline-assets.js';
-import { isSandboxModeEnabled } from './sandbox-mode.js';
+} from "./inline-assets.js";
+import { isSandboxModeEnabled } from "./sandbox-mode.js";
+import { ArtifactKind, ArtifactManifest } from "@open-design/contracts";
 
-export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
+export interface RegisterImportRoutesDeps extends RouteDeps<
+  | "db"
+  | "http"
+  | "uploads"
+  | "node"
+  | "ids"
+  | "paths"
+  | "imports"
+  | "auth"
+  | "projectStore"
+  | "conversations"
+  | "projectFiles"
+  | "validation"
+> {}
 
-export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps) {
+export function registerImportRoutes(
+  app: Express,
+  ctx: RegisterImportRoutesDeps,
+) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { importUpload } = ctx.uploads;
@@ -32,26 +49,26 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { validateProjectDesignSystemId } = ctx.validation;
   const rejectSandboxFolderImport = () =>
     isSandboxModeEnabled(process.env)
-      ? 'folder imports are disabled when OD_SANDBOX_MODE is enabled'
+      ? "folder imports are disabled when OD_SANDBOX_MODE is enabled"
       : null;
 
   app.post(
-    '/api/import/claude-design',
-    importUpload.single('file'),
+    "/api/import/claude-design",
+    importUpload.single("file"),
     async (req, res) => {
       try {
         if (!req.file)
-          return res.status(400).json({ error: 'zip file required' });
+          return res.status(400).json({ error: "zip file required" });
         const originalName =
-          req.file.originalname || 'Claude Design export.zip';
+          req.file.originalname || "Claude Design export.zip";
         if (!/\.zip$/i.test(originalName)) {
           fs.promises.unlink(req.file.path).catch(() => {});
-          return res.status(400).json({ error: 'expected a .zip file' });
+          return res.status(400).json({ error: "expected a .zip file" });
         }
         const id = randomId();
         const now = Date.now();
         const baseName =
-          originalName.replace(/\.zip$/i, '').trim() || 'Claude Design import';
+          originalName.replace(/\.zip$/i, "").trim() || "Claude Design import";
         const imported = await importClaudeDesignZip(
           req.file.path,
           projectDir(PROJECTS_DIR, id),
@@ -65,8 +82,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           designSystemId: null,
           pendingPrompt: `Imported from Claude Design ZIP: ${originalName}. Continue editing ${imported.entryFile}.`,
           metadata: {
-            kind: 'prototype',
-            importedFrom: 'claude-design',
+            kind: "prototype",
+            importedFrom: "claude-design",
             entryFile: imported.entryFile,
             sourceFileName: originalName,
           },
@@ -77,7 +94,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         insertConversation(db, {
           id: cid,
           projectId: id,
-          title: 'Imported Claude Design project',
+          title: "Imported Claude Design project",
           createdAt: now,
           updatedAt: now,
         });
@@ -103,20 +120,20 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   // Replace an existing project's working directory in-place. Mirrors
   // the same trust-gate, realpath, and data-dir checks as folder import,
   // but updates metadata.baseDir on an existing project record.
-  app.post('/api/projects/:id/working-dir', async (req, res) => {
+  app.post("/api/projects/:id/working-dir", async (req, res) => {
     try {
       const projectId = req.params.id;
       const existing = getProject(db, projectId);
       if (!existing) {
-        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return sendApiError(res, 404, "PROJECT_NOT_FOUND", "project not found");
       }
       const { baseDir } = req.body || {};
-      if (typeof baseDir !== 'string' || !baseDir.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      if (typeof baseDir !== "string" || !baseDir.trim()) {
+        return sendApiError(res, 400, "BAD_REQUEST", "baseDir required");
       }
       const sandboxReason = rejectSandboxFolderImport();
       if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+        return sendApiError(res, 400, "BAD_REQUEST", sandboxReason);
       }
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
@@ -125,16 +142,18 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           return sendApiError(
             res,
             503,
-            'DESKTOP_AUTH_PENDING',
-            'desktop auth required but secret not yet registered',
+            "DESKTOP_AUTH_PENDING",
+            "desktop auth required but secret not yet registered",
             {
-              details: { hint: 'restart desktop or wait for sidecar registration' },
+              details: {
+                hint: "restart desktop or wait for sidecar registration",
+              },
               retryable: true,
             },
           );
         }
-        const headerValue = req.get('x-od-desktop-import-token');
-        const token = typeof headerValue === 'string' ? headerValue : '';
+        const headerValue = req.get("x-od-desktop-import-token");
+        const token = typeof headerValue === "string" ? headerValue : "";
         const now = Date.now();
         pruneExpiredImportNonces(now);
         const verification = verifyDesktopImportToken(
@@ -148,8 +167,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           return sendApiError(
             res,
             403,
-            'FORBIDDEN',
-            'desktop import token rejected',
+            "FORBIDDEN",
+            "desktop import token rejected",
             { details: { reason: verification.reason } },
           );
         }
@@ -159,50 +178,79 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "baseDir must be absolute",
+        );
       }
       let normalizedPath: string;
       try {
         normalizedPath = await fs.promises.realpath(trimmedInput);
       } catch {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+        return sendApiError(res, 400, "BAD_REQUEST", "folder not found");
       }
       let dirStat;
       try {
         dirStat = await fs.promises.lstat(normalizedPath);
       } catch {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+        return sendApiError(res, 400, "BAD_REQUEST", "folder not found");
       }
       if (!dirStat.isDirectory()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "path must be a directory",
+        );
       }
       if (path.parse(normalizedPath).root === normalizedPath) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the filesystem root');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "cannot point at the filesystem root",
+        );
       }
       if (
         normalizedPath === RUNTIME_DATA_DIR_CANONICAL ||
         normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
       ) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "cannot point at the data directory",
+        );
       }
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
       const nextMeta = {
         ...existingMeta,
-        kind: existingMeta.kind ?? 'prototype',
+        kind: existingMeta.kind ?? "prototype",
         baseDir: normalizedPath,
-        importedFrom: 'folder' as const,
+        importedFrom: "folder" as const,
         entryFile,
         ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
       };
-      const isReactVite = fs.existsSync(path.join(normalizedPath, 'package.json'));
+      const isReactVite = fs.existsSync(
+        path.join(normalizedPath, "package.json"),
+      );
       let nextSkillId = existing.skillId;
       if (isReactVite) {
-        if (nextSkillId === 'web-prototype' || nextSkillId === 'web-prototype-wireframe' || !nextSkillId) {
-          nextSkillId = 'web-prototype-high-fidelity';
-        } else if (nextSkillId === 'example-web-prototype' || nextSkillId === 'example-web-prototype-wireframe') {
-          nextSkillId = 'example-web-prototype-high-fidelity';
+        if (
+          nextSkillId === "web-prototype" ||
+          nextSkillId === "web-prototype-wireframe" ||
+          !nextSkillId
+        ) {
+          nextSkillId = "web-prototype-high-fidelity";
+        } else if (
+          nextSkillId === "example-web-prototype" ||
+          nextSkillId === "example-web-prototype-wireframe"
+        ) {
+          nextSkillId = "example-web-prototype-high-fidelity";
         }
       }
       const updated = updateProject(db, projectId, {
@@ -210,7 +258,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         ...(nextSkillId !== existing.skillId ? { skillId: nextSkillId } : {}),
       });
       if (!updated) {
-        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return sendApiError(res, 404, "PROJECT_NOT_FOUND", "project not found");
       }
       // Folder imports should land on Design Files so users can choose from
       // the imported folder's artifacts. Persist an empty saved tab state so
@@ -220,19 +268,19 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project: updated, baseDir: normalizedPath, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, "BAD_REQUEST", String(err));
     }
   });
 
-  app.post('/api/import/folder', async (req, res) => {
+  app.post("/api/import/folder", async (req, res) => {
     try {
       const { baseDir, name, skillId, designSystemId } = req.body || {};
-      if (typeof baseDir !== 'string' || !baseDir.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      if (typeof baseDir !== "string" || !baseDir.trim()) {
+        return sendApiError(res, 400, "BAD_REQUEST", "baseDir required");
       }
       const sandboxReason = rejectSandboxFolderImport();
       if (sandboxReason) {
-        return sendApiError(res, 400, 'BAD_REQUEST', sandboxReason);
+        return sendApiError(res, 400, "BAD_REQUEST", sandboxReason);
       }
       let trustedPickerImport = false;
       if (isDesktopAuthGateActive()) {
@@ -241,16 +289,18 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           return sendApiError(
             res,
             503,
-            'DESKTOP_AUTH_PENDING',
-            'desktop auth required but secret not yet registered',
+            "DESKTOP_AUTH_PENDING",
+            "desktop auth required but secret not yet registered",
             {
-              details: { hint: 'restart desktop or wait for sidecar registration' },
+              details: {
+                hint: "restart desktop or wait for sidecar registration",
+              },
               retryable: true,
             },
           );
         }
-        const headerValue = req.get('x-od-desktop-import-token');
-        const token = typeof headerValue === 'string' ? headerValue : '';
+        const headerValue = req.get("x-od-desktop-import-token");
+        const token = typeof headerValue === "string" ? headerValue : "";
         const now = Date.now();
         pruneExpiredImportNonces(now);
         const verification = verifyDesktopImportToken(
@@ -264,8 +314,8 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           return sendApiError(
             res,
             403,
-            'FORBIDDEN',
-            'desktop import token rejected',
+            "FORBIDDEN",
+            "desktop import token rejected",
             { details: { reason: verification.reason } },
           );
         }
@@ -274,7 +324,12 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "baseDir must be absolute",
+        );
       }
       // Resolve symlinks once at import and persist the canonical path.
       // Without this, a user-controlled symlink (e.g. ~/sneaky → /etc) at
@@ -286,7 +341,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       try {
         normalizedPath = await fs.promises.realpath(trimmedInput);
       } catch {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+        return sendApiError(res, 400, "BAD_REQUEST", "folder not found");
       }
       // realpath resolved → lstat the canonical path to ensure it's a
       // real directory, not another symlink (defense-in-depth).
@@ -294,13 +349,23 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       try {
         dirStat = await fs.promises.lstat(normalizedPath);
       } catch {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+        return sendApiError(res, 400, "BAD_REQUEST", "folder not found");
       }
       if (!dirStat.isDirectory()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "path must be a directory",
+        );
       }
       if (path.parse(normalizedPath).root === normalizedPath) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the filesystem root');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "cannot import the filesystem root",
+        );
       }
       // Prevent importing the data directory into itself (post-realpath so
       // a symlink pointing into RUNTIME_DATA_DIR is also caught). Compare
@@ -311,17 +376,23 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         normalizedPath === RUNTIME_DATA_DIR_CANONICAL ||
         normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
       ) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot import the data directory');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "cannot import the data directory",
+        );
       }
 
       const id = randomId();
       const now = Date.now();
       const projectName =
-        typeof name === 'string' && name.trim()
+        typeof name === "string" && name.trim()
           ? name.trim()
           : path.basename(normalizedPath);
       const entryFile = await detectEntryFile(normalizedPath);
-      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      const designSystemValidation =
+        await validateProjectDesignSystemId(designSystemId);
       if (!designSystemValidation.ok) {
         return sendApiError(
           res,
@@ -332,12 +403,21 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
 
       let targetSkillId = skillId;
-      const isReactVite = fs.existsSync(path.join(normalizedPath, 'package.json'));
+      const isReactVite = fs.existsSync(
+        path.join(normalizedPath, "package.json"),
+      );
       if (isReactVite) {
-        if (targetSkillId === 'web-prototype' || targetSkillId === 'web-prototype-wireframe' || !targetSkillId) {
-          targetSkillId = 'web-prototype-high-fidelity';
-        } else if (targetSkillId === 'example-web-prototype' || targetSkillId === 'example-web-prototype-wireframe') {
-          targetSkillId = 'example-web-prototype-high-fidelity';
+        if (
+          targetSkillId === "web-prototype" ||
+          targetSkillId === "web-prototype-wireframe" ||
+          !targetSkillId
+        ) {
+          targetSkillId = "web-prototype-high-fidelity";
+        } else if (
+          targetSkillId === "example-web-prototype" ||
+          targetSkillId === "example-web-prototype-wireframe"
+        ) {
+          targetSkillId = "example-web-prototype-high-fidelity";
         }
       }
 
@@ -348,9 +428,9 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         designSystemId: designSystemValidation.id,
         pendingPrompt: null,
         metadata: {
-          kind: 'prototype',
+          kind: "prototype",
           baseDir: normalizedPath,
-          importedFrom: 'folder',
+          importedFrom: "folder",
           entryFile,
           ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
         },
@@ -374,20 +454,31 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       const body = { project, conversationId: cid, entryFile };
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, "BAD_REQUEST", String(err));
     }
   });
-
 }
 
-export interface RegisterProjectExportRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'exports' | 'projectFiles' | 'validation'> {}
+export interface RegisterProjectExportRoutesDeps extends RouteDeps<
+  | "db"
+  | "http"
+  | "paths"
+  | "projectStore"
+  | "exports"
+  | "projectFiles"
+  | "validation"
+> {}
 
-export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectExportRoutesDeps) {
+export function registerProjectExportRoutes(
+  app: Express,
+  ctx: RegisterProjectExportRoutesDeps,
+) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
-  const { listFiles, readProjectFile, resolveProjectFilePath } = ctx.projectFiles;
+  const { listFiles, readProjectFile, resolveProjectFilePath } =
+    ctx.projectFiles;
   const { isSafeId } = ctx.validation;
   const {
     buildProjectArchive,
@@ -402,9 +493,9 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // imported `ui-design/` folder — instead of a one-file snapshot of the
   // rendered HTML. `root` scopes the archive to a subdirectory; without
   // it, the whole project is packed.
-  app.get('/api/projects/:id/archive', async (req, res) => {
+  app.get("/api/projects/:id/archive", async (req, res) => {
     try {
-      const root = typeof req.query?.root === 'string' ? req.query.root : '';
+      const root = typeof req.query?.root === "string" ? req.query.root : "";
       const project = getProject(db, req.params.id);
       const { buffer, baseName } = await buildProjectArchive(
         PROJECTS_DIR,
@@ -413,26 +504,28 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         project?.metadata,
       );
       const fallbackName = project?.name || req.params.id;
-      const fileSlug = sanitizeArchiveFilename(baseName || fallbackName) || 'project';
+      const fileSlug =
+        sanitizeArchiveFilename(baseName || fallbackName) || "project";
       const filename = `${fileSlug}.zip`;
       // RFC 5987 dance: legacy `filename=` carries an ASCII fallback, while
       // `filename*=UTF-8''…` lets modern browsers pick up project names
       // with non-ASCII characters (accents, CJK, etc.) without mojibake.
       const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
+        filename.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "_") ||
+        "project.zip";
+      res.setHeader("Content-Type", "application/zip");
       res.setHeader(
-        'Content-Disposition',
+        "Content-Disposition",
         `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
       );
       res.send(buffer);
     } catch (err: any) {
       const code = err && err.code;
-      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
+      const status = code === "ENOENT" || code === "ENOTDIR" ? 404 : 400;
       sendApiError(
         res,
         status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        status === 404 ? "FILE_NOT_FOUND" : "BAD_REQUEST",
         String(err?.message || err),
       );
     }
@@ -440,11 +533,16 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
 
   // Batch archive: accepts a list of file names and returns a ZIP of just
   // those files. Used by the Design Files panel multi-select download.
-  app.post('/api/projects/:id/archive/batch', async (req, res) => {
+  app.post("/api/projects/:id/archive/batch", async (req, res) => {
     try {
       const { files } = req.body || {};
       if (!Array.isArray(files) || files.length === 0) {
-        sendApiError(res, 400, 'BAD_REQUEST', 'files must be a non-empty array');
+        sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "files must be a non-empty array",
+        );
         return;
       }
       const project = getProject(db, req.params.id);
@@ -454,36 +552,38 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         files,
         project?.metadata,
       );
-      const fileSlug = sanitizeArchiveFilename(project?.name || req.params.id) || 'project';
+      const fileSlug =
+        sanitizeArchiveFilename(project?.name || req.params.id) || "project";
       const filename = `${fileSlug}.zip`;
       const asciiFallback =
-        filename.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '_') || 'project.zip';
-      res.setHeader('Content-Type', 'application/zip');
+        filename.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "_") ||
+        "project.zip";
+      res.setHeader("Content-Type", "application/zip");
       res.setHeader(
-        'Content-Disposition',
+        "Content-Disposition",
         `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
       );
       res.send(buffer);
     } catch (err: any) {
       const code = err && err.code;
-      const status = code === 'ENOENT' ? 404 : 400;
+      const status = code === "ENOENT" ? 404 : 400;
       sendApiError(
         res,
         status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        status === 404 ? "FILE_NOT_FOUND" : "BAD_REQUEST",
         String(err?.message || err),
       );
     }
   });
 
-  app.get('/api/projects/:id/export/manifest', async (req, res) => {
+  app.get("/api/projects/:id/export/manifest", async (req, res) => {
     try {
       if (!isSafeId(req.params.id)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+        return sendApiError(res, 400, "BAD_REQUEST", "invalid project id");
       }
       const project = getProject(db, req.params.id);
       if (!project) {
-        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return sendApiError(res, 404, "PROJECT_NOT_FOUND", "project not found");
       }
       const files = await listFiles(PROJECTS_DIR, req.params.id, {
         metadata: project.metadata,
@@ -496,23 +596,23 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       });
       res.json(body);
     } catch (err: any) {
-      sendApiError(res, 400, 'BAD_REQUEST', String(err?.message || err));
+      sendApiError(res, 400, "BAD_REQUEST", String(err?.message || err));
     }
   });
 
-  app.post('/api/projects/:id/export/pdf', async (req, res) => {
-    if (typeof desktopPdfExporter !== 'function') {
+  app.post("/api/projects/:id/export/pdf", async (req, res) => {
+    if (typeof desktopPdfExporter !== "function") {
       return sendApiError(
         res,
         501,
-        'UPSTREAM_UNAVAILABLE',
-        'desktop PDF export is only available in the desktop runtime',
+        "UPSTREAM_UNAVAILABLE",
+        "desktop PDF export is only available in the desktop runtime",
       );
     }
     try {
       const { fileName, title, deck } = req.body || {};
-      if (typeof fileName !== 'string' || fileName.length === 0) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
+      if (typeof fileName !== "string" || fileName.length === 0) {
+        return sendApiError(res, 400, "BAD_REQUEST", "fileName required");
       }
       const input = await buildDesktopPdfExportInput({
         daemonUrl: daemonUrlRef.current,
@@ -520,16 +620,16 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         fileName,
         projectId: req.params.id,
         projectsRoot: PROJECTS_DIR,
-        title: typeof title === 'string' ? title : undefined,
+        title: typeof title === "string" ? title : undefined,
       });
       const result = await desktopPdfExporter(input);
       res.json(result);
     } catch (err: any) {
-      const status = err && err.code === 'ENOENT' ? 404 : 400;
+      const status = err && err.code === "ENOENT" ? 404 : 400;
       sendApiError(
         res,
         status,
-        status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+        status === 404 ? "FILE_NOT_FOUND" : "BAD_REQUEST",
         String(err?.message || err),
       );
     }
@@ -561,26 +661,30 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   //
   // See nexu-io/open-design#368 and the architecture lock at
   // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
-  app.get('/api/projects/:id/export/*splat', async (req, res) => {
+  app.get("/api/projects/:id/export/*splat", async (req, res) => {
     try {
       if (!isSafeId(req.params.id)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+        return sendApiError(res, 400, "BAD_REQUEST", "invalid project id");
       }
 
       const inlineRaw =
-        typeof req.query.inline === 'string' ? req.query.inline.trim().toLowerCase() : '';
-      if (!['1', 'true', 'yes', 'on'].includes(inlineRaw)) {
+        typeof req.query.inline === "string"
+          ? req.query.inline.trim().toLowerCase()
+          : "";
+      if (!["1", "true", "yes", "on"].includes(inlineRaw)) {
         return sendApiError(
           res,
           400,
-          'BAD_REQUEST',
+          "BAD_REQUEST",
           "query parameter 'inline=1' is required",
         );
       }
 
       const project = getProject(db, req.params.id);
       const splatParam = (req.params as { splat?: string | string[] }).splat;
-      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
+      const relPath = Array.isArray(splatParam)
+        ? splatParam.join("/")
+        : String(splatParam ?? "");
 
       // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
       // readProjectFile so a 100 MiB owner HTML is rejected after a
@@ -604,11 +708,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
           project?.metadata,
         );
       } catch (err: any) {
-        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        const status = err && err.code === "ENOENT" ? 404 : 400;
         return sendApiError(
           res,
           status,
-          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          status === 404 ? "FILE_NOT_FOUND" : "BAD_REQUEST",
           String(err),
         );
       }
@@ -617,29 +721,34 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         return sendApiError(
           res,
           413,
-          'PAYLOAD_TOO_LARGE',
+          "PAYLOAD_TOO_LARGE",
           `owner html ${ownerMeta.size} bytes exceeds MAX_INLINE_OWNER_BYTES ${MAX_INLINE_OWNER_BYTES}`,
         );
       }
 
-      if (!ownerMeta.mime.startsWith('text/html')) {
+      if (!ownerMeta.mime.startsWith("text/html")) {
         return sendApiError(
           res,
           415,
-          'UNSUPPORTED_MEDIA_TYPE',
-          'export endpoint only supports HTML files',
+          "UNSUPPORTED_MEDIA_TYPE",
+          "export endpoint only supports HTML files",
         );
       }
 
       let file;
       try {
-        file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
+        file = await readProjectFile(
+          PROJECTS_DIR,
+          req.params.id,
+          relPath,
+          project?.metadata,
+        );
       } catch (err: any) {
-        const status = err && err.code === 'ENOENT' ? 404 : 400;
+        const status = err && err.code === "ENOENT" ? 404 : 400;
         return sendApiError(
           res,
           status,
-          status === 404 ? 'FILE_NOT_FOUND' : 'BAD_REQUEST',
+          status === 404 ? "FILE_NOT_FOUND" : "BAD_REQUEST",
           String(err),
         );
       }
@@ -671,7 +780,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
                 sibling,
                 project?.metadata,
               );
-              return siblingFile.buffer.toString('utf8');
+              return siblingFile.buffer.toString("utf8");
             } catch {
               return null;
             }
@@ -680,7 +789,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       };
 
       const rendered = await inlineRelativeAssets(
-        file.buffer.toString('utf8'),
+        file.buffer.toString("utf8"),
         relPath,
         fileReader,
       );
@@ -692,21 +801,23 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       // iframe with an opaque origin — scripts execute (that's the point
       // of inlining JS for screenshot tooling), but cannot read cookies,
       // hit /api/, or escalate to daemon-origin privileges.
-      res.setHeader('Content-Security-Policy', 'sandbox allow-scripts');
-      res.type('text/html').send(rendered);
+      res.setHeader("Content-Security-Policy", "sandbox allow-scripts");
+      res.type("text/html").send(rendered);
     } catch (err: any) {
       // PR #1312 round-3 (lefarcen P2): the inliner's cap-enforcement
       // throws InlineAssetsLimitError when the owner HTML, candidate
       // count, or assembled output exceeds the module-level limits.
       // Map every such throw to a 413 PAYLOAD_TOO_LARGE envelope so
       // callers see a structured error rather than a generic 400.
-      if (err instanceof InlineAssetsLimitError || err?.name === 'InlineAssetsLimitError') {
-        return sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', String(err));
+      if (
+        err instanceof InlineAssetsLimitError ||
+        err?.name === "InlineAssetsLimitError"
+      ) {
+        return sendApiError(res, 413, "PAYLOAD_TOO_LARGE", String(err));
       }
-      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+      sendApiError(res, 400, "BAD_REQUEST", String(err));
     }
   });
-
 }
 
 function buildProjectExportManifestResponse({
@@ -718,33 +829,39 @@ function buildProjectExportManifestResponse({
   projectId: string;
   files: any[];
 }) {
-  const sortedFiles = [...files].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const sortedFiles = [...files].sort((a, b) =>
+    String(a.name).localeCompare(String(b.name)),
+  );
   const filesByName = new Map(sortedFiles.map((file) => [file.name, file]));
   const reasons = new Map<string, Set<string>>();
   const supportingNames = new Set<string>();
   const artifactNames = new Set<string>();
-  const artifacts = [];
+  const artifacts: any[] = [];
 
   const note = (name: unknown, reason: string) => {
-    if (typeof name !== 'string' || !filesByName.has(name)) return;
+    if (typeof name !== "string" || !filesByName.has(name)) return;
     if (!reasons.has(name)) reasons.set(name, new Set());
     reasons.get(name)?.add(reason);
   };
 
   for (const file of sortedFiles) {
-    const manifest = file.artifactManifest && typeof file.artifactManifest === 'object'
-      ? file.artifactManifest
-      : null;
+    const manifest =
+      file.artifactManifest && typeof file.artifactManifest === "object"
+        ? file.artifactManifest
+        : null;
     if (!manifest) continue;
     if (isInferredArtifactManifest(manifest)) continue;
     artifactNames.add(file.name);
-    note(file.name, 'artifact-manifest');
+    note(file.name, "artifact-manifest");
 
     const artifactSupporting = new Set<string>();
     const addManifestRef = (
       ref: unknown,
       reason: string,
-      options: { allowProjectRootFallback?: boolean; preferProjectRoot?: boolean } = {},
+      options: {
+        allowProjectRootFallback?: boolean;
+        preferProjectRoot?: boolean;
+      } = {},
     ) => {
       const ownerRelative = normalizeManifestProjectRef(ref, file.name);
       const projectRoot = normalizeManifestProjectRootRef(ref);
@@ -754,46 +871,68 @@ function buildProjectExportManifestResponse({
             ownerRelative,
             ...(options.allowProjectRootFallback ? [projectRoot] : []),
           ];
-      const normalized = candidates.find((candidate) => candidate && filesByName.has(candidate));
+      const normalized = candidates.find(
+        (candidate) => candidate && filesByName.has(candidate),
+      );
       if (!normalized) return;
       if (normalized === file.name) return;
       supportingNames.add(normalized);
       artifactSupporting.add(normalized);
       note(normalized, reason);
     };
-    addManifestRef(manifest.entry, 'artifact-entry', { preferProjectRoot: true });
-    if (typeof manifest.primary === 'string') {
-      addManifestRef(manifest.primary, 'artifact-primary', { preferProjectRoot: true });
+    addManifestRef(manifest.entry, "artifact-entry", {
+      preferProjectRoot: true,
+    });
+    if (typeof manifest.primary === "string") {
+      addManifestRef(manifest.primary, "artifact-primary", {
+        preferProjectRoot: true,
+      });
     }
     if (Array.isArray(manifest.supportingFiles)) {
       for (const ref of manifest.supportingFiles) {
-        addManifestRef(ref, 'artifact-supporting-file', { allowProjectRootFallback: true });
+        addManifestRef(ref, "artifact-supporting-file", {
+          allowProjectRootFallback: true,
+        });
       }
     }
 
     artifacts.push({
       file: file.name,
-      title: typeof manifest.title === 'string' && manifest.title.trim()
-        ? manifest.title
-        : file.name,
-      kind: typeof manifest.kind === 'string' ? manifest.kind : (file.artifactKind ?? null),
-      renderer: typeof manifest.renderer === 'string' ? manifest.renderer : null,
-      status: typeof manifest.status === 'string' ? manifest.status : null,
+      title:
+        typeof manifest.title === "string" && manifest.title.trim()
+          ? manifest.title
+          : file.name,
+      kind:
+        typeof manifest.kind === "string"
+          ? manifest.kind
+          : (file.artifactKind ?? null),
+      renderer:
+        typeof manifest.renderer === "string" ? manifest.renderer : null,
+      status: typeof manifest.status === "string" ? manifest.status : null,
       exports: Array.isArray(manifest.exports)
-        ? manifest.exports.filter((value: unknown): value is string => typeof value === 'string')
+        ? manifest.exports.filter(
+            (value: unknown): value is string => typeof value === "string",
+          )
         : [],
-      supportingFiles: Array.from(artifactSupporting).sort((a, b) => a.localeCompare(b)),
-      updatedAt: typeof manifest.updatedAt === 'string' ? manifest.updatedAt : null,
+      supportingFiles: Array.from(artifactSupporting).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+      updatedAt:
+        typeof manifest.updatedAt === "string" ? manifest.updatedAt : null,
     });
   }
 
-  const entryFile = chooseExportManifestEntryFile(project, sortedFiles, filesByName);
-  note(entryFile, 'project-entry-file');
+  const entryFile = chooseExportManifestEntryFile(
+    project,
+    sortedFiles,
+    filesByName,
+  );
+  note(entryFile, "project-entry-file");
 
   return {
-    schema: 'open-design.project-export-manifest.v1',
+    schema: "open-design.project-export-manifest.v1",
     projectId,
-    projectName: typeof project?.name === 'string' ? project.name : null,
+    projectName: typeof project?.name === "string" ? project.name : null,
     generatedAt: new Date().toISOString(),
     entryFile,
     files: sortedFiles.map((file) => ({
@@ -804,16 +943,20 @@ function buildProjectExportManifestResponse({
         artifactNames,
         supportingNames,
       }),
-      reasons: Array.from(reasons.get(file.name) ?? ['visible-project-file']).sort((a, b) => a.localeCompare(b)),
+      reasons: Array.from(
+        reasons.get(file.name) ?? ["visible-project-file"],
+      ).sort((a, b) => a.localeCompare(b)),
     })),
     artifacts,
   };
 }
 
 function isInferredArtifactManifest(manifest: any): boolean {
-  return manifest?.metadata &&
-    typeof manifest.metadata === 'object' &&
-    manifest.metadata.inferred === true;
+  return (
+    manifest?.metadata &&
+    typeof manifest.metadata === "object" &&
+    manifest.metadata.inferred === true
+  );
 }
 
 function chooseExportManifestEntryFile(
@@ -821,46 +964,64 @@ function chooseExportManifestEntryFile(
   files: any[],
   filesByName: Map<string, any>,
 ): string | null {
-  const metadataEntry = typeof project?.metadata?.entryFile === 'string'
-    ? project.metadata.entryFile
-    : null;
+  const metadataEntry =
+    typeof project?.metadata?.entryFile === "string"
+      ? project.metadata.entryFile
+      : null;
   if (metadataEntry && filesByName.has(metadataEntry)) return metadataEntry;
   for (const file of files) {
     const manifest = file.artifactManifest;
-    if (!manifest || typeof manifest !== 'object') continue;
+    if (!manifest || typeof manifest !== "object") continue;
     if (isInferredArtifactManifest(manifest)) continue;
     if (manifest.primary === true) return file.name;
-    if (typeof manifest.primary === 'string') {
+    if (typeof manifest.primary === "string") {
       const rootPrimary = normalizeManifestProjectRootRef(manifest.primary);
       if (rootPrimary && filesByName.has(rootPrimary)) return rootPrimary;
-      const ownerRelativePrimary = normalizeManifestProjectRef(manifest.primary, file.name);
-      if (ownerRelativePrimary && filesByName.has(ownerRelativePrimary)) return ownerRelativePrimary;
+      const ownerRelativePrimary = normalizeManifestProjectRef(
+        manifest.primary,
+        file.name,
+      );
+      if (ownerRelativePrimary && filesByName.has(ownerRelativePrimary))
+        return ownerRelativePrimary;
     }
     const rootEntry = normalizeManifestProjectRootRef(manifest.entry);
     if (rootEntry && filesByName.has(rootEntry)) return rootEntry;
-    const ownerRelativeEntry = normalizeManifestProjectRef(manifest.entry, file.name);
-    if (ownerRelativeEntry && filesByName.has(ownerRelativeEntry)) return ownerRelativeEntry;
+    const ownerRelativeEntry = normalizeManifestProjectRef(
+      manifest.entry,
+      file.name,
+    );
+    if (ownerRelativeEntry && filesByName.has(ownerRelativeEntry))
+      return ownerRelativeEntry;
   }
-  return files.find((file) => /(^|\/)index\.html?$/i.test(file.name))?.name
-    ?? files.find((file) => file.kind === 'html')?.name
-    ?? files[0]?.name
-    ?? null;
+  return (
+    files.find((file) => /(^|\/)index\.html?$/i.test(file.name))?.name ??
+    files.find((file) => file.kind === "html")?.name ??
+    files[0]?.name ??
+    null
+  );
 }
 
 function normalizeManifestProjectRootRef(ref: unknown): string | null {
-  return normalizeManifestProjectRef(ref, '');
+  return normalizeManifestProjectRef(ref, "");
 }
 
-function normalizeManifestProjectRef(ref: unknown, ownerFile: string): string | null {
-  if (typeof ref !== 'string' || !ref.trim()) return null;
+function normalizeManifestProjectRef(
+  ref: unknown,
+  ownerFile: string,
+): string | null {
+  if (typeof ref !== "string" || !ref.trim()) return null;
   const value = ref.trim();
-  if (value.includes('\0') || value.startsWith('/')) return null;
+  if (value.includes("\0") || value.startsWith("/")) return null;
   if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
   const ownerDir = nodePath.posix.dirname(ownerFile);
-  const joined = ownerDir === '.' ? value : `${ownerDir}/${value}`;
-  const normalized = nodePath.posix.normalize(joined).replace(/^\.\//, '');
-  if (!normalized || normalized === '.' || normalized.startsWith('../')) return null;
-  if (normalized.split('/').some((segment) => segment === '..' || segment === '.')) return null;
+  const joined = ownerDir === "." ? value : `${ownerDir}/${value}`;
+  const normalized = nodePath.posix.normalize(joined).replace(/^\.\//, "");
+  if (!normalized || normalized === "." || normalized.startsWith("../"))
+    return null;
+  if (
+    normalized.split("/").some((segment) => segment === ".." || segment === ".")
+  )
+    return null;
   return normalized;
 }
 
@@ -872,17 +1033,23 @@ function roleForExportManifestFile(
     supportingNames: Set<string>;
   },
 ) {
-  if (file.name === refs.entryFile) return 'entry';
-  if (refs.artifactNames.has(file.name)) return 'artifact';
-  if (refs.supportingNames.has(file.name)) return 'supporting';
-  if (file.kind === 'image' || file.kind === 'video' || file.kind === 'audio') return 'asset';
-  if (file.kind === 'code' || file.kind === 'text') return 'source';
-  return 'other';
+  if (file.name === refs.entryFile) return "entry";
+  if (refs.artifactNames.has(file.name)) return "artifact";
+  if (refs.supportingNames.has(file.name)) return "supporting";
+  if (file.kind === "image" || file.kind === "video" || file.kind === "audio")
+    return "asset";
+  if (file.kind === "code" || file.kind === "text") return "source";
+  return "other";
 }
 
-export interface RegisterFinalizeRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'validation' | 'finalize'> {}
+export interface RegisterFinalizeRoutesDeps extends RouteDeps<
+  "db" | "http" | "paths" | "projectStore" | "validation" | "finalize"
+> {}
 
-export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutesDeps) {
+export function registerFinalizeRoutes(
+  app: Express,
+  ctx: RegisterFinalizeRoutesDeps,
+) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR } = ctx.paths;
@@ -896,8 +1063,15 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     isFinalizeProviderProtocol,
     redactSecrets,
   } = ctx.finalize;
-  app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol } = req.body || {};
+  app.post("/api/projects/:id/finalize/:provider", async (req, res) => {
+    const {
+      apiKey,
+      baseUrl,
+      model,
+      maxTokens,
+      apiVersion,
+      protocol: bodyProtocol,
+    } = req.body || {};
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -906,7 +1080,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // we see it, so this check covers both URL-supplied and stored-row
       // attack vectors.
       if (!isSafeId(req.params.id)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
+        return sendApiError(res, 400, "BAD_REQUEST", "invalid project id");
       }
 
       const protocol = req.params.provider;
@@ -914,56 +1088,84 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         return sendApiError(
           res,
           400,
-          'BAD_REQUEST',
-          'provider must be one of anthropic|openai|azure|google|ollama',
+          "BAD_REQUEST",
+          "provider must be one of anthropic|openai|azure|google|ollama",
         );
       }
       if (bodyProtocol !== undefined && bodyProtocol !== protocol) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'body protocol must match route provider');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "body protocol must match route provider",
+        );
       }
 
-      if (typeof apiKey !== 'string' || !apiKey.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      if (typeof apiKey !== "string" || !apiKey.trim()) {
+        return sendApiError(res, 400, "BAD_REQUEST", "apiKey is required");
       }
-      if (typeof model !== 'string' || !model.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      if (typeof model !== "string" || !model.trim()) {
+        return sendApiError(res, 400, "BAD_REQUEST", "model is required");
       }
       let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
       if (baseUrl !== undefined) {
-        if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
-          return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
+        if (typeof baseUrl !== "string" || !baseUrl.trim()) {
+          return sendApiError(
+            res,
+            400,
+            "BAD_REQUEST",
+            "baseUrl must be a non-empty string when provided",
+          );
         }
         effectiveBaseUrl = baseUrl.trim();
       }
       if (!effectiveBaseUrl) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl is required for this provider');
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "baseUrl is required for this provider",
+        );
       }
       const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
       if (validated.error) {
         return sendApiError(
           res,
           validated.forbidden ? 403 : 400,
-          validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+          validated.forbidden ? "FORBIDDEN" : "BAD_REQUEST",
           validated.error,
         );
       }
-      if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      if (
+        maxTokens !== undefined &&
+        (typeof maxTokens !== "number" || maxTokens <= 0)
+      ) {
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "maxTokens must be a positive number when provided",
+        );
       }
-      if (apiVersion !== undefined && typeof apiVersion !== 'string') {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'apiVersion must be a string when provided');
+      if (apiVersion !== undefined && typeof apiVersion !== "string") {
+        return sendApiError(
+          res,
+          400,
+          "BAD_REQUEST",
+          "apiVersion must be a string when provided",
+        );
       }
 
       const project = getProject(db, req.params.id);
       if (!project) {
-        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return sendApiError(res, 404, "PROJECT_NOT_FOUND", "project not found");
       }
 
       const finalizeAbort = new AbortController();
       const abortFromRequest = (): void => {
         if (!finalizeAbort.signal.aborted) finalizeAbort.abort();
       };
-      res.on('close', abortFromRequest);
+      res.on("close", abortFromRequest);
 
       let result;
       try {
@@ -978,14 +1180,14 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
             baseUrl: effectiveBaseUrl,
             model,
             maxTokens,
-            ...(typeof apiVersion === 'string' && apiVersion.trim()
+            ...(typeof apiVersion === "string" && apiVersion.trim()
               ? { apiVersion: apiVersion.trim() }
               : {}),
             signal: finalizeAbort.signal,
           },
         );
       } finally {
-        res.off('close', abortFromRequest);
+        res.off("close", abortFromRequest);
       }
       res.json(result);
     } catch (err: any) {
@@ -993,7 +1195,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // call. Caller can retry after a short wait; not a client error.
       // Maps to the shared CONFLICT code per @lefarcen P2 on PR #832.
       if (err instanceof FinalizePackageLockedError) {
-        return sendApiError(res, 409, 'CONFLICT', err.message);
+        return sendApiError(res, 409, "CONFLICT", err.message);
       }
 
       // Upstream provider error - status-aware mapping using shared
@@ -1002,15 +1204,21 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
       // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
       if (err instanceof FinalizeUpstreamError) {
-        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const safeDetails = redactSecrets(err.rawText || "", [apiKey]);
         const init = safeDetails ? { details: safeDetails } : {};
         if (err.status === 401) {
-          return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
+          return sendApiError(res, 401, "UNAUTHORIZED", err.message, init);
         }
         if (err.status === 429) {
-          return sendApiError(res, 429, 'RATE_LIMITED', err.message, init);
+          return sendApiError(res, 429, "RATE_LIMITED", err.message, init);
         }
-        return sendApiError(res, 502, 'UPSTREAM_UNAVAILABLE', err.message, init);
+        return sendApiError(
+          res,
+          502,
+          "UPSTREAM_UNAVAILABLE",
+          err.message,
+          init,
+        );
       }
 
       // The blocking call hit our 120s AbortController timeout - or the
@@ -1018,19 +1226,25 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // 503 with the shared UPSTREAM_UNAVAILABLE code (no dedicated
       // TIMEOUT code in the contracts ApiErrorCode union).
       const errName =
-        err && typeof err === 'object' && 'name' in err ? (err as { name?: unknown }).name : '';
-      if (errName === 'AbortError') {
-        return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'finalize timed out');
+        err && typeof err === "object" && "name" in err
+          ? (err as { name?: unknown }).name
+          : "";
+      if (errName === "AbortError") {
+        return sendApiError(
+          res,
+          503,
+          "UPSTREAM_UNAVAILABLE",
+          "finalize timed out",
+        );
       }
 
       // Unexpected runtime failure (file IO, db access, prompt build).
       // Log via console.error per the daemon convention; client sees a
       // generic 500 with the shared INTERNAL_ERROR code. Run the message
       // through redactSecrets defensively.
-      console.error('[finalize]', err);
+      console.error("[finalize]", err);
       const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
-      return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
+      return sendApiError(res, 500, "INTERNAL_ERROR", safeMsg);
     }
   });
-
 }

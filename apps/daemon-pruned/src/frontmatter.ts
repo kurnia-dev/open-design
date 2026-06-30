@@ -4,7 +4,10 @@
 // YAML (nested objects, flow-style, anchors), swap for `yaml` or `js-yaml`.
 
 export type FrontmatterScalar = string | number | boolean | null;
-export type FrontmatterValue = FrontmatterScalar | FrontmatterArray | FrontmatterObject;
+export type FrontmatterValue =
+  | FrontmatterScalar
+  | FrontmatterArray
+  | FrontmatterObject;
 export interface FrontmatterArray extends Array<FrontmatterValue> {}
 export interface FrontmatterObject extends Record<string, FrontmatterValue> {}
 type FrontmatterContainer = FrontmatterObject | FrontmatterArray;
@@ -14,12 +17,15 @@ type StackEntry = {
   key: string | null;
 };
 
-export function parseFrontmatter(src: string): { data: FrontmatterObject; body: string } {
-  const text = src.replace(/^﻿/, '');
+export function parseFrontmatter(src: string): {
+  data: FrontmatterObject;
+  body: string;
+} {
+  const text = src.replace(/^﻿/, "");
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(text);
   if (!match) return { data: {}, body: text };
-  const yaml = match[1] ?? '';
-  const body = match[2] ?? '';
+  const yaml = match[1] ?? "";
+  const body = match[2] ?? "";
   return { data: parseYamlSubset(yaml), body };
 }
 
@@ -30,22 +36,25 @@ function parseYamlSubset(src: string): FrontmatterObject {
   let i = 0;
 
   while (i < lines.length) {
-    const raw = lines[i] ?? '';
+    const raw = lines[i] ?? "";
     if (/^\s*(#.*)?$/.test(raw)) {
       i++;
       continue;
     }
     const indent = raw.match(/^\s*/)?.[0].length ?? 0;
 
-    while (stack.length > 1 && indent <= (stack[stack.length - 1]?.indent ?? -1)) {
+    while (
+      stack.length > 1 &&
+      indent <= (stack[stack.length - 1]?.indent ?? -1)
+    ) {
       stack.pop();
     }
     const top = stack[stack.length - 1];
-    if (!top) throw new Error('frontmatter parser stack invariant violated');
+    if (!top) throw new Error("frontmatter parser stack invariant violated");
     const line = raw.slice(indent);
 
     // Array item
-    if (line.startsWith('- ')) {
+    if (line.startsWith("- ")) {
       const value = line.slice(2).trim();
       let container = top.container;
       if (!Array.isArray(container)) {
@@ -53,7 +62,7 @@ function parseYamlSubset(src: string): FrontmatterObject {
         const parent = stack[stack.length - 2];
         if (parent && top.key) {
           if (Array.isArray(parent.container)) {
-            throw new Error('invalid frontmatter array nesting');
+            throw new Error("invalid frontmatter array nesting");
           }
           parent.container[top.key] = [];
           container = parent.container[top.key] as FrontmatterArray;
@@ -63,17 +72,19 @@ function parseYamlSubset(src: string): FrontmatterObject {
           continue;
         }
       }
-      if (value.includes(':')) {
+      if (value.includes(":")) {
         const obj: FrontmatterObject = {};
-        const colonIdx = value.indexOf(':');
+        const colonIdx = value.indexOf(":");
         const key = value.slice(0, colonIdx).trim();
         const valRaw = value.slice(colonIdx + 1).trim();
         if (valRaw) obj[key] = coerce(valRaw);
-        if (!Array.isArray(container)) throw new Error('frontmatter array container expected');
+        if (!Array.isArray(container))
+          throw new Error("frontmatter array container expected");
         container.push(obj);
         stack.push({ indent, container: obj, key: null });
       } else {
-        if (!Array.isArray(container)) throw new Error('frontmatter array container expected');
+        if (!Array.isArray(container))
+          throw new Error("frontmatter array container expected");
         container.push(coerce(value));
       }
       i++;
@@ -86,25 +97,26 @@ function parseYamlSubset(src: string): FrontmatterObject {
       i++;
       continue;
     }
-    const key = (kv[1] ?? '').trim();
+    const key = (kv[1] ?? "").trim();
     const val = kv[2];
 
-    if (val === '' || val === undefined) {
-      if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
+    if (val === "" || val === undefined) {
+      if (Array.isArray(top.container))
+        throw new Error("frontmatter object container expected");
       top.container[key] = {};
       stack.push({ indent, container: top.container[key], key });
       i++;
       continue;
     }
 
-    if (val === '|' || val === '|-' || val === '>' || val === '>-') {
-      const collected = [];
+    if (val === "|" || val === "|-" || val === ">" || val === ">-") {
+      const collected: string[] = [];
       const childIndent = indent + 2;
       i++;
       while (i < lines.length) {
-        const next = lines[i] ?? '';
+        const next = lines[i] ?? "";
         if (/^\s*$/.test(next)) {
-          collected.push('');
+          collected.push("");
           i++;
           continue;
         }
@@ -113,30 +125,34 @@ function parseYamlSubset(src: string): FrontmatterObject {
         collected.push(next.slice(childIndent));
         i++;
       }
-      if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
-      top.container[key] = collected.join('\n').trimEnd();
+      if (Array.isArray(top.container))
+        throw new Error("frontmatter object container expected");
+      top.container[key] = collected.join("\n").trimEnd();
       continue;
     }
 
-    if (val === '[]') {
-      if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
+    if (val === "[]") {
+      if (Array.isArray(top.container))
+        throw new Error("frontmatter object container expected");
       top.container[key] = [];
       i++;
       continue;
     }
 
-    if (val.startsWith('[') && val.endsWith(']')) {
-      if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
+    if (val.startsWith("[") && val.endsWith("]")) {
+      if (Array.isArray(top.container))
+        throw new Error("frontmatter object container expected");
       top.container[key] = val
         .slice(1, -1)
-        .split(',')
+        .split(",")
         .map((s) => coerce(s.trim()))
-        .filter((v) => v !== '');
+        .filter((v) => v !== "");
       i++;
       continue;
     }
 
-    if (Array.isArray(top.container)) throw new Error('frontmatter object container expected');
+    if (Array.isArray(top.container))
+      throw new Error("frontmatter object container expected");
     top.container[key] = coerce(val);
     i++;
   }
@@ -145,14 +161,17 @@ function parseYamlSubset(src: string): FrontmatterObject {
 }
 
 function coerce(raw: string | undefined): FrontmatterValue {
-  if (raw === undefined) return '';
+  if (raw === undefined) return "";
   let v = raw.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
     return v.slice(1, -1);
   }
-  if (v === 'true') return true;
-  if (v === 'false') return false;
-  if (v === 'null' || v === '~') return null;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (v === "null" || v === "~") return null;
   if (/^-?\d+$/.test(v)) return Number(v);
   if (/^-?\d*\.\d+$/.test(v)) return Number(v);
   return v;

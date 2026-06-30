@@ -17,7 +17,7 @@
  * surface badges next to each saved artifact.
  */
 
-type LintSeverity = 'P0' | 'P1' | 'P2';
+type LintSeverity = "P0" | "P1" | "P2";
 
 export type LintFinding = {
   severity: LintSeverity;
@@ -37,13 +37,29 @@ type CssTokenScope = {
 
 const PURPLE_HEXES = [
   // Tailwind violet / purple — the original AI-slop palette.
-  '#a855f7', '#9333ea', '#7c3aed', '#6d28d9', '#581c87',
-  '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe',
+  "#a855f7",
+  "#9333ea",
+  "#7c3aed",
+  "#6d28d9",
+  "#581c87",
+  "#8b5cf6",
+  "#a78bfa",
+  "#c4b5fd",
+  "#ddd6fe",
+  "#ede9fe",
   // Tailwind indigo — Refero's #1 reported AI tell. Common solid uses
   // (button fill, accent badge), not just gradients, are flagged
   // separately by `ai-default-indigo` below.
-  '#6366f1', '#4f46e5', '#4338ca', '#3730a3', '#312e81',
-  '#818cf8', '#a5b4fc', '#c7d2fe', '#e0e7ff', '#eef2ff',
+  "#6366f1",
+  "#4f46e5",
+  "#4338ca",
+  "#3730a3",
+  "#312e81",
+  "#818cf8",
+  "#a5b4fc",
+  "#c7d2fe",
+  "#e0e7ff",
+  "#eef2ff",
 ];
 
 // Blue / cyan stops used in the documented "blue→cyan two-stop trust
@@ -56,15 +72,31 @@ const PURPLE_HEXES = [
 // rule below pairs these against each other to close the gap.
 const TRUST_GRADIENT_BLUE_HEXES = [
   // Tailwind blue 500–900 + 400/300/200.
-  '#3b82f6', '#2563eb', '#1d4ed8', '#1e40af', '#1e3a8a',
-  '#60a5fa', '#93c5fd', '#bfdbfe',
+  "#3b82f6",
+  "#2563eb",
+  "#1d4ed8",
+  "#1e40af",
+  "#1e3a8a",
+  "#60a5fa",
+  "#93c5fd",
+  "#bfdbfe",
   // Tailwind sky 400–700 — the same blue→cyan ramp under a different name.
-  '#0ea5e9', '#0284c7', '#0369a1', '#38bdf8', '#7dd3fc',
+  "#0ea5e9",
+  "#0284c7",
+  "#0369a1",
+  "#38bdf8",
+  "#7dd3fc",
 ];
 const TRUST_GRADIENT_CYAN_HEXES = [
   // Tailwind cyan 500–900 + 400/300/200.
-  '#06b6d4', '#0891b2', '#0e7490', '#155e75', '#164e63',
-  '#22d3ee', '#67e8f9', '#a5f3fc',
+  "#06b6d4",
+  "#0891b2",
+  "#0e7490",
+  "#155e75",
+  "#164e63",
+  "#22d3ee",
+  "#67e8f9",
+  "#a5f3fc",
 ];
 
 // Subset of PURPLE_HEXES that constitute the canonical "default LLM
@@ -76,13 +108,33 @@ const TRUST_GRADIENT_CYAN_HEXES = [
 // "Default Tailwind indigo as accent" cardinal-sin entry — the prompt
 // contract documents the exact set the lint enforces.
 const AI_DEFAULT_INDIGO = [
-  '#6366f1', '#4f46e5', '#4338ca', '#3730a3',
-  '#8b5cf6', '#7c3aed', '#a855f7',
+  "#6366f1",
+  "#4f46e5",
+  "#4338ca",
+  "#3730a3",
+  "#8b5cf6",
+  "#7c3aed",
+  "#a855f7",
 ];
 
 const SLOP_EMOJI = [
-  '✨', '🚀', '🎯', '⚡', '🔥', '💡', '📈', '🎨', '🛡️', '🌟',
-  '💪', '🎉', '👋', '🙌', '✅', '⭐', '🏆',
+  "✨",
+  "🚀",
+  "🎯",
+  "⚡",
+  "🔥",
+  "💡",
+  "📈",
+  "🎨",
+  "🛡️",
+  "🌟",
+  "💪",
+  "🎉",
+  "👋",
+  "🙌",
+  "✅",
+  "⭐",
+  "🏆",
 ];
 
 // Simple sentinel words for invented-metric copy. Catching every claim is
@@ -119,41 +171,41 @@ const DISPLAY_SANS_RE =
  */
 export function lintArtifact(rawHtml: unknown): LintFinding[] {
   const out: LintFinding[] = [];
-  if (typeof rawHtml !== 'string' || rawHtml.length === 0) return out;
+  if (typeof rawHtml !== "string" || rawHtml.length === 0) return out;
 
   // Strip HTML comments before any pattern matching — comments often contain
   // pedagogical examples ("paste a `<section class="slide">` here") that
   // would otherwise fire false positives for the section / slide checks.
-  const html = rawHtml.replace(/<!--[\s\S]*?-->/g, '');
+  const html = rawHtml.replace(/<!--[\s\S]*?-->/g, "");
   const lower = html.toLowerCase();
 
   // ── P0-1: purple gradient backgrounds ─────────────────────────────
   for (const hex of PURPLE_HEXES) {
     const re = new RegExp(
       `linear-gradient\\([^)]*${escapeRe(hex)}[^)]*\\)`,
-      'i',
+      "i",
     );
     const m = re.exec(html);
     if (m) {
       out.push({
-        severity: 'P0',
-        id: 'purple-gradient',
+        severity: "P0",
+        id: "purple-gradient",
         message: `Found a violet/purple gradient using ${hex} — anti-slop list says no.`,
-        fix: 'Replace the gradient with a flat surface (var(--bg) or var(--surface)) or use the active accent at a single intensity, not in a gradient.',
+        fix: "Replace the gradient with a flat surface (var(--bg) or var(--surface)) or use the active accent at a single intensity, not in a gradient.",
         snippet: clip(m[0]),
       });
       break;
     }
   }
   // Also catch the literal "purple"/"violet" keyword in a linear-gradient.
-  if (out.find((f) => f.id === 'purple-gradient') === undefined) {
+  if (out.find((f) => f.id === "purple-gradient") === undefined) {
     const m = /linear-gradient\([^)]*\b(purple|violet)\b[^)]*\)/i.exec(html);
     if (m) {
       out.push({
-        severity: 'P0',
-        id: 'purple-gradient',
+        severity: "P0",
+        id: "purple-gradient",
         message: `Found a "${m[1]}" keyword inside a gradient — anti-slop.`,
-        fix: 'Remove the gradient or swap to a single solid color from the active design tokens.',
+        fix: "Remove the gradient or swap to a single solid color from the active design tokens.",
         snippet: clip(m[0]),
       });
     }
@@ -169,14 +221,14 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // contains both a blue token (hex or keyword) and a cyan token
   // (hex or keyword). Skip if the purple-gradient rule already fired
   // so we emit a single corrective signal per artifact.
-  if (out.find((f) => f.id === 'purple-gradient') === undefined) {
+  if (out.find((f) => f.id === "purple-gradient") === undefined) {
     const tg = detectBlueCyanTrustGradient(html);
     if (tg) {
       out.push({
-        severity: 'P0',
-        id: 'trust-gradient',
+        severity: "P0",
+        id: "trust-gradient",
         message: `Found a blue→cyan two-stop "trust" gradient — anti-slop list says no.`,
-        fix: 'Replace the gradient with a flat surface (var(--bg) or var(--surface)) or use a single design-token color. Two-stop blue→cyan trust gradients are a SaaS hero cliché.',
+        fix: "Replace the gradient with a flat surface (var(--bg) or var(--surface)) or use a single design-token color. Two-stop blue→cyan trust gradients are a SaaS hero cliché.",
         snippet: clip(tg),
       });
     }
@@ -194,17 +246,17 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // not the model defaulting, and must not fire. Component-local
   // variables (e.g. `.cta { --cta-bg: #6366f1; }`) stay in scope so
   // the lint still catches indigo laundered through a local var.
-  if (out.find((f) => f.id === 'purple-gradient') === undefined) {
+  if (out.find((f) => f.id === "purple-gradient") === undefined) {
     const htmlForIndigo = stripTokenBlocks(html);
     for (const hex of AI_DEFAULT_INDIGO) {
-      const re = new RegExp(escapeRe(hex), 'i');
+      const re = new RegExp(escapeRe(hex), "i");
       const m = re.exec(htmlForIndigo);
       if (m) {
         out.push({
-          severity: 'P0',
-          id: 'ai-default-indigo',
+          severity: "P0",
+          id: "ai-default-indigo",
           message: `Found a default LLM accent color (${hex}) — this is the most-reported AI design tell.`,
-          fix: 'Replace with var(--accent) from the active DESIGN.md. If the brief truly requires indigo, encode it as the design system\'s accent so it reads as intentional, not default.',
+          fix: "Replace with var(--accent) from the active DESIGN.md. If the brief truly requires indigo, encode it as the design system's accent so it reads as intentional, not default.",
           snippet: clip(m[0]),
         });
         break;
@@ -219,15 +271,15 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
       // button, list item — not in body prose.
       const re = new RegExp(
         `<(?:h[1-6]|button|li|span class="[^"]*icon[^"]*")[^>]*>[^<]*${escapeRe(e)}`,
-        'i',
+        "i",
       );
       const m = re.exec(html);
       if (m) {
         out.push({
-          severity: 'P0',
-          id: 'emoji-icon',
+          severity: "P0",
+          id: "emoji-icon",
           message: `Emoji "${e}" used as a UI icon — anti-slop list says SVG monoline only.`,
-          fix: 'Replace with a small inline SVG icon (1.6–1.8px stroke, currentColor) or remove the icon entirely.',
+          fix: "Replace with a small inline SVG icon (1.6–1.8px stroke, currentColor) or remove the icon entirely.",
           snippet: clip(m[0]),
         });
         break;
@@ -241,10 +293,11 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   const lam = leftAccentRe.exec(html);
   if (lam) {
     out.push({
-      severity: 'P0',
-      id: 'left-accent-card',
-      message: 'Rounded card with a coloured left border — the canonical AI-slop card pattern.',
-      fix: 'Drop either the border-radius (set 0px) or the border-left. Cards in the OD seed use hairline borders all-round, no left accent.',
+      severity: "P0",
+      id: "left-accent-card",
+      message:
+        "Rounded card with a coloured left border — the canonical AI-slop card pattern.",
+      fix: "Drop either the border-radius (set 0px) or the border-left. Cards in the OD seed use hairline borders all-round, no left accent.",
       snippet: clip(lam[0]),
     });
   }
@@ -255,9 +308,10 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   const dm = DISPLAY_SANS_RE.exec(html);
   if (dm) {
     out.push({
-      severity: 'P0',
-      id: 'sans-display',
-      message: 'A heading rule uses Inter / Roboto / system-sans as the display face — not the serif the seed binds.',
+      severity: "P0",
+      id: "sans-display",
+      message:
+        "A heading rule uses Inter / Roboto / system-sans as the display face — not the serif the seed binds.",
       fix: 'Use `font-family: var(--font-display)` on h1/h2/h3 and let the active design system pick the serif. Override only if the active direction is "tech / utility" or "modern minimal".',
       snippet: clip(dm[0]),
     });
@@ -268,10 +322,10 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     const m = re.exec(html);
     if (m) {
       out.push({
-        severity: 'P0',
-        id: 'invented-metric',
+        severity: "P0",
+        id: "invented-metric",
         message: `Suspected invented metric: "${m[0]}". Anti-slop list says: no numbers without a real source.`,
-        fix: 'Either remove the claim or replace with a placeholder (— or a labelled stub) until the user supplies a real number.',
+        fix: "Either remove the claim or replace with a placeholder (— or a labelled stub) until the user supplies a real number.",
         snippet: clip(m[0]),
       });
       break;
@@ -283,10 +337,10 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     const m = re.exec(html);
     if (m) {
       out.push({
-        severity: 'P0',
-        id: 'filler-copy',
+        severity: "P0",
+        id: "filler-copy",
         message: `Filler copy detected: "${m[0]}". Pages should ship with real, brief-derived copy.`,
-        fix: 'Replace with copy specific to the brief or delete the section entirely. An empty section is a design problem to solve with composition, not by inventing words.',
+        fix: "Replace with copy specific to the brief or delete the section entirely. An empty section is a design problem to solve with composition, not by inventing words.",
         snippet: clip(m[0]),
       });
       break;
@@ -296,9 +350,10 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // ── P0-7: scrollIntoView (breaks iframe preview) ──────────────────
   if (/\.scrollIntoView\s*\(/.test(html)) {
     out.push({
-      severity: 'P0',
-      id: 'scroll-into-view',
-      message: 'Element.scrollIntoView() detected — yanks the host page when an iframe boundary is crossed.',
+      severity: "P0",
+      id: "scroll-into-view",
+      message:
+        "Element.scrollIntoView() detected — yanks the host page when an iframe boundary is crossed.",
       fix: 'Use `scrollTo({ left, top, behavior: "smooth" })` on the actual scroller (see simple-deck seed for the proven pattern).',
     });
   }
@@ -324,7 +379,7 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     // commented-out by the browser but the rule-shaped regex below
     // would otherwise match it and emit a P1 finding for CSS that has
     // no rendered effect.
-    const css = (styleBlock[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = (styleBlock[1] ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
     // Match a CSS rule body containing text-transform: uppercase.
     // Capture the selector + body so we can inspect tracking. The body
     // alternation is `[^{}]*` (not `[^}]*`) so the regex matches only
@@ -339,17 +394,18 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     // tracking on a 48px heading. Restricting the body to `[^{}]*`
     // makes the regex skip the wrapper and match the inner rule
     // directly.
-    const upperRe = /([^{}]*)\{([^{}]*text-transform\s*:\s*uppercase[^{}]*)\}/gi;
+    const upperRe =
+      /([^{}]*)\{([^{}]*text-transform\s*:\s*uppercase[^{}]*)\}/gi;
     let m;
     while ((m = upperRe.exec(css)) !== null) {
-      const selector = (m[1] ?? '').trim();
-      const body = m[2] ?? '';
+      const selector = (m[1] ?? "").trim();
+      const body = m[2] ?? "";
       if (!hasAdequateUppercaseTracking(body, tokenScopes)) {
         out.push({
-          severity: 'P1',
-          id: 'all-caps-no-tracking',
+          severity: "P1",
+          id: "all-caps-no-tracking",
           message: `Selector \`${selector.slice(0, 60)}\` sets text-transform: uppercase without sufficient letter-spacing (≥0.06em).`,
-          fix: 'Add `letter-spacing: 0.08em` (typical) to the same rule. ALL CAPS without tracking looks cramped — Refero\'s typography rules call this out as a top-tier amateur tell.',
+          fix: "Add `letter-spacing: 0.08em` (typical) to the same rule. ALL CAPS without tracking looks cramped — Refero's typography rules call this out as a top-tier amateur tell.",
           snippet: clip(`${selector} { ${body.trim()} }`),
         });
         break outer;
@@ -366,19 +422,19 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // <style>-block branch — no separate threshold. Only fire if the
   // <style>-block scan above didn't already produce this id, so the
   // agent gets a single corrective signal per artifact.
-  if (out.find((f) => f.id === 'all-caps-no-tracking') === undefined) {
+  if (out.find((f) => f.id === "all-caps-no-tracking") === undefined) {
     const inlineStyleRe = /(?:^|\s)style\s*=\s*(["'])([\s\S]*?)\1/gi;
     let im;
     while ((im = inlineStyleRe.exec(html)) !== null) {
-      const decl = im[2] ?? '';
+      const decl = im[2] ?? "";
       if (!/text-transform\s*:\s*uppercase/i.test(decl)) continue;
       if (!hasAdequateUppercaseTracking(decl, tokenScopes)) {
         out.push({
-          severity: 'P1',
-          id: 'all-caps-no-tracking',
+          severity: "P1",
+          id: "all-caps-no-tracking",
           message:
-            'Inline style sets text-transform: uppercase without sufficient letter-spacing (≥0.06em).',
-          fix: 'Add `letter-spacing: 0.08em` (typical) to the same inline style. ALL CAPS without tracking looks cramped — Refero\'s typography rules call this out as a top-tier amateur tell.',
+            "Inline style sets text-transform: uppercase without sufficient letter-spacing (≥0.06em).",
+          fix: "Add `letter-spacing: 0.08em` (typical) to the same inline style. ALL CAPS without tracking looks cramped — Refero's typography rules call this out as a top-tier amateur tell.",
           snippet: clip(decl.trim()),
         });
         break;
@@ -394,10 +450,11 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     );
   if (extImg) {
     out.push({
-      severity: 'P1',
-      id: 'external-image',
-      message: 'External placeholder image CDN detected — fragile, looks fake when it 404s.',
-      fix: 'Use the .ph-img placeholder class shipped in the seed templates instead.',
+      severity: "P1",
+      id: "external-image",
+      message:
+        "External placeholder image CDN detected — fragile, looks fake when it 404s.",
+      fix: "Use the .ph-img placeholder class shipped in the seed templates instead.",
       snippet: clip(extImg[0]),
     });
   }
@@ -408,9 +465,9 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   const styleRe = /<style[^>]*>([\s\S]*?)<\/style>/i;
   const styleMatch = styleRe.exec(html);
   if (styleMatch) {
-    const css = styleMatch[1] ?? '';
+    const css = styleMatch[1] ?? "";
     const rootRe = /:root\s*\{[^}]*\}/g;
-    const cssWithoutRoot = css.replace(rootRe, '');
+    const cssWithoutRoot = css.replace(rootRe, "");
     const hexes = cssWithoutRoot.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
     // Allow up to ~12 raw hex values outside :root. Device chrome
     // (mobile-app frame: bezel gradient, side rails, status icons) has
@@ -419,11 +476,11 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     // signals tokens weren't honoured by the agent's generation.
     if (hexes.length > 12) {
       out.push({
-        severity: 'P1',
-        id: 'raw-hex',
+        severity: "P1",
+        id: "raw-hex",
         message: `${hexes.length} raw hex values found outside :root — design tokens probably not honoured.`,
-        fix: 'Move every color into the :root token block (--bg / --surface / --fg / --muted / --border / --accent) and reference via var(). Use color-mix() for derived tones.',
-        snippet: hexes.slice(0, 6).join(' '),
+        fix: "Move every color into the :root token block (--bg / --surface / --fg / --muted / --border / --accent) and reference via var(). Use color-mix() for derived tones.",
+        snippet: hexes.slice(0, 6).join(" "),
       });
     }
   }
@@ -434,14 +491,15 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // class system definitions. The seed's <style> block defines the
   // accent on many class selectors that won't all render on one page;
   // the body is what the user actually sees.
-  const styleStripped = html.replace(/<style[\s\S]*?<\/style>/gi, '');
-  const accentUsesInBody = (styleStripped.match(/var\(--accent\)/g) ?? []).length;
+  const styleStripped = html.replace(/<style[\s\S]*?<\/style>/gi, "");
+  const accentUsesInBody = (styleStripped.match(/var\(--accent\)/g) ?? [])
+    .length;
   if (accentUsesInBody > 6) {
     out.push({
-      severity: 'P1',
-      id: 'accent-overuse',
+      severity: "P1",
+      id: "accent-overuse",
       message: `var(--accent) used ${accentUsesInBody} times inline in the body — likely overused per screen.`,
-      fix: 'Cap accent usage at 2 visible uses per screen (one eyebrow + one CTA, OR one accent card + one tab). Demote the rest to var(--fg) or var(--muted).',
+      fix: "Cap accent usage at 2 visible uses per screen (one eyebrow + one CTA, OR one accent card + one tab). Demote the rest to var(--fg) or var(--muted).",
     });
   }
 
@@ -455,8 +513,8 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   ).length;
   if (sections.length > 0 && tagged < sections.length) {
     out.push({
-      severity: 'P2',
-      id: 'missing-section-anchor',
+      severity: "P2",
+      id: "missing-section-anchor",
       message: `${sections.length - tagged} of ${sections.length} <section>s lack data-od-id (or data-screen-label).`,
       fix: 'Add data-od-id="kebab-slug" (or data-screen-label="01 Cover" for slides) to every top-level <section> so comment mode can target it.',
     });
@@ -465,14 +523,16 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
   // ── P2-2: missing slide theme classes (deck specifically) ──────────
   // Triggered only if the artifact looks deck-shaped (has .slide).
   if (/class\s*=\s*["'][^"']*\bslide\b/.test(html)) {
-    const slideMatches = html.match(/<section\s+class\s*=\s*["'][^"']*\bslide\b[^"']*["']/gi) ?? [];
+    const slideMatches =
+      html.match(/<section\s+class\s*=\s*["'][^"']*\bslide\b[^"']*["']/gi) ??
+      [];
     const themed = slideMatches.filter((s) =>
       /\b(light|dark|hero\s+light|hero\s+dark)\b/.test(s),
     ).length;
     if (slideMatches.length > 0 && themed < slideMatches.length) {
       out.push({
-        severity: 'P0',
-        id: 'slide-theme-missing',
+        severity: "P0",
+        id: "slide-theme-missing",
         message: `${slideMatches.length - themed} of ${slideMatches.length} slides lack a theme class (light / dark / hero light / hero dark).`,
         fix: 'Every <section class="slide"> must include exactly one theme class. Audit your slide list and add light/dark/hero modifiers.',
       });
@@ -480,26 +540,26 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     // Theme rhythm: no 3+ same-theme in a row.
     const themeSeq = slideMatches
       .map((s) => {
-        if (/hero\s+dark/.test(s)) return 'HD';
-        if (/hero\s+light/.test(s)) return 'HL';
-        if (/\bdark\b/.test(s)) return 'D';
-        if (/\blight\b/.test(s)) return 'L';
-        return '?';
+        if (/hero\s+dark/.test(s)) return "HD";
+        if (/hero\s+light/.test(s)) return "HL";
+        if (/\bdark\b/.test(s)) return "D";
+        if (/\blight\b/.test(s)) return "L";
+        return "?";
       })
-      .filter((t) => t !== '?');
+      .filter((t) => t !== "?");
     for (let i = 0; i < themeSeq.length - 2; i++) {
       const a = themeSeq[i];
-      const isLight = (t: string | undefined) => t === 'L' || t === 'HL';
-      const isDark = (t: string | undefined) => t === 'D' || t === 'HD';
+      const isLight = (t: string | undefined) => t === "L" || t === "HL";
+      const isDark = (t: string | undefined) => t === "D" || t === "HD";
       if (
         (isLight(a) && isLight(themeSeq[i + 1]) && isLight(themeSeq[i + 2])) ||
         (isDark(a) && isDark(themeSeq[i + 1]) && isDark(themeSeq[i + 2]))
       ) {
         out.push({
-          severity: 'P1',
-          id: 'slide-rhythm',
+          severity: "P1",
+          id: "slide-rhythm",
           message: `Three same-theme slides in a row at position ${i + 1}–${i + 3} — visual fatigue.`,
-          fix: 'Swap the middle slide to the opposite theme (light → dark, or dark → light). For 8+ slides, mix in at least one hero light AND one hero dark.',
+          fix: "Swap the middle slide to the opposite theme (light → dark, or dark → light). For 8+ slides, mix in at least one hero light AND one hero dark.",
         });
         break;
       }
@@ -517,37 +577,37 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
  * @returns {string}
  */
 export function renderFindingsForAgent(findings: LintFinding[]): string {
-  if (findings.length === 0) return '';
+  if (findings.length === 0) return "";
   const sorted = [...findings].sort((a, b) => severity(a) - severity(b));
   const lines = [
-    '<artifact-lint>',
-    'The artifact you just produced has the following anti-slop / design-token issues.',
-    `${findings.filter((f) => f.severity === 'P0').length} P0 (must fix), ${findings.filter((f) => f.severity === 'P1').length} P1 (should fix), ${findings.filter((f) => f.severity === 'P2').length} P2 (nice to have).`,
-    'Re-emit a corrected `<artifact>` in your next turn — do not write a separate explanation; the user has the previous version already.',
-    '',
+    "<artifact-lint>",
+    "The artifact you just produced has the following anti-slop / design-token issues.",
+    `${findings.filter((f) => f.severity === "P0").length} P0 (must fix), ${findings.filter((f) => f.severity === "P1").length} P1 (should fix), ${findings.filter((f) => f.severity === "P2").length} P2 (nice to have).`,
+    "Re-emit a corrected `<artifact>` in your next turn — do not write a separate explanation; the user has the previous version already.",
+    "",
   ];
   for (const f of sorted) {
     lines.push(`**[${f.severity}] ${f.id}** — ${f.message}`);
     lines.push(`  Fix: ${f.fix}`);
     if (f.snippet) lines.push(`  Snippet: \`${f.snippet}\``);
-    lines.push('');
+    lines.push("");
   }
-  lines.push('</artifact-lint>');
-  return lines.join('\n');
+  lines.push("</artifact-lint>");
+  return lines.join("\n");
 }
 
 function severity(f: LintFinding): number {
-  return f.severity === 'P0' ? 0 : f.severity === 'P1' ? 1 : 2;
+  return f.severity === "P0" ? 0 : f.severity === "P1" ? 1 : 2;
 }
 
 function clip(s: string): string {
-  if (!s) return '';
-  const trimmed = s.replace(/\s+/g, ' ').trim();
-  return trimmed.length > 200 ? trimmed.slice(0, 197) + '…' : trimmed;
+  if (!s) return "";
+  const trimmed = s.replace(/\s+/g, " ").trim();
+  return trimmed.length > 200 ? trimmed.slice(0, 197) + "…" : trimmed;
 }
 
 function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Scan every `linear-gradient(...)` body for a blue→cyan two-stop
@@ -634,7 +694,10 @@ function detectBlueCyanTrustGradient(html: string): string | null {
 // pairing (48px, 1px) that an independent per-token cartesian would
 // emit.
 const ROOT_FONT_PX = 16;
-function hasAdequateUppercaseTracking(body: string, scopes?: CssTokenScope[]): boolean {
+function hasAdequateUppercaseTracking(
+  body: string,
+  scopes?: CssTokenScope[],
+): boolean {
   const themes = buildResolvedThemes(scopes ?? []);
   for (const themeMap of themes) {
     const resolved = resolveCssVars(body, themeMap);
@@ -652,7 +715,7 @@ function hasAdequateUppercaseTracking(body: string, scopes?: CssTokenScope[]): b
 // so the lint must judge against the last declaration, not the first.
 function isResolvedTrackingAdequate(body: string): boolean {
   const decls = parseDeclarations(body);
-  const ls = findLastDecl(decls, 'letter-spacing');
+  const ls = findLastDecl(decls, "letter-spacing");
   if (!ls) return false;
   const lsMatch = /^(-?\d*\.?\d+)\s*(em|px|rem)\b/i.exec(ls.value);
   if (!lsMatch) return false;
@@ -661,13 +724,13 @@ function isResolvedTrackingAdequate(body: string): boolean {
   if (valueText == null || unitText == null) return false;
   const v = parseFloat(valueText);
   const unit = unitText.toLowerCase();
-  if (unit === 'em') return v >= 0.06;
-  const trackingPx = unit === 'rem' ? v * ROOT_FONT_PX : v;
+  if (unit === "em") return v >= 0.06;
+  const trackingPx = unit === "rem" ? v * ROOT_FONT_PX : v;
   const fsPx = resolveFontSizePx(decls);
   if (fsPx != null) {
     return fsPx > 0 && trackingPx >= fsPx * 0.06;
   }
-  if (decls.some((d) => d.prop === 'font-size')) return false;
+  if (decls.some((d) => d.prop === "font-size")) return false;
   return trackingPx >= 1;
 }
 
@@ -693,7 +756,7 @@ function isResolvedTrackingAdequate(body: string): boolean {
 // pairings such as `(default-size, dark-track)` and emitted false
 // positives on legitimate light/dark theme variants.
 function buildResolvedThemes(scopes: CssTokenScope[]): Map<string, string>[] {
-  const themeKeys = new Set(['default']);
+  const themeKeys = new Set(["default"]);
   for (const scope of scopes) {
     for (const k of scope.themeKeys) themeKeys.add(k);
   }
@@ -720,7 +783,10 @@ function isBareGlobalSelector(s: string): boolean {
   return /^(?::root|html|body)$/.test(s);
 }
 
-function findLastDecl(decls: CssDeclaration[], prop: string): CssDeclaration | undefined {
+function findLastDecl(
+  decls: CssDeclaration[],
+  prop: string,
+): CssDeclaration | undefined {
   for (let i = decls.length - 1; i >= 0; i--) {
     const decl = decls[i];
     if (decl && decl.prop === prop) return decl;
@@ -734,11 +800,11 @@ function findLastDecl(decls: CssDeclaration[], prop: string): CssDeclaration | u
 // or `font-size` cannot collide with token-name declarations.
 function parseDeclarations(body: string): CssDeclaration[] {
   const out: CssDeclaration[] = [];
-  for (const raw of body.split(';')) {
-    const idx = raw.indexOf(':');
+  for (const raw of body.split(";")) {
+    const idx = raw.indexOf(":");
     if (idx < 0) continue;
     const prop = raw.slice(0, idx).trim().toLowerCase();
-    if (!prop || prop.startsWith('--')) continue;
+    if (!prop || prop.startsWith("--")) continue;
     const value = raw.slice(idx + 1).trim();
     if (!value) continue;
     out.push({ prop, value });
@@ -760,7 +826,7 @@ function parseDeclarations(body: string): CssDeclaration[] {
 // stale earlier `48px`. CSS cascade is last-write-wins on conflicting
 // declarations within a single rule body.
 function resolveFontSizePx(decls: CssDeclaration[]): number | null {
-  const fs = findLastDecl(decls, 'font-size');
+  const fs = findLastDecl(decls, "font-size");
   if (!fs) return null;
   const m = /^(-?\d*\.?\d+)\s*(px|rem)\b/i.exec(fs.value);
   if (!m) return null;
@@ -769,7 +835,7 @@ function resolveFontSizePx(decls: CssDeclaration[]): number | null {
   if (valueText == null || unitText == null) return null;
   const v = parseFloat(valueText);
   const unit = unitText.toLowerCase();
-  return unit === 'rem' ? v * ROOT_FONT_PX : v;
+  return unit === "rem" ? v * ROOT_FONT_PX : v;
 }
 
 // Collect CSS custom properties (`--name: value`) declared in global
@@ -805,25 +871,32 @@ function resolveFontSizePx(decls: CssDeclaration[]): number | null {
 function extractCssTokens(html: string): CssTokenScope[] {
   const scopes: CssTokenScope[] = [];
   for (const styleBlock of html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)) {
-    const css = (styleBlock[1] ?? '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = (styleBlock[1] ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
     const ruleRe = /([^{}]*)\{([^{}]*)\}/g;
     let m;
     while ((m = ruleRe.exec(css)) !== null) {
-      const sel = (m[1] ?? '').trim();
+      const sel = (m[1] ?? "").trim();
       if (!selectorListIsGlobalThemeScope(sel)) continue;
-      const selectors = sel.split(',').map((s) => s.trim()).filter(Boolean);
+      const selectors = sel
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const isDefault = selectors.some(isBareGlobalSelector);
-      const themeKeys = new Set(
+      const themeKeys = new Set<string>(
         selectors.filter((s) => !isBareGlobalSelector(s)),
       );
-      const body = m[2] ?? '';
+      const body = m[2] ?? "";
       const tokens = new Map();
-      for (const decl of body.split(';').map((d) => d.trim()).filter(Boolean)) {
+      for (const decl of body
+        .split(";")
+        .map((d) => d.trim())
+        .filter(Boolean)) {
         const dm = /^(--[\w-]+)\s*:\s*(.+)$/.exec(decl);
         if (dm) {
           const tokenName = dm[1];
           const tokenValue = dm[2];
-          if (tokenName != null && tokenValue != null) tokens.set(tokenName, tokenValue.trim());
+          if (tokenName != null && tokenValue != null)
+            tokens.set(tokenName, tokenValue.trim());
         }
       }
       if (tokens.size === 0) continue;
@@ -893,7 +966,8 @@ function resolveCssVars(body: string, tokens: Map<string, string>): string {
 function stripTokenBlocks(input: string): string {
   return input.replace(
     /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_m: string, open: string, css: string, close: string) => `${open}${stripTokenBlocksFromCss(css)}${close}`,
+    (_m: string, open: string, css: string, close: string) =>
+      `${open}${stripTokenBlocksFromCss(css)}${close}`,
   );
 }
 
@@ -903,7 +977,7 @@ function stripTokenBlocksFromCss(css: string): string {
   // produce a declaration fragment that begins with the comment,
   // fail `isTokenShapedDeclaration`, and leave a legitimate token
   // definition in scope of the indigo scan.
-  const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const cleaned = css.replace(/\/\*[\s\S]*?\*\//g, "");
   // The body alternation is `[^{}]*` (not `[^}]*`) so the regex matches
   // only innermost `selector { body }` rules. That lets us recognize
   // global token blocks nested inside at-rule wrappers — e.g.
@@ -912,24 +986,27 @@ function stripTokenBlocksFromCss(css: string): string {
   // `@media` wrapper is preserved with the inner token block stripped,
   // so the indigo scan no longer fires on legitimate responsive theme
   // declarations.
-  return cleaned.replace(/([^{}]*)\{([^{}]*)\}/g, (full: string, selector: string, body: string) => {
-    const sel = (selector || '').trim();
-    if (!selectorListIsGlobalThemeScope(sel)) return full;
-    const decls = (body || '')
-      .split(';')
-      .map((d: string) => d.trim())
-      .filter(Boolean);
-    if (decls.length === 0) return full;
-    const tokenShaped = decls.every(isTokenShapedDeclaration);
-    if (!tokenShaped) return full;
-    // The `--accent` escape hatch is for `--accent` only. Any other
-    // global token whose value carries an AI-default indigo hex is
-    // still laundering the LLM-default color through an arbitrary
-    // name (`--primary: #6366f1`, `--button-bg: #4f46e5`, …). Keep
-    // the rule in scope so the indigo lint fires on the literal hex.
-    if (decls.some(declarationLaundersIndigo)) return full;
-    return '';
-  });
+  return cleaned.replace(
+    /([^{}]*)\{([^{}]*)\}/g,
+    (full: string, selector: string, body: string) => {
+      const sel = (selector || "").trim();
+      if (!selectorListIsGlobalThemeScope(sel)) return full;
+      const decls = (body || "")
+        .split(";")
+        .map((d: string) => d.trim())
+        .filter(Boolean);
+      if (decls.length === 0) return full;
+      const tokenShaped = decls.every(isTokenShapedDeclaration);
+      if (!tokenShaped) return full;
+      // The `--accent` escape hatch is for `--accent` only. Any other
+      // global token whose value carries an AI-default indigo hex is
+      // still laundering the LLM-default color through an arbitrary
+      // name (`--primary: #6366f1`, `--button-bg: #4f46e5`, …). Keep
+      // the rule in scope so the indigo lint fires on the literal hex.
+      if (decls.some(declarationLaundersIndigo)) return full;
+      return "";
+    },
+  );
 }
 
 function declarationLaundersIndigo(decl: string): boolean {
@@ -938,7 +1015,7 @@ function declarationLaundersIndigo(decl: string): boolean {
   const tokenName = m[1];
   const tokenValue = m[2];
   if (tokenName == null || tokenValue == null) return false;
-  if (tokenName.toLowerCase() === '--accent') return false;
+  if (tokenName.toLowerCase() === "--accent") return false;
   const value = tokenValue.toLowerCase();
   for (const hex of AI_DEFAULT_INDIGO) {
     if (value.includes(hex.toLowerCase())) return true;
@@ -957,7 +1034,10 @@ function isTokenShapedDeclaration(decl: string): boolean {
 }
 
 function selectorListIsGlobalThemeScope(selector: string): boolean {
-  const parts = selector.split(',').map((s: string) => s.trim()).filter(Boolean);
+  const parts = selector
+    .split(",")
+    .map((s: string) => s.trim())
+    .filter(Boolean);
   if (parts.length === 0) return false;
   return parts.every(isGlobalThemeScopeSelector);
 }
@@ -972,9 +1052,9 @@ function selectorListIsGlobalThemeScope(selector: string): boolean {
 // is the exact component-local indigo laundering this lint is
 // meant to catch.
 const GLOBAL_THEME_ATTRIBUTES = new Set([
-  'data-theme',
-  'data-color-scheme',
-  'data-mode',
+  "data-theme",
+  "data-color-scheme",
+  "data-mode",
 ]);
 
 function isGlobalThemeScopeSelector(s: string): boolean {
@@ -984,7 +1064,8 @@ function isGlobalThemeScopeSelector(s: string): boolean {
   // names one of GLOBAL_THEME_ATTRIBUTES. A component/state attribute
   // suffix (`:root[data-variant="primary"]`, `html[aria-current="page"]`)
   // must keep the rule in scope of the indigo lint.
-  const tagAttr = /^(?::root|html|body)(?:\[([a-zA-Z-]+)(?:[*^$|~]?=[^\]]*)?\])?$/.exec(s);
+  const tagAttr =
+    /^(?::root|html|body)(?:\[([a-zA-Z-]+)(?:[*^$|~]?=[^\]]*)?\])?$/.exec(s);
   if (tagAttr) {
     const attrName = tagAttr[1];
     if (!attrName) return true;

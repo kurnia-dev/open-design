@@ -37,7 +37,7 @@ export async function listPromptTemplates(root: string): Promise<PromptTemplate[
   const out: PromptTemplate[] = [];
   for (const surface of SUPPORTED_SURFACES) {
     const dir = path.join(root, surface);
-    let entries = [];
+    let entries: any[] = [];
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {

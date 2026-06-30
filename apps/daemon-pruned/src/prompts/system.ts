@@ -33,7 +33,6 @@ import { buildOfficialDesignerPrompt } from './official-system.js';
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { renderMediaGenerationContract } from './media-contract.js';
-import { IMAGE_MODELS } from '../media-models.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import type { ChatSessionMode, MediaExecutionPolicy, MediaSurface } from '@open-design/contracts';
@@ -918,14 +917,7 @@ function renderConnectedExternalMcpDirective(
   ].join('');
 }
 
-const CODEX_IMAGEGEN_MODEL_IDS = new Set(
-  IMAGE_MODELS.filter(
-    (model) =>
-      model?.provider === 'openai' &&
-      typeof model?.id === 'string' &&
-      model.id.startsWith('gpt-image-'),
-  ).map((model) => model.id),
-);
+const CODEX_IMAGEGEN_MODEL_IDS = new Set<string>();
 
 export function resolveCodexImagegenModelId(
   metadata: ProjectMetadata | undefined,
@@ -1300,7 +1292,7 @@ function renderMetadataBlock(
     const tpl = metadata.promptTemplate;
     lines.push('');
     lines.push(`### Reference prompt template — "${tpl.title ?? 'untitled'}"`);
-    const meta = [];
+    const meta: string[] = [];
     if (tpl.category) meta.push(`category: ${tpl.category}`);
     if (tpl.model) meta.push(`suggested model: ${tpl.model}`);
     if (tpl.aspect) meta.push(`aspect: ${tpl.aspect}`);

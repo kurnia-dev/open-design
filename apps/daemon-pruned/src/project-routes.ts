@@ -14,7 +14,6 @@ import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems, readDesignSystemPackageInfo } from './design-systems.js';
 import { startDevScript, getDevServerUrl, stopDevScript } from './dev-server.js';
 
-import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
 import { isSafeId } from './projects.js';
@@ -1497,7 +1496,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const requested = Array.isArray(req.body?.locations) ? req.body.locations : null;
       if (!requested) return sendApiError(res, 400, 'BAD_REQUEST', 'locations must be an array');
       const previousLocations = await configuredProjectLocations();
-      const prepared = [];
+      const prepared: any[] = [];
       for (const loc of requested) {
         if (!loc || typeof loc !== 'object' || typeof loc.path !== 'string') continue;
         const canonicalPath = await ensureProjectLocation(loc.path);
@@ -1526,7 +1525,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   app.post('/api/project-locations/scan', async (_req, res) => {
     try {
       const locations = (await configuredProjectLocations()).filter((loc: any) => !loc.builtIn);
-      const imported = [];
+      const imported: any[] = [];
       const existing: string[] = [];
       const skipped: Array<{ path: string; reason: string }> = [];
       let scanned = 0;
@@ -2526,7 +2525,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       const files = await listFiles(PROJECTS_DIR, sourceProjectId, {
         metadata: sourceProject.metadata,
       });
-      const snapshot = [];
+      const snapshot: any[] = [];
       for (const f of files) {
         if (f.kind !== 'html' && f.kind !== 'text' && f.kind !== 'code')
           continue;
@@ -4260,7 +4259,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
         // stashed by the multer destination resolver. Prepend it so callers
         // get the file's true project-relative path, not just its basename.
         const relDir = typeof (req as any)._uploadRelDir === 'string' ? (req as any)._uploadRelDir : '';
-        const out = [];
+        const out: any[] = [];
         for (const f of incoming) {
           try {
             const stat = await fs.promises.stat(f.path);

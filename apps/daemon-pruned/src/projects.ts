@@ -7,59 +7,74 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { link, lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
-import path from 'node:path';
-import JSZip from 'jszip';
+import {
+  link,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import path from "node:path";
+import JSZip from "jszip";
 import {
   inferLegacyManifest,
   parsePersistedManifest,
   validateArtifactManifestInput,
-} from './artifact-manifest.js';
+} from "./artifact-manifest.js";
 import {
   ArtifactRegressionError,
   STUB_GUARDED_MANIFEST_KINDS,
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
-} from './artifact-stub-guard.js';
+} from "./artifact-stub-guard.js";
 import {
   assertArtifactPublicationAllowed,
   isPublicationGuardedArtifactKind,
-} from './artifact-publication-guard.js';
-import { isIgnoredProjectDirName } from './project-ignored-dirs.js';
-import { isSandboxModeEnabled } from './sandbox-mode.js';
+} from "./artifact-publication-guard.js";
+import { isIgnoredProjectDirName } from "./project-ignored-dirs.js";
+import { isSandboxModeEnabled } from "./sandbox-mode.js";
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
-const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
-const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
-const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
+const RESERVED_PROJECT_FILE_SEGMENTS = new Set([".live-artifacts"]);
+const DESIGN_HANDOFF_FILENAME = "DESIGN-HANDOFF.md";
+const DESIGN_MANIFEST_FILENAME = "DESIGN-MANIFEST.json";
 export const RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS = 1000;
 export const projectFileRenameTestHooks = {
-  beforeCommit: null as null | ((paths: { source: string; target: string }) => Promise<void> | void),
+  beforeCommit: null as
+    | null
+    | ((paths: { source: string; target: string }) => Promise<void> | void),
 };
 
 export function isRunTouchedProjectFile(fileMtimeMs, runStartTimeMs) {
-  if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs)) return false;
+  if (!Number.isFinite(fileMtimeMs) || !Number.isFinite(runStartTimeMs))
+    return false;
   return fileMtimeMs + RUN_ARTIFACT_RECONCILE_MTIME_GRACE_MS >= runStartTimeMs;
 }
 
 export function projectDir(projectsRoot, projectId) {
-  if (!isSafeId(projectId)) throw new Error('invalid project id');
+  if (!isSafeId(projectId)) throw new Error("invalid project id");
   return path.join(projectsRoot, projectId);
 }
 
 export class SandboxImportedProjectError extends Error {
-  code = 'SANDBOX_IMPORTED_PROJECT_UNAVAILABLE';
+  code = "SANDBOX_IMPORTED_PROJECT_UNAVAILABLE";
 
   constructor() {
     super(
-      'Imported-folder projects are not available in OD_SANDBOX_MODE until their files are mirrored into the managed project directory.',
+      "Imported-folder projects are not available in OD_SANDBOX_MODE until their files are mirrored into the managed project directory.",
     );
-    this.name = 'SandboxImportedProjectError';
+    this.name = "SandboxImportedProjectError";
   }
 }
 
 function hasExternalProjectRoot(metadata?) {
-  if (typeof metadata?.baseDir !== 'string') return false;
+  if (typeof metadata?.baseDir !== "string") return false;
   return path.isAbsolute(path.normalize(metadata.baseDir));
 }
 
@@ -77,14 +92,19 @@ function usesExternalProjectRoot(metadata?) {
 // Returns the folder a project's files live in. For git-linked projects
 // (metadata.baseDir set), this is the user's own folder. Otherwise falls
 // back to the standard computed path under projectsRoot.
-export function resolveProjectDir(projectsRoot, projectId, metadata?, opts = {}) {
+export function resolveProjectDir(
+  projectsRoot,
+  projectId,
+  metadata?,
+  opts = {},
+) {
   if (!opts.allowUnavailableSandboxImportedProject) {
     assertSandboxProjectRootAvailable(metadata);
   }
   if (usesExternalProjectRoot(metadata)) {
     return path.normalize(metadata.baseDir);
   }
-  if (!isSafeId(projectId)) throw new Error('invalid project id');
+  if (!isSafeId(projectId)) throw new Error("invalid project id");
   return path.join(projectsRoot, projectId);
 }
 
@@ -100,11 +120,13 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
 export async function listFiles(projectsRoot, projectId, opts = {}) {
   const metadata = opts?.metadata;
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
-  const out = [];
+  const out: any[] = [];
   // Skip build/install dirs for linked folders so node_modules doesn't stall
   // the walk on large repos.
-  const skipDirs = usesExternalProjectRoot(metadata) ? isIgnoredProjectDirName : undefined;
-  await collectFiles(dir, '', out, skipDirs, dir);
+  const skipDirs = usesExternalProjectRoot(metadata)
+    ? isIgnoredProjectDirName
+    : undefined;
+  await collectFiles(dir, "", out, skipDirs, dir);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
   const since = Number(opts.since);
@@ -119,22 +141,27 @@ export async function listProjectFolders(projectsRoot, projectId, opts = {}) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const out = [];
   const skipDirs = metadata?.baseDir ? isIgnoredProjectDirName : undefined;
-  await collectFolders(dir, '', out, skipDirs);
+  await collectFolders(dir, "", out, skipDirs);
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
-async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) => boolean) {
+async function collectFolders(
+  dir,
+  relDir,
+  out,
+  shouldSkipDir?: (name: string) => boolean,
+) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (err && err.code === "ENOENT") return;
     throw err;
   }
   for (const e of entries) {
     if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.')) continue;
+    if (e.name.startsWith(".")) continue;
     if (shouldSkipDir?.(e.name)) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
@@ -142,7 +169,7 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
     out.push({
       name: rel,
       path: rel,
-      type: 'dir',
+      type: "dir",
       size: 0,
       mtime: st.mtimeMs,
     });
@@ -150,21 +177,26 @@ async function collectFolders(dir, relDir, out, shouldSkipDir?: (name: string) =
   }
 }
 
-export async function createProjectFolder(projectsRoot, projectId, name, metadata?) {
+export async function createProjectFolder(
+  projectsRoot,
+  projectId,
+  name,
+  metadata?,
+) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
   await mkdir(target, { recursive: true });
   const st = await stat(target);
   if (!st.isDirectory()) {
-    const err = new Error('target path is not a folder');
-    err.code = 'ENOTDIR';
+    const err = new Error("target path is not a folder");
+    err.code = "ENOTDIR";
     throw err;
   }
   return {
     name: safeName,
     path: safeName,
-    type: 'dir',
+    type: "dir",
     size: 0,
     mtime: st.mtimeMs,
   };
@@ -175,10 +207,15 @@ export async function createProjectFolder(projectsRoot, projectId, name, metadat
 // forward-slash relative path ('' when no subdir was requested). Used by the
 // upload route so attachments dropped/picked while viewing a folder land in
 // that folder instead of the project root.
-export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metadata?) {
+export async function ensureProjectSubdir(
+  projectsRoot,
+  projectId,
+  subdir,
+  metadata?,
+) {
   const dir = await ensureProject(projectsRoot, projectId, metadata);
-  const raw = typeof subdir === 'string' ? subdir.trim() : '';
-  if (!raw) return { absDir: dir, relDir: '' };
+  const raw = typeof subdir === "string" ? subdir.trim() : "";
+  if (!raw) return { absDir: dir, relDir: "" };
   const relDir = sanitizePath(raw);
   const target = await resolveSafeReal(dir, relDir);
   await mkdir(target, { recursive: true });
@@ -188,20 +225,25 @@ export async function ensureProjectSubdir(projectsRoot, projectId, subdir, metad
 // Recursively delete a folder (and everything under it) within the project
 // sandbox. Refuses to delete the project root itself. resolveSafeReal confines
 // the target to the project tree even across descendant symlinks.
-export async function deleteProjectFolder(projectsRoot, projectId, name, metadata?) {
+export async function deleteProjectFolder(
+  projectsRoot,
+  projectId,
+  name,
+  metadata?,
+) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
   const dirReal = await realpath(dir).catch(() => dir);
   if (target === dirReal) {
-    const err = new Error('cannot delete project root');
-    err.code = 'EINVAL';
+    const err = new Error("cannot delete project root");
+    err.code = "EINVAL";
     throw err;
   }
   const st = await stat(target);
   if (!st.isDirectory()) {
-    const err = new Error('target is not a folder');
-    err.code = 'ENOTDIR';
+    const err = new Error("target is not a folder");
+    err.code = "ENOTDIR";
     throw err;
   }
   await rm(target, { recursive: true, force: true });
@@ -213,27 +255,39 @@ export async function deleteProjectFolder(projectsRoot, projectId, name, metadat
 // auto-selected tab.
 export async function detectEntryFile(dir: string): Promise<string | null> {
   try {
-    await stat(path.join(dir, 'index.html'));
-    return 'index.html';
-  } catch { /* not found */ }
+    await stat(path.join(dir, "index.html"));
+    return "index.html";
+  } catch {
+    /* not found */
+  }
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    const htmlFile = entries.find((e) => e.isFile() && /\.html?$/i.test(e.name));
+    const htmlFile = entries.find(
+      (e) => e.isFile() && /\.html?$/i.test(e.name),
+    );
     if (htmlFile) return htmlFile.name;
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
-async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => boolean, projectRoot = dir) {
+async function collectFiles(
+  dir,
+  relDir,
+  out,
+  shouldSkipDir?: (name: string) => boolean,
+  projectRoot = dir,
+) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (err && err.code === "ENOENT") return;
     throw err;
   }
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+    if (e.name.startsWith(".")) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
@@ -242,13 +296,13 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
       continue;
     }
     if (!e.isFile()) continue;
-    if (e.name.endsWith('.artifact.json')) continue;
+    if (e.name.endsWith(".artifact.json")) continue;
     const st = await stat(full);
     const manifest = await readManifestForPath(projectRoot, rel);
     out.push({
       name: rel,
       path: rel,
-      type: 'file',
+      type: "file",
       size: st.size,
       mtime: st.mtimeMs,
       kind: kindFor(rel),
@@ -265,11 +319,16 @@ async function collectFiles(dir, relDir, out, shouldSkipDir?: (name: string) => 
 // the user sees in the file panel. Used by the "Download as .zip" share
 // menu item, which exports the user's actual project tree (e.g. the
 // uploaded `ui-design/` folder), not just the rendered HTML.
-export async function buildProjectArchive(projectsRoot, projectId, root, metadata?) {
+export async function buildProjectArchive(
+  projectsRoot,
+  projectId,
+  root,
+  metadata?,
+) {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   let archiveRoot = projectRoot;
-  let archiveBaseName = '';
-  if (typeof root === 'string' && root.trim().length > 0) {
+  let archiveBaseName = "";
+  if (typeof root === "string" && root.trim().length > 0) {
     // Use the symlink-aware resolver so that an imported folder containing
     // e.g. `docs -> /Users/me/.ssh` cannot exfiltrate via
     // GET /api/projects/:id/archive?root=docs. resolveSafe()'s string
@@ -288,24 +347,24 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
   try {
     rootStat = await stat(archiveRoot);
   } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      const e = new Error('archive root does not exist');
-      e.code = 'ENOENT';
+    if (err && err.code === "ENOENT") {
+      const e = new Error("archive root does not exist");
+      e.code = "ENOENT";
       throw e;
     }
     throw err;
   }
   if (!rootStat.isDirectory()) {
-    const err = new Error('archive root is not a directory');
-    err.code = 'ENOTDIR';
+    const err = new Error("archive root is not a directory");
+    err.code = "ENOTDIR";
     throw err;
   }
 
   const entries = [];
-  await collectArchiveEntries(archiveRoot, '', entries);
+  await collectArchiveEntries(archiveRoot, "", entries);
   if (entries.length === 0) {
-    const err = new Error('archive root is empty');
-    err.code = 'ENOENT';
+    const err = new Error("archive root is empty");
+    err.code = "ENOENT";
     throw err;
   }
 
@@ -318,20 +377,29 @@ export async function buildProjectArchive(projectsRoot, projectId, root, metadat
     });
   }
   addDesignHandoff(zip, entries, archiveBaseName || path.basename(projectRoot));
-  addDesignManifest(zip, entries, archiveBaseName || path.basename(projectRoot));
+  addDesignManifest(
+    zip,
+    entries,
+    archiveBaseName || path.basename(projectRoot),
+  );
   // Level 6 is the zlib default — balances speed and ratio for typical
   // project trees (HTML/CSS/JS plus a handful of assets). Level 9 buys
   // <5% on already-compressed PNGs/fonts at 2-3× CPU; level 1 produces
   // noticeably larger archives. Revisit only if profiling says so.
   const buffer = await zip.generateAsync({
-    type: 'nodebuffer',
-    compression: 'DEFLATE',
+    type: "nodebuffer",
+    compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
   return { buffer, baseName: archiveBaseName };
 }
 
-export async function buildBatchArchive(projectsRoot, projectId, fileNames, metadata?) {
+export async function buildBatchArchive(
+  projectsRoot,
+  projectId,
+  fileNames,
+  metadata?,
+) {
   const projectRoot = resolveProjectDir(projectsRoot, projectId, metadata);
   const zip = new JSZip();
   let packed = 0;
@@ -352,17 +420,23 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
     const relSegments = path.relative(projectRoot, filePath).split(path.sep);
     let hidden = false;
     for (const seg of relSegments) {
-      if (seg.startsWith('.')) {
+      if (seg.startsWith(".")) {
         hidden = true;
         break;
       }
     }
     if (hidden) {
-      rejected.push({ name, reason: 'hidden segments are not eligible for archive' });
+      rejected.push({
+        name,
+        reason: "hidden segments are not eligible for archive",
+      });
       continue;
     }
-    if (path.basename(filePath).endsWith('.artifact.json')) {
-      rejected.push({ name, reason: 'artifact sidecars are not eligible for archive' });
+    if (path.basename(filePath).endsWith(".artifact.json")) {
+      rejected.push({
+        name,
+        reason: "artifact sidecars are not eligible for archive",
+      });
       continue;
     }
 
@@ -376,7 +450,7 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
       try {
         segStat = await lstat(walk);
       } catch (err) {
-        if (err && err.code === 'ENOENT') {
+        if (err && err.code === "ENOENT") {
           rejected.push({ name, reason: `segment not found: ${seg}` });
           break;
         }
@@ -388,10 +462,11 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
       }
     }
     if (symlinkFound) {
-      rejected.push({ name, reason: 'symlinks are not eligible for archive' });
+      rejected.push({ name, reason: "symlinks are not eligible for archive" });
       continue;
     }
-    if (rejected.length > 0 && rejected[rejected.length - 1].name === name) continue;
+    if (rejected.length > 0 && rejected[rejected.length - 1].name === name)
+      continue;
 
     // Final stat on the resolved path (guards against TOCTOU between segment
     // walk and read, and catches non-regular files).
@@ -399,19 +474,19 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
     try {
       st = await lstat(filePath);
     } catch (err) {
-      if (err && err.code === 'ENOENT') {
-        rejected.push({ name, reason: 'file not found' });
+      if (err && err.code === "ENOENT") {
+        rejected.push({ name, reason: "file not found" });
         continue;
       }
       throw err;
     }
 
     if (st.isSymbolicLink()) {
-      rejected.push({ name, reason: 'symlinks are not eligible for archive' });
+      rejected.push({ name, reason: "symlinks are not eligible for archive" });
       continue;
     }
     if (!st.isFile()) {
-      rejected.push({ name, reason: 'not a regular file' });
+      rejected.push({ name, reason: "not a regular file" });
       continue;
     }
 
@@ -427,25 +502,25 @@ export async function buildBatchArchive(projectsRoot, projectId, fileNames, meta
   // strict rejection semantics of the panel and full archive.
   if (rejected.length > 0) {
     const err = new Error(
-      `${rejected.length} file(s) ineligible for archive: ${rejected.map((r) => r.name).join(', ')}`,
+      `${rejected.length} file(s) ineligible for archive: ${rejected.map((r) => r.name).join(", ")}`,
     );
-    err.code = 'BAD_REQUEST';
+    err.code = "BAD_REQUEST";
     err.rejected = rejected;
     throw err;
   }
 
   if (packed === 0) {
-    const err = new Error('no files could be packed');
-    err.code = 'ENOENT';
+    const err = new Error("no files could be packed");
+    err.code = "ENOENT";
     throw err;
   }
 
   const buffer = await zip.generateAsync({
-    type: 'nodebuffer',
-    compression: 'DEFLATE',
+    type: "nodebuffer",
+    compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
-  return { buffer, baseName: '' };
+  return { buffer, baseName: "" };
 }
 
 async function collectArchiveEntries(dir, relDir, out) {
@@ -453,11 +528,11 @@ async function collectArchiveEntries(dir, relDir, out) {
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (err && err.code === "ENOENT") return;
     throw err;
   }
   for (const e of entries) {
-    if (e.name.startsWith('.')) continue;
+    if (e.name.startsWith(".")) continue;
     if (!e.isDirectory() && !e.isFile()) continue;
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     const full = path.join(dir, e.name);
@@ -465,14 +540,15 @@ async function collectArchiveEntries(dir, relDir, out) {
       await collectArchiveEntries(full, rel, out);
       continue;
     }
-    if (e.name.endsWith('.artifact.json')) continue;
+    if (e.name.endsWith(".artifact.json")) continue;
     const st = await stat(full);
     out.push({ relPath: rel, fullPath: full, mtime: st.mtimeMs });
   }
 }
 
 function addDesignHandoff(zip, entries, projectLabel) {
-  if (entries.some((entry) => entry.relPath === DESIGN_HANDOFF_FILENAME)) return;
+  if (entries.some((entry) => entry.relPath === DESIGN_HANDOFF_FILENAME))
+    return;
   zip.file(DESIGN_HANDOFF_FILENAME, buildDesignHandoff(entries, projectLabel), {
     date: new Date(0),
     binary: false,
@@ -480,11 +556,16 @@ function addDesignHandoff(zip, entries, projectLabel) {
 }
 
 function addDesignManifest(zip, entries, projectLabel) {
-  if (entries.some((entry) => entry.relPath === DESIGN_MANIFEST_FILENAME)) return;
-  zip.file(DESIGN_MANIFEST_FILENAME, buildDesignManifest(entries, projectLabel), {
-    date: new Date(0),
-    binary: false,
-  });
+  if (entries.some((entry) => entry.relPath === DESIGN_MANIFEST_FILENAME))
+    return;
+  zip.file(
+    DESIGN_MANIFEST_FILENAME,
+    buildDesignManifest(entries, projectLabel),
+    {
+      date: new Date(0),
+      binary: false,
+    },
+  );
 }
 
 // A file is treated as a preview-chrome wrapper only when it lives inside
@@ -492,123 +573,271 @@ function addDesignManifest(zip, entries, projectLabel) {
 // wrapper template (browser-chrome.html, device-frame.html).  Filenames
 // like phone.html or iphone-upgrade.html are legitimate product-screen
 // deliverables and must not be dropped from manifest screens.
-const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame)\.html?$/i;
+const FRAME_WRAPPER_FILE_RE =
+  /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame)\.html?$/i;
 
 function isFrameWrapperHtmlFile(file: string): boolean {
   return FRAME_WRAPPER_FILE_RE.test(file);
 }
 
 function projectFileMap(entries) {
-  const files = entries.map((entry) => entry.relPath).sort((a, b) => a.localeCompare(b));
+  const files = entries
+    .map((entry) => entry.relPath)
+    .sort((a, b) => a.localeCompare(b));
   const htmlFiles = files.filter((name) => /\.html?$/i.test(name));
-  const screenHtmlFiles = htmlFiles.filter((name) => !isFrameWrapperHtmlFile(name));
+  const screenHtmlFiles = htmlFiles.filter(
+    (name) => !isFrameWrapperHtmlFile(name),
+  );
   const cssFiles = files.filter((name) => /\.css$/i.test(name));
   const jsFiles = files.filter((name) => /\.[cm]?[jt]sx?$/i.test(name));
-  const assetFiles = files.filter((name) => !htmlFiles.includes(name) && !cssFiles.includes(name) && !jsFiles.includes(name));
-  const entryFile = screenHtmlFiles.find((name) => /(^|\/)index\.html$/i.test(name))
-    || screenHtmlFiles[0]
-    || htmlFiles.find((name) => /(^|\/)index\.html$/i.test(name))
-    || htmlFiles[0]
-    || files[0]
-    || 'index.html';
-  return { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile };
+  const assetFiles = files.filter(
+    (name) =>
+      !htmlFiles.includes(name) &&
+      !cssFiles.includes(name) &&
+      !jsFiles.includes(name),
+  );
+  const entryFile =
+    screenHtmlFiles.find((name) => /(^|\/)index\.html$/i.test(name)) ||
+    screenHtmlFiles[0] ||
+    htmlFiles.find((name) => /(^|\/)index\.html$/i.test(name)) ||
+    htmlFiles[0] ||
+    files[0] ||
+    "index.html";
+  return {
+    files,
+    htmlFiles,
+    screenHtmlFiles,
+    cssFiles,
+    jsFiles,
+    assetFiles,
+    entryFile,
+  };
 }
 
 function buildDesignManifest(entries, projectLabel) {
-  const { files, htmlFiles, screenHtmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
-  const screenFiles = screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
-  return JSON.stringify({
-    schema: 'open-design.design-manifest.v1',
-    title: projectLabel || 'Open Design project',
+  const {
+    files,
+    htmlFiles,
+    screenHtmlFiles,
+    cssFiles,
+    jsFiles,
+    assetFiles,
     entryFile,
-    sourceFiles: {
-      all: files,
-      html: htmlFiles,
-      css: cssFiles,
-      scriptsAndComponents: jsFiles,
-      assets: assetFiles,
-    },
-    screens: screenFiles.map((file) => {
-      const isIndex = /(^|\/)index\.html?$/i.test(file);
-      const isLanding = /(^|\/)(landing|marketing)\.html?$/i.test(file) || /landing|marketing/i.test(file);
-      const isOsWidget = /widget|live-activity|lock-screen|home-screen/i.test(file);
-      const isApp = /app|dashboard|workspace|generator|translator|editor|screen/i.test(file);
-      return {
-        file,
-        role: isIndex && screenFiles.length > 1 ? 'launcher-overview' : isLanding ? 'landing-page' : isOsWidget ? 'os-widget-surface' : isApp ? 'product-screen' : 'screen',
-        implementationNote: isIndex && screenFiles.length > 1
-          ? 'Use this as the navigation/overview entry only; implement each linked screen file as its own route/surface.'
-          : 'Preserve visual hierarchy, responsive behavior, and interactive states from this screen.',
-      };
-    }),
-    screenFilePolicy: {
-      mode: 'screen-file-first',
-      entryFileRole: screenFiles.length > 1 && /(^|\/)index\.html?$/i.test(entryFile) ? 'launcher-overview' : 'primary-screen',
-      rules: [
-        'Each distinct user-facing screen or surface must be delivered and implemented as its own file/route.',
-        'If a landing page is present or requested, keep it in landing.html and do not merge it into the product app screen.',
-        'When multiple HTML screens exist, index.html is a launcher/overview only; it must not be treated as the combined final UI.',
-        'Keep product app screens, landing pages, platform screens, and OS widget surfaces separate in production code.',
+  } = projectFileMap(entries);
+  const screenFiles =
+    screenHtmlFiles.length > 0 ? screenHtmlFiles : [entryFile];
+  return JSON.stringify(
+    {
+      schema: "open-design.design-manifest.v1",
+      title: projectLabel || "Open Design project",
+      entryFile,
+      sourceFiles: {
+        all: files,
+        html: htmlFiles,
+        css: cssFiles,
+        scriptsAndComponents: jsFiles,
+        assets: assetFiles,
+      },
+      screens: screenFiles.map((file) => {
+        const isIndex = /(^|\/)index\.html?$/i.test(file);
+        const isLanding =
+          /(^|\/)(landing|marketing)\.html?$/i.test(file) ||
+          /landing|marketing/i.test(file);
+        const isOsWidget = /widget|live-activity|lock-screen|home-screen/i.test(
+          file,
+        );
+        const isApp =
+          /app|dashboard|workspace|generator|translator|editor|screen/i.test(
+            file,
+          );
+        return {
+          file,
+          role:
+            isIndex && screenFiles.length > 1
+              ? "launcher-overview"
+              : isLanding
+                ? "landing-page"
+                : isOsWidget
+                  ? "os-widget-surface"
+                  : isApp
+                    ? "product-screen"
+                    : "screen",
+          implementationNote:
+            isIndex && screenFiles.length > 1
+              ? "Use this as the navigation/overview entry only; implement each linked screen file as its own route/surface."
+              : "Preserve visual hierarchy, responsive behavior, and interactive states from this screen.",
+        };
+      }),
+      screenFilePolicy: {
+        mode: "screen-file-first",
+        entryFileRole:
+          screenFiles.length > 1 && /(^|\/)index\.html?$/i.test(entryFile)
+            ? "launcher-overview"
+            : "primary-screen",
+        rules: [
+          "Each distinct user-facing screen or surface must be delivered and implemented as its own file/route.",
+          "If a landing page is present or requested, keep it in landing.html and do not merge it into the product app screen.",
+          "When multiple HTML screens exist, index.html is a launcher/overview only; it must not be treated as the combined final UI.",
+          "Keep product app screens, landing pages, platform screens, and OS widget surfaces separate in production code.",
+        ],
+      },
+      appModules: [
+        "Identify domain-specific in-app modules from the exported UI; do not reduce them to generic cards.",
+        "For each major module, implement purpose, default/loading/empty/error/success states, and responsive behavior.",
+        "Keep app modules separate from OS home-screen widgets in the production component model.",
+      ],
+      osWidgets: [
+        "If the export includes home-screen, lock-screen, Live Activity, tablet glance, or Android widget surfaces, implement them as platform quick-access surfaces outside the app UI.",
+        "If none are present, do not invent OS widgets unless the product requirements request them.",
+      ],
+      landingPage: {
+        detection:
+          "Inspect files and screen names for a marketing/landing page surface. If present, keep it separate from product app screens.",
+        requiredSections: [
+          "hero",
+          "value props",
+          "product proof/screenshots",
+          "feature proof",
+          "CTA",
+        ],
+      },
+      tokens: {
+        source: cssFiles.length > 0 ? cssFiles : [entryFile],
+        required: [
+          "background",
+          "surface",
+          "foreground",
+          "muted text",
+          "border",
+          "accent",
+          "radius",
+          "shadow",
+          "spacing",
+          "type scale",
+          "motion",
+        ],
+        note: "Extract/freeze tokens before framework implementation so coding tools do not substitute default theme colors or typography.",
+      },
+      interactions: {
+        source: jsFiles.length > 0 ? jsFiles : [entryFile],
+        requiredStates: [
+          "default",
+          "hover",
+          "focus",
+          "active",
+          "disabled",
+          "loading",
+          "empty",
+          "error",
+          "success",
+        ],
+        requiredBehaviors: [
+          "forms/validation where present",
+          "tabs/filters where present",
+          "dialogs/sheets/drawers where present",
+          "copy/generate/share actions where present",
+          "player or quick controls where present",
+        ],
+        note: "If the prototype is static, derive missing behavior from visible controls and document it before coding.",
+      },
+      responsiveViewports: [
+        {
+          name: "mobile-compact",
+          width: 360,
+          height: 800,
+          category: "mobile",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "mobile-standard",
+          width: 390,
+          height: 844,
+          category: "mobile",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "mobile-large",
+          width: 430,
+          height: 932,
+          category: "mobile",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "foldable-small-tablet",
+          width: 600,
+          height: 960,
+          category: "foldable-tablet",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "tablet-portrait",
+          width: 820,
+          height: 1180,
+          category: "tablet",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "tablet-landscape",
+          width: 1024,
+          height: 768,
+          category: "tablet",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "laptop",
+          width: 1366,
+          height: 768,
+          category: "desktop",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "desktop",
+          width: 1440,
+          height: 900,
+          category: "desktop",
+          mustAvoidHorizontalScroll: true,
+        },
+        {
+          name: "wide",
+          width: 1920,
+          height: 1080,
+          category: "wide",
+          mustAvoidHorizontalScroll: true,
+        },
+      ],
+      implementationChecklist: [
+        "Open entryFile first and map screens, modules, tokens, and interactions.",
+        "Extract tokens before writing framework components.",
+        "Implement app-specific modules with real states instead of generic card grids.",
+        "Preserve or rebuild JS interactions for meaningful UX actions.",
+        "Validate screenshots at desktop/tablet/mobile viewports with no horizontal overflow.",
+        "Keep landing pages, in-app modules, and OS widgets as separate implementation surfaces.",
       ],
     },
-    appModules: [
-      'Identify domain-specific in-app modules from the exported UI; do not reduce them to generic cards.',
-      'For each major module, implement purpose, default/loading/empty/error/success states, and responsive behavior.',
-      'Keep app modules separate from OS home-screen widgets in the production component model.',
-    ],
-    osWidgets: [
-      'If the export includes home-screen, lock-screen, Live Activity, tablet glance, or Android widget surfaces, implement them as platform quick-access surfaces outside the app UI.',
-      'If none are present, do not invent OS widgets unless the product requirements request them.',
-    ],
-    landingPage: {
-      detection: 'Inspect files and screen names for a marketing/landing page surface. If present, keep it separate from product app screens.',
-      requiredSections: ['hero', 'value props', 'product proof/screenshots', 'feature proof', 'CTA'],
-    },
-    tokens: {
-      source: cssFiles.length > 0 ? cssFiles : [entryFile],
-      required: ['background', 'surface', 'foreground', 'muted text', 'border', 'accent', 'radius', 'shadow', 'spacing', 'type scale', 'motion'],
-      note: 'Extract/freeze tokens before framework implementation so coding tools do not substitute default theme colors or typography.',
-    },
-    interactions: {
-      source: jsFiles.length > 0 ? jsFiles : [entryFile],
-      requiredStates: ['default', 'hover', 'focus', 'active', 'disabled', 'loading', 'empty', 'error', 'success'],
-      requiredBehaviors: ['forms/validation where present', 'tabs/filters where present', 'dialogs/sheets/drawers where present', 'copy/generate/share actions where present', 'player or quick controls where present'],
-      note: 'If the prototype is static, derive missing behavior from visible controls and document it before coding.',
-    },
-    responsiveViewports: [
-      { name: 'mobile-compact', width: 360, height: 800, category: 'mobile', mustAvoidHorizontalScroll: true },
-      { name: 'mobile-standard', width: 390, height: 844, category: 'mobile', mustAvoidHorizontalScroll: true },
-      { name: 'mobile-large', width: 430, height: 932, category: 'mobile', mustAvoidHorizontalScroll: true },
-      { name: 'foldable-small-tablet', width: 600, height: 960, category: 'foldable-tablet', mustAvoidHorizontalScroll: true },
-      { name: 'tablet-portrait', width: 820, height: 1180, category: 'tablet', mustAvoidHorizontalScroll: true },
-      { name: 'tablet-landscape', width: 1024, height: 768, category: 'tablet', mustAvoidHorizontalScroll: true },
-      { name: 'laptop', width: 1366, height: 768, category: 'desktop', mustAvoidHorizontalScroll: true },
-      { name: 'desktop', width: 1440, height: 900, category: 'desktop', mustAvoidHorizontalScroll: true },
-      { name: 'wide', width: 1920, height: 1080, category: 'wide', mustAvoidHorizontalScroll: true },
-    ],
-    implementationChecklist: [
-      'Open entryFile first and map screens, modules, tokens, and interactions.',
-      'Extract tokens before writing framework components.',
-      'Implement app-specific modules with real states instead of generic card grids.',
-      'Preserve or rebuild JS interactions for meaningful UX actions.',
-      'Validate screenshots at desktop/tablet/mobile viewports with no horizontal overflow.',
-      'Keep landing pages, in-app modules, and OS widgets as separate implementation surfaces.',
-    ],
-  }, null, 2);
+    null,
+    2,
+  );
 }
 
 function buildDesignHandoff(entries, projectLabel) {
-  const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } = projectFileMap(entries);
+  const { files, htmlFiles, cssFiles, jsFiles, assetFiles, entryFile } =
+    projectFileMap(entries);
   const accentLikelyBrandLed =
-    files.some((name) => /(design|brand|tokens?|theme|style|tailwind|variables)\.(css|scss|sass|less|json|ts|tsx|js|jsx|md)$/i.test(name)) ||
-    cssFiles.length > 0;
+    files.some((name) =>
+      /(design|brand|tokens?|theme|style|tailwind|variables)\.(css|scss|sass|less|json|ts|tsx|js|jsx|md)$/i.test(
+        name,
+      ),
+    ) || cssFiles.length > 0;
   const hasResponsiveClues =
     htmlFiles.length > 0 ||
     cssFiles.length > 0 ||
     files.some((name) => /(screens?|pages?|components?|app|src)\//i.test(name));
-  const list = (items) => items.length > 0 ? items.map((name) => `- \`${name}\``).join('\n') : '- None detected';
+  const list = (items) =>
+    items.length > 0
+      ? items.map((name) => `- \`${name}\``).join("\n")
+      : "- None detected";
 
-  return `# ${projectLabel || 'Open Design project'} implementation handoff
+  return `# ${projectLabel || "Open Design project"} implementation handoff
 
 This archive is the source of truth for turning the design into production code. Start from \`${entryFile}\`, then preserve the visual system, responsive behavior, and interactions found in the exported files.
 
@@ -638,7 +867,7 @@ Validate the implementation across this 2025–2026 viewport matrix:
 - Desktop: 1440×900
 - Wide desktop: 1920×1080
 
-For responsive web exports, treat these as a modern breakpoint system for one adaptive web experience, not three fixed screenshots. Do not split responsive web into unrelated native app screens unless the project explicitly includes native targets. Use semantic layout thresholds, fluid \`clamp()\` type/spacing, and container queries where component width matters more than viewport width. ${hasResponsiveClues ? 'Preserve any CSS media queries, container queries, fluid \`clamp()\` scales, and layout changes already present in the exported files.' : 'If responsive rules are not present in the export, add them in the target implementation before shipping.'}
+For responsive web exports, treat these as a modern breakpoint system for one adaptive web experience, not three fixed screenshots. Do not split responsive web into unrelated native app screens unless the project explicitly includes native targets. Use semantic layout thresholds, fluid \`clamp()\` type/spacing, and container queries where component width matters more than viewport width. ${hasResponsiveClues ? "Preserve any CSS media queries, container queries, fluid \`clamp()\` scales, and layout changes already present in the exported files." : "If responsive rules are not present in the export, add them in the target implementation before shipping."}
 
 ## Design fidelity contract
 - Extract reusable tokens before writing components: background, surface, foreground, muted text, border, accent, radius, shadow, spacing, type scale, and motion duration/easing.
@@ -660,7 +889,7 @@ For responsive web exports, treat these as a modern breakpoint system for one ad
 ## Color and brand contract
 - Use the exported design tokens and product/domain context as the color source of truth.
 - Do not introduce warm beige / cream / peach / pink / orange-brown background washes unless they are already explicit brand/reference colors in the export.
-- ${accentLikelyBrandLed ? 'A stylesheet or design/token file was detected; inspect it for canonical color variables before choosing framework theme tokens.' : 'No obvious token stylesheet was detected; sample colors from the entry file and convert them into named tokens before coding.'}
+- ${accentLikelyBrandLed ? "A stylesheet or design/token file was detected; inspect it for canonical color variables before choosing framework theme tokens." : "No obvious token stylesheet was detected; sample colors from the entry file and convert them into named tokens before coding."}
 
 ## Implementation sequence for AI coding tools
 1. Open \`${entryFile}\` and \`${DESIGN_MANIFEST_FILENAME}\`; identify every screen file, launcher/overview file, app module, and interaction before coding.
@@ -698,7 +927,12 @@ ${list(assetFiles)}
 `;
 }
 
-export async function readProjectFile(projectsRoot, projectId, name, metadata?) {
+export async function readProjectFile(
+  projectsRoot,
+  projectId,
+  name,
+  metadata?,
+) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
@@ -721,7 +955,12 @@ export async function readProjectFile(projectsRoot, projectId, name, metadata?) 
 
 // Like readProjectFile but skips loading the file content into memory.
 // Used by the media streaming endpoint so large video files are never buffered.
-export async function resolveProjectFilePath(projectsRoot, projectId, name, metadata?) {
+export async function resolveProjectFilePath(
+  projectsRoot,
+  projectId,
+  name,
+  metadata?,
+) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   const st = await stat(file);
@@ -751,17 +990,17 @@ export async function writeProjectFile(
   if (!overwrite) {
     try {
       await stat(target);
-      const err = new Error('file already exists');
-      err.code = 'EEXIST';
+      const err = new Error("file already exists");
+      err.code = "EEXIST";
       throw err;
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (!err || err.code !== "ENOENT") throw err;
     }
   }
   await mkdir(path.dirname(target), { recursive: true });
   let stubGuardWarning = null;
   let validatedManifest = null;
-  if (artifactManifest && typeof artifactManifest === 'object') {
+  if (artifactManifest && typeof artifactManifest === "object") {
     const validated = validateArtifactManifestInput(artifactManifest, safeName);
     if (validated.ok && validated.value) {
       validatedManifest = validated.value;
@@ -774,13 +1013,17 @@ export async function writeProjectFile(
       if (isPublicationGuardedArtifactKind(validatedManifest.kind)) {
         assertArtifactPublicationAllowed(body);
       }
-      const identifier = typeof validatedManifest.metadata?.identifier === 'string'
-        ? validatedManifest.metadata.identifier
-        : '';
+      const identifier =
+        typeof validatedManifest.metadata?.identifier === "string"
+          ? validatedManifest.metadata.identifier
+          : "";
       // Stub-guard applies to HTML-rendered manifest kinds (html, deck).
       // Other kinds (markdown, svg, code-snippet) can legitimately be small
       // and are skipped.
-      if (identifier.length > 0 && STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)) {
+      if (
+        identifier.length > 0 &&
+        STUB_GUARDED_MANIFEST_KINDS.has(validatedManifest.kind)
+      ) {
         // Scan the directory the new file actually lands in, not the project
         // root — writeProjectFile accepts nested paths like reports/X.html
         // and a root-only scan would miss prior siblings in subdirectories.
@@ -790,7 +1033,10 @@ export async function writeProjectFile(
           newSize: Buffer.byteLength(body),
           config: readArtifactStubGuardConfigFromEnv(),
         });
-        if ((guard.outcome === 'reject' || guard.outcome === 'warn') && guard.warning) {
+        if (
+          (guard.outcome === "reject" || guard.outcome === "warn") &&
+          guard.warning
+        ) {
           // Operator-visible signal regardless of mode, so on-call can see
           // how often the guard fires without combing through 422s.
           console.warn(
@@ -799,7 +1045,7 @@ export async function writeProjectFile(
               `priorName=${guard.warning.priorName} project=${projectId}`,
           );
         }
-        if (guard.outcome === 'reject' && guard.warning) {
+        if (guard.outcome === "reject" && guard.warning) {
           throw new ArtifactRegressionError(guard.warning.message, {
             identifier: guard.warning.identifier,
             newSize: guard.warning.newSize,
@@ -807,7 +1053,7 @@ export async function writeProjectFile(
             priorName: guard.warning.priorName,
           });
         }
-        if (guard.outcome === 'warn' && guard.warning) {
+        if (guard.outcome === "warn" && guard.warning) {
           stubGuardWarning = guard.warning;
         }
       }
@@ -839,17 +1085,22 @@ function artifactManifestNameFor(name) {
   return `${name}.artifact.json`;
 }
 
-export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, name, metadata?) {
+export async function reconcileHtmlArtifactManifest(
+  projectsRoot,
+  projectId,
+  name,
+  metadata?,
+) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const safeName = validateProjectPath(name);
   const ext = path.extname(safeName).toLowerCase();
-  if (ext !== '.html' && ext !== '.htm') return null;
+  if (ext !== ".html" && ext !== ".htm") return null;
 
   let target;
   try {
     target = await resolveSafeReal(dir, safeName);
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (err && err.code === "ENOENT") return null;
     throw err;
   }
 
@@ -857,7 +1108,7 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   try {
     targetStat = await stat(target);
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (err && err.code === "ENOENT") return null;
     throw err;
   }
   if (!targetStat.isFile()) return null;
@@ -865,16 +1116,18 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
   const manifestFileName = artifactManifestNameFor(safeName);
   const manifestTarget = await resolveSafeReal(dir, manifestFileName);
   try {
-    const raw = await readFile(manifestTarget, 'utf8');
+    const raw = await readFile(manifestTarget, "utf8");
     return parseManifest(raw);
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') throw err;
+    if (!err || err.code !== "ENOENT") throw err;
   }
 
   const inferred = inferLegacyManifest(safeName);
   if (!inferred) return null;
   const inferredMetadata =
-    inferred.metadata && typeof inferred.metadata === 'object' && !Array.isArray(inferred.metadata)
+    inferred.metadata &&
+    typeof inferred.metadata === "object" &&
+    !Array.isArray(inferred.metadata)
       ? inferred.metadata
       : {};
   const validated = validateArtifactManifestInput(
@@ -897,13 +1150,16 @@ export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, nam
 }
 
 async function readManifestForPath(projectDirPath, relPath) {
-  const manifestPath = path.join(projectDirPath, artifactManifestNameFor(relPath));
+  const manifestPath = path.join(
+    projectDirPath,
+    artifactManifestNameFor(relPath),
+  );
   try {
-    const raw = await readFile(manifestPath, 'utf8');
+    const raw = await readFile(manifestPath, "utf8");
     const parsed = parseManifest(raw);
     if (parsed) return parsed;
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') {
+    if (!err || err.code !== "ENOENT") {
       // ignore malformed/invalid manifests and fallback to inference
     }
   }
@@ -911,25 +1167,36 @@ async function readManifestForPath(projectDirPath, relPath) {
 }
 
 function parseManifest(raw) {
-  return parsePersistedManifest(raw, '');
+  return parsePersistedManifest(raw, "");
 }
 
-export async function deleteProjectFile(projectsRoot, projectId, name, metadata?) {
+export async function deleteProjectFile(
+  projectsRoot,
+  projectId,
+  name,
+  metadata?,
+) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
   await unlink(file);
 }
 
-export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
+export async function renameProjectFile(
+  projectsRoot,
+  projectId,
+  fromName,
+  toName,
+  metadata?,
+) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const oldName = validateProjectPath(fromName);
   const newName = sanitizePath(toName);
   try {
     await stat(dir);
   } catch (err) {
-    if (err && err.code === 'ENOENT') {
-      const missing = new Error('source file not found');
-      missing.code = 'ENOENT';
+    if (err && err.code === "ENOENT") {
+      const missing = new Error("source file not found");
+      missing.code = "ENOENT";
       throw missing;
     }
     throw err;
@@ -937,8 +1204,8 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   const source = await resolveSafeReal(dir, oldName);
   const sourceStat = await stat(source);
   if (!sourceStat.isFile()) {
-    const err = new Error('source is not a regular file');
-    err.code = 'EISDIR';
+    const err = new Error("source is not a regular file");
+    err.code = "EISDIR";
     throw err;
   }
 
@@ -966,18 +1233,25 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   if (source !== target) {
     try {
       await stat(target);
-      const err = new Error('target file already exists');
-      err.code = 'EEXIST';
+      const err = new Error("target file already exists");
+      err.code = "EEXIST";
       throw err;
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (!err || err.code !== "ENOENT") throw err;
     }
   }
 
-  const manifestRename = await prepareArtifactManifestRename(dir, oldName, newName);
+  const manifestRename = await prepareArtifactManifestRename(
+    dir,
+    oldName,
+    newName,
+  );
 
   await mkdir(path.dirname(targetPath), { recursive: true });
-  await projectFileRenameTestHooks.beforeCommit?.({ source, target: targetPath });
+  await projectFileRenameTestHooks.beforeCommit?.({
+    source,
+    target: targetPath,
+  });
   await renameFilePath(source, targetPath, { noOverwrite: true });
   await commitArtifactManifestRename(manifestRename, newName);
   await updateArtifactManifestRefsForRename(dir, oldName, newName);
@@ -1030,48 +1304,54 @@ async function uniqueRenameTempPath(source) {
   const dir = path.dirname(source);
   const base = path.basename(source);
   for (let i = 0; i < 10; i++) {
-    const temp = path.join(dir, `.od-rename-${process.pid}-${Date.now()}-${i}-${base}.tmp`);
+    const temp = path.join(
+      dir,
+      `.od-rename-${process.pid}-${Date.now()}-${i}-${base}.tmp`,
+    );
     try {
       await stat(temp);
     } catch (err) {
-      if (err && err.code === 'ENOENT') return temp;
+      if (err && err.code === "ENOENT") return temp;
       throw err;
     }
   }
-  const err = new Error('could not allocate temporary rename path');
-  err.code = 'EEXIST';
+  const err = new Error("could not allocate temporary rename path");
+  err.code = "EEXIST";
   throw err;
 }
 
 async function prepareArtifactManifestRename(dir, oldName, newName) {
   const oldManifestName = artifactManifestNameFor(oldName);
-  const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch((err) => {
-    if (err && err.code === 'ENOENT') return null;
-    throw err;
-  });
+  const oldManifestPath = await resolveSafeReal(dir, oldManifestName).catch(
+    (err) => {
+      if (err && err.code === "ENOENT") return null;
+      throw err;
+    },
+  );
   if (!oldManifestPath) return null;
 
   let raw = null;
   try {
-    raw = await readFile(oldManifestPath, 'utf8');
+    raw = await readFile(oldManifestPath, "utf8");
   } catch (err) {
-    if (err && err.code === 'ENOENT') return null;
+    if (err && err.code === "ENOENT") return null;
     throw err;
   }
 
   const newManifestName = artifactManifestNameFor(newName);
   const newManifestPath = await resolveSafeReal(dir, newManifestName);
-  const targetManifestPath = oldManifestPath === newManifestPath
-    ? resolveSafe(dir, newManifestName)
-    : newManifestPath;
+  const targetManifestPath =
+    oldManifestPath === newManifestPath
+      ? resolveSafe(dir, newManifestName)
+      : newManifestPath;
   if (oldManifestPath !== newManifestPath) {
     try {
       await stat(newManifestPath);
-      const err = new Error('target artifact manifest already exists');
-      err.code = 'EEXIST';
+      const err = new Error("target artifact manifest already exists");
+      err.code = "EEXIST";
       throw err;
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (!err || err.code !== "ENOENT") throw err;
     }
   }
 
@@ -1084,16 +1364,19 @@ async function commitArtifactManifestRename(manifestRename, newName) {
   await mkdir(path.dirname(newManifestPath), { recursive: true });
   const parsed = parseManifest(raw);
   if (parsed) {
-    const parsedEntry = typeof parsed.entry === 'string'
-      ? parsed.entry.replace(/\\/g, '/')
-      : '';
-    const renamedManifest = parsedEntry === oldName
-      ? { ...parsed, entry: newName }
-      : parsed;
+    const parsedEntry =
+      typeof parsed.entry === "string" ? parsed.entry.replace(/\\/g, "/") : "";
+    const renamedManifest =
+      parsedEntry === oldName ? { ...parsed, entry: newName } : parsed;
     const validated = validateArtifactManifestInput(renamedManifest, newName);
     if (validated.ok && validated.value) {
-      await writeFile(oldManifestPath, JSON.stringify(validated.value, null, 2));
-      await renameFilePath(oldManifestPath, newManifestPath, { noOverwrite: true });
+      await writeFile(
+        oldManifestPath,
+        JSON.stringify(validated.value, null, 2),
+      );
+      await renameFilePath(oldManifestPath, newManifestPath, {
+        noOverwrite: true,
+      });
       return;
     }
   }
@@ -1102,15 +1385,15 @@ async function commitArtifactManifestRename(manifestRename, newName) {
 
 async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
   const manifests = [];
-  await collectArtifactManifestFiles(dir, '', manifests);
+  await collectArtifactManifestFiles(dir, "", manifests);
   for (const manifestFile of manifests) {
     const ownerName = ownerNameForArtifactManifest(manifestFile.relPath);
     if (!ownerName) continue;
     let raw;
     try {
-      raw = await readFile(manifestFile.fullPath, 'utf8');
+      raw = await readFile(manifestFile.fullPath, "utf8");
     } catch (err) {
-      if (err && err.code === 'ENOENT') continue;
+      if (err && err.code === "ENOENT") continue;
       throw err;
     }
     const parsed = parseManifest(raw);
@@ -1123,9 +1406,15 @@ async function updateArtifactManifestRefsForRename(dir, oldName, newName) {
     });
     if (!updated.changed) continue;
 
-    const validated = validateArtifactManifestInput(updated.manifest, ownerName);
+    const validated = validateArtifactManifestInput(
+      updated.manifest,
+      ownerName,
+    );
     if (!validated.ok || !validated.value) continue;
-    await writeFile(manifestFile.fullPath, JSON.stringify(validated.value, null, 2));
+    await writeFile(
+      manifestFile.fullPath,
+      JSON.stringify(validated.value, null, 2),
+    );
   }
 }
 
@@ -1134,45 +1423,60 @@ async function collectArtifactManifestFiles(dir, relDir, out) {
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
-    if (err && err.code === 'ENOENT') return;
+    if (err && err.code === "ENOENT") return;
     throw err;
   }
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue;
+    if (entry.name.startsWith(".")) continue;
     const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       await collectArtifactManifestFiles(fullPath, relPath, out);
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith('.artifact.json')) {
+    if (entry.isFile() && entry.name.endsWith(".artifact.json")) {
       out.push({ relPath, fullPath });
     }
   }
 }
 
 function ownerNameForArtifactManifest(manifestName) {
-  const suffix = '.artifact.json';
+  const suffix = ".artifact.json";
   if (!manifestName.endsWith(suffix)) return null;
   return manifestName.slice(0, -suffix.length);
 }
 
-function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newName }) {
+function rewriteArtifactManifestRenameRefs(
+  manifest,
+  { ownerName, oldName, newName },
+) {
   let changed = false;
   const next = { ...manifest };
 
-  const entry = rewriteManifestRefForRename(next.entry, ownerName, oldName, newName, {
-    preferProjectRoot: true,
-  });
+  const entry = rewriteManifestRefForRename(
+    next.entry,
+    ownerName,
+    oldName,
+    newName,
+    {
+      preferProjectRoot: true,
+    },
+  );
   if (entry.changed) {
     next.entry = entry.value;
     changed = true;
   }
 
-  if (typeof next.primary === 'string') {
-    const primary = rewriteManifestRefForRename(next.primary, ownerName, oldName, newName, {
-      preferProjectRoot: true,
-    });
+  if (typeof next.primary === "string") {
+    const primary = rewriteManifestRefForRename(
+      next.primary,
+      ownerName,
+      oldName,
+      newName,
+      {
+        preferProjectRoot: true,
+      },
+    );
     if (primary.changed) {
       next.primary = primary.value;
       changed = true;
@@ -1181,7 +1485,12 @@ function rewriteArtifactManifestRenameRefs(manifest, { ownerName, oldName, newNa
 
   if (Array.isArray(next.supportingFiles)) {
     const supportingFiles = next.supportingFiles.map((ref) => {
-      const updated = rewriteManifestRefForRename(ref, ownerName, oldName, newName);
+      const updated = rewriteManifestRefForRename(
+        ref,
+        ownerName,
+        oldName,
+        newName,
+      );
       if (updated.changed) changed = true;
       return updated.value;
     });
@@ -1198,11 +1507,14 @@ function rewriteManifestRefForRename(
   newName,
   options = {},
 ) {
-  if (typeof ref !== 'string') return { changed: false, value: ref };
-  const normalized = ref.replace(/\\/g, '/').trim();
+  if (typeof ref !== "string") return { changed: false, value: ref };
+  const normalized = ref.replace(/\\/g, "/").trim();
   if (!normalized) return { changed: false, value: ref };
 
-  if (options.preferProjectRoot && normalizeManifestProjectRootRef(normalized) === oldName) {
+  if (
+    options.preferProjectRoot &&
+    normalizeManifestProjectRootRef(normalized) === oldName
+  ) {
     return { changed: true, value: newName };
   }
 
@@ -1222,28 +1534,37 @@ function rewriteManifestRefForRename(
 
 function relativeManifestRefForOwner(ownerName, targetName) {
   const ownerDir = path.posix.dirname(ownerName);
-  if (ownerDir === '.') return targetName;
+  if (ownerDir === ".") return targetName;
   const relative = path.posix.relative(ownerDir, targetName);
-  if (!relative || relative === '.' || relative.startsWith('../') || relative.includes('/../')) {
+  if (
+    !relative ||
+    relative === "." ||
+    relative.startsWith("../") ||
+    relative.includes("/../")
+  ) {
     return targetName;
   }
   return relative;
 }
 
 function normalizeManifestProjectRootRef(ref) {
-  return normalizeManifestProjectRef(ref, '');
+  return normalizeManifestProjectRef(ref, "");
 }
 
 function normalizeManifestProjectRef(ref, ownerName) {
-  if (typeof ref !== 'string' || !ref.trim()) return null;
-  const value = ref.trim().replace(/\\/g, '/');
-  if (value.includes('\0') || value.startsWith('/')) return null;
+  if (typeof ref !== "string" || !ref.trim()) return null;
+  const value = ref.trim().replace(/\\/g, "/");
+  if (value.includes("\0") || value.startsWith("/")) return null;
   if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return null;
   const ownerDir = path.posix.dirname(ownerName);
-  const joined = ownerDir === '.' ? value : `${ownerDir}/${value}`;
-  const normalized = path.posix.normalize(joined).replace(/^\.\//, '');
-  if (!normalized || normalized === '.' || normalized.startsWith('../')) return null;
-  if (normalized.split('/').some((segment) => segment === '..' || segment === '.')) return null;
+  const joined = ownerDir === "." ? value : `${ownerDir}/${value}`;
+  const normalized = path.posix.normalize(joined).replace(/^\.\//, "");
+  if (!normalized || normalized === "." || normalized.startsWith("../"))
+    return null;
+  if (
+    normalized.split("/").some((segment) => segment === ".." || segment === ".")
+  )
+    return null;
   return normalized;
 }
 
@@ -1256,7 +1577,7 @@ function resolveSafe(dir, name) {
   const safePath = validateProjectPath(name);
   const target = path.resolve(dir, safePath);
   if (!target.startsWith(dir + path.sep) && target !== dir) {
-    throw new Error('path escapes project dir');
+    throw new Error("path escapes project dir");
   }
   return target;
 }
@@ -1276,14 +1597,14 @@ async function resolveSafeReal(dir, name) {
   try {
     real = await realpath(candidate);
   } catch (err) {
-    if (!err || err.code !== 'ENOENT') throw err;
+    if (!err || err.code !== "ENOENT") throw err;
     // Write case: path doesn't exist yet. Realpath the longest existing
     // prefix and re-append the missing tail.
     real = await resolveExistingPrefix(candidate);
   }
   if (!real.startsWith(rootReal + path.sep) && real !== rootReal) {
-    const e = new Error('path escapes project dir via symlink');
-    e.code = 'EPATHESCAPE';
+    const e = new Error("path escapes project dir via symlink");
+    e.code = "EPATHESCAPE";
     throw e;
   }
   return real;
@@ -1298,7 +1619,7 @@ async function resolveExistingPrefix(p) {
       const rest = parts.slice(i).join(path.sep);
       return rest ? path.join(real, rest) : real;
     } catch (err) {
-      if (!err || err.code !== 'ENOENT') throw err;
+      if (!err || err.code !== "ENOENT") throw err;
     }
   }
   return p;
@@ -1306,31 +1627,38 @@ async function resolveExistingPrefix(p) {
 
 export function sanitizePath(raw) {
   const normalized = validateProjectPath(raw);
-  return normalized.split('/').map(sanitizeName).join('/');
+  return normalized.split("/").map(sanitizeName).join("/");
 }
 
 export function validateProjectPath(raw) {
-  if (typeof raw !== 'string' || !raw.trim()) {
-    throw new Error('invalid file name');
+  if (typeof raw !== "string" || !raw.trim()) {
+    throw new Error("invalid file name");
   }
-  const normalized = raw.replace(/\\/g, '/');
-  if (raw.includes('\0') || /^[A-Za-z]:/.test(normalized) || normalized.startsWith('/')) {
-    throw new Error('invalid file name');
+  const normalized = raw.replace(/\\/g, "/");
+  if (
+    raw.includes("\0") ||
+    /^[A-Za-z]:/.test(normalized) ||
+    normalized.startsWith("/")
+  ) {
+    throw new Error("invalid file name");
   }
-  const parts = normalized.split('/').filter(Boolean);
+  const parts = normalized.split("/").filter(Boolean);
   if (parts.length === 0 || parts.some((p) => FORBIDDEN_SEGMENT.test(p))) {
-    throw new Error('invalid file name');
+    throw new Error("invalid file name");
   }
   if (parts.some((part) => RESERVED_PROJECT_FILE_SEGMENTS.has(part))) {
-    throw new Error('reserved project path');
+    throw new Error("reserved project path");
   }
-  return parts.join('/');
+  return parts.join("/");
 }
 
 export function isReservedProjectFilePath(raw) {
   try {
-    const normalized = String(raw ?? '').replace(/\\/g, '/');
-    return normalized.split('/').filter(Boolean).some((part) => RESERVED_PROJECT_FILE_SEGMENTS.has(part));
+    const normalized = String(raw ?? "").replace(/\\/g, "/");
+    return normalized
+      .split("/")
+      .filter(Boolean)
+      .some((part) => RESERVED_PROJECT_FILE_SEGMENTS.has(part));
   } catch {
     return false;
   }
@@ -1343,11 +1671,11 @@ export function isReservedProjectFilePath(raw) {
 // '_', so a Chinese filename like '测试文档.docx' became '____.docx'
 // (issue #144).
 export function sanitizeName(raw) {
-  const cleaned = String(raw ?? '')
-    .replace(/[\\/]/g, '_')
-    .replace(/\s+/g, '-')
-    .replace(/[^\p{L}\p{N}._-]/gu, '_')
-    .replace(/^\.+/, '_')
+  const cleaned = String(raw ?? "")
+    .replace(/[\\/]/g, "_")
+    .replace(/\s+/g, "-")
+    .replace(/[^\p{L}\p{N}._-]/gu, "_")
+    .replace(/^\.+/, "_")
     .trim();
   return cleaned || `file-${Date.now()}`;
 }
@@ -1357,7 +1685,7 @@ export function sanitizeName(raw) {
 // decode as UTF-8 when the result round-trips back to the original
 // bytes; otherwise the source was genuine latin1 and we leave it alone.
 export function decodeMultipartFilename(name) {
-  if (!name || typeof name !== 'string') return name ?? '';
+  if (!name || typeof name !== "string") return name ?? "";
   // If any code point exceeds 0xFF the source is already a properly
   // decoded Unicode string — for example, multer received an RFC 5987
   // `filename*` parameter and decoded it as UTF-8. Re-running latin1
@@ -1365,13 +1693,13 @@ export function decodeMultipartFilename(name) {
   for (let i = 0; i < name.length; i++) {
     if (name.charCodeAt(i) > 0xff) return name;
   }
-  const buf = Buffer.from(name, 'latin1');
-  const utf8 = buf.toString('utf8');
-  return Buffer.from(utf8, 'utf8').equals(buf) ? utf8 : name;
+  const buf = Buffer.from(name, "latin1");
+  const utf8 = buf.toString("utf8");
+  return Buffer.from(utf8, "utf8").equals(buf) ? utf8 : name;
 }
 
 function toProjectPath(raw) {
-  return raw.split(path.sep).join('/');
+  return raw.split(path.sep).join("/");
 }
 
 // Validates an id string for use as a path segment under a daemon-managed
@@ -1384,53 +1712,55 @@ function toProjectPath(raw) {
 // which Express decodes before the route handler sees it) and steer
 // finalize / write operations outside `.od/projects/`.
 export function isSafeId(id) {
-  if (typeof id !== 'string') return false;
+  if (typeof id !== "string") return false;
   if (id.length === 0 || id.length > 128) return false;
   if (/^\.+$/.test(id)) return false; // reject `.`, `..`, `...`, etc.
   return /^[A-Za-z0-9._-]+$/.test(id);
 }
 
 const EXT_MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.htm': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.cjs': 'text/javascript; charset=utf-8',
-  '.jsx': 'text/javascript; charset=utf-8',
-  '.ts': 'text/typescript; charset=utf-8',
-  '.py': 'text/x-python; charset=utf-8',
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".cjs": "text/javascript; charset=utf-8",
+  ".jsx": "text/javascript; charset=utf-8",
+  ".ts": "text/typescript; charset=utf-8",
+  ".py": "text/x-python; charset=utf-8",
   // `.tsx` previously served as `text/typescript`, which browser module
   // loaders and strict CSPs do not accept as a JavaScript MIME. Multi-file
   // React prototypes that load `.tsx` via Babel-standalone (`<script
   // type="text/babel" src="…">`) need a JS-family Content-Type for the
   // browser fetch to succeed. Upstream of issue #336.
-  '.tsx': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.md': 'text/markdown; charset=utf-8',
-  '.txt': 'text/plain; charset=utf-8',
-  '.pdf': 'application/pdf',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.avif': 'image/avif',
-  '.mp4': 'video/mp4',
-  '.mov': 'video/quicktime',
-  '.webm': 'video/webm',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
-  '.m4a': 'audio/mp4',
+  ".tsx": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".pdf": "application/pdf",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".m4a": "audio/mp4",
 };
 
 export function mimeFor(name) {
   const ext = path.extname(name).toLowerCase();
-  return EXT_MIME[ext] || 'application/octet-stream';
+  return EXT_MIME[ext] || "application/octet-stream";
 }
 
 // Parses an HTTP Range header (RFC 7233) for a single byte range.
@@ -1438,61 +1768,69 @@ export function mimeFor(name) {
 // 416-class range, or null if the header is absent/malformed/multi-range
 // (callers fall back to a full 200 response in the null case).
 export function parseByteRange(header, fileSize) {
-  if (!header || !header.startsWith('bytes=')) return null;
+  if (!header || !header.startsWith("bytes=")) return null;
   const spec = header.slice(6).trim();
   // Multi-range is valid RFC 7233 but uncommon for media; fall back to full.
-  if (spec.includes(',')) return null;
-  const dashIdx = spec.indexOf('-');
+  if (spec.includes(",")) return null;
+  const dashIdx = spec.indexOf("-");
   if (dashIdx === -1) return null;
   const rawStart = spec.slice(0, dashIdx);
   const rawEnd = spec.slice(dashIdx + 1);
   let start, end;
-  if (rawStart === '') {
+  if (rawStart === "") {
     // Suffix range: bytes=-N → last N bytes.
     const suffix = Number(rawEnd);
     if (!Number.isFinite(suffix) || !Number.isInteger(suffix) || suffix <= 0) {
-      return 'unsatisfiable';
+      return "unsatisfiable";
     }
     start = Math.max(0, fileSize - suffix);
     end = fileSize - 1;
   } else {
     start = Number(rawStart);
-    if (!Number.isFinite(start) || !Number.isInteger(start) || start < 0) return null;
-    if (start >= fileSize) return 'unsatisfiable';
-    if (rawEnd === '') {
+    if (!Number.isFinite(start) || !Number.isInteger(start) || start < 0)
+      return null;
+    if (start >= fileSize) return "unsatisfiable";
+    if (rawEnd === "") {
       // Open-ended range: bytes=N- → from N to EOF.
       end = fileSize - 1;
     } else {
       end = Number(rawEnd);
-      if (!Number.isFinite(end) || !Number.isInteger(end) || end < start) return null;
+      if (!Number.isFinite(end) || !Number.isInteger(end) || end < start)
+        return null;
       end = Math.min(end, fileSize - 1); // clamp over-long end
     }
   }
   return { start, end };
 }
 
-export async function searchProjectFiles(projectsRoot, projectId, query, opts = {}) {
+export async function searchProjectFiles(
+  projectsRoot,
+  projectId,
+  query,
+  opts = {},
+) {
   const max = Math.min(Number(opts.max) || 200, 1000);
   const pattern = opts.pattern || null;
   const metadata = opts.metadata;
   const items = await listFiles(projectsRoot, projectId, { metadata });
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
-  const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(escaped, 'i');
+  const escaped = String(query).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(escaped, "i");
   const matches = [];
   for (const f of items) {
     if (!isTextualMime(f.mime)) continue;
     if (pattern && !globMatch(f.name, pattern)) continue;
     let content;
     try {
-      content = await readFile(path.join(dir, f.name), 'utf8');
+      content = await readFile(path.join(dir, f.name), "utf8");
     } catch {
       continue;
     }
-    const lines = content.split('\n');
+    const lines = content.split("\n");
     for (let i = 0; i < lines.length; i++) {
       if (re.test(lines[i])) {
-        const snippet = lines[i].length > 220 ? lines[i].slice(0, 220) + '…' : lines[i];
+        const snippet =
+          lines[i].length > 220 ? lines[i].slice(0, 220) + "…" : lines[i];
         matches.push({ file: f.name, line: i + 1, snippet });
         if (matches.length >= max) return matches;
       }
@@ -1505,7 +1843,9 @@ function isTextualMime(mime) {
   if (!mime) return false;
   return (
     /^text\//i.test(mime) ||
-    /^application\/(json|javascript|typescript|xml|x-(?:yaml|toml|httpd-php|sh))\b/i.test(mime) ||
+    /^application\/(json|javascript|typescript|xml|x-(?:yaml|toml|httpd-php|sh))\b/i.test(
+      mime,
+    ) ||
     /\+(?:json|xml)\b/i.test(mime) ||
     /^image\/svg\+xml/i.test(mime)
   );
@@ -1513,12 +1853,12 @@ function isTextualMime(mime) {
 
 function globMatch(name, glob) {
   const re = new RegExp(
-    '^' +
+    "^" +
       glob
-        .split('*')
-        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
-        .join('.*') +
-      '$',
+        .split("*")
+        .map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*") +
+      "$",
   );
   return re.test(name);
 }
@@ -1527,23 +1867,25 @@ function globMatch(name, glob) {
 export function kindFor(name) {
   // Editable sketches use a compound extension so they slot into the
   // "sketch" bucket while still being valid JSON on disk.
-  if (name.endsWith('.sketch.json')) return 'sketch';
+  if (name.endsWith(".sketch.json")) return "sketch";
   const ext = path.extname(name).toLowerCase();
-  if (ext === '.html' || ext === '.htm') return 'html';
-  if (ext === '.svg') return 'sketch';
-  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif'].includes(ext)) {
-    if (name.startsWith('sketch-')) return 'sketch';
-    return 'image';
+  if (ext === ".html" || ext === ".htm") return "html";
+  if (ext === ".svg") return "sketch";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif"].includes(ext)) {
+    if (name.startsWith("sketch-")) return "sketch";
+    return "image";
   }
-  if (['.mp4', '.mov', '.webm'].includes(ext)) return 'video';
-  if (['.mp3', '.wav', '.m4a'].includes(ext)) return 'audio';
-  if (['.md', '.txt'].includes(ext)) return 'text';
-  if (['.js', '.mjs', '.cjs', '.ts', '.tsx', '.json', '.css', '.py'].includes(ext)) {
-    return 'code';
+  if ([".mp4", ".mov", ".webm"].includes(ext)) return "video";
+  if ([".mp3", ".wav", ".m4a"].includes(ext)) return "audio";
+  if ([".md", ".txt"].includes(ext)) return "text";
+  if (
+    [".js", ".mjs", ".cjs", ".ts", ".tsx", ".json", ".css", ".py"].includes(ext)
+  ) {
+    return "code";
   }
-  if (ext === '.pdf') return 'pdf';
-  if (ext === '.docx') return 'document';
-  if (ext === '.pptx') return 'presentation';
-  if (ext === '.xlsx') return 'spreadsheet';
-  return 'binary';
+  if (ext === ".pdf") return "pdf";
+  if (ext === ".docx") return "document";
+  if (ext === ".pptx") return "presentation";
+  if (ext === ".xlsx") return "spreadsheet";
+  return "binary";
 }

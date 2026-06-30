@@ -1,18 +1,31 @@
-import { execFile } from 'node:child_process';
-import { copyFile, cp, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
-import path, { parse } from 'node:path';
-import { promisify } from 'node:util';
+import { execFile } from "node:child_process";
+import {
+  copyFile,
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import path, { parse } from "node:path";
+import { promisify } from "node:util";
 
-import { extractComponentsManifest } from '@open-design/contracts/design-systems/components-manifest';
-import { renderDesignTokensJson, renderTailwindV4Css } from '@open-design/contracts/design-systems/derived-token-outputs';
+import { extractComponentsManifest } from "@open-design/contracts/design-systems/components-manifest";
+import {
+  renderDesignTokensJson,
+  renderTailwindV4Css,
+} from "@open-design/contracts/design-systems/derived-token-outputs";
 import {
   buildDesignTokenContract,
   buildReportWithSelfCheck,
   validateDesignTokenOutputs,
   type DesignTokenBinding,
   type DesignTokenContractReport,
-} from './design-token-contract.js';
-import { extractCssCustomProperties } from './design-token-evidence.js';
+} from "./design-token-contract.js";
+import { extractCssCustomProperties } from "./design-token-evidence.js";
+import { Dirent } from "node:fs";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,41 +41,40 @@ export type LocalDesignSystemImportOptions = {
   fallbackName?: string;
   reservedIds?: Iterable<string>;
   source?: DesignSystemProjectSource;
-  importMode?: 'normalized' | 'hybrid' | 'verbatim';
+  importMode?: "normalized" | "hybrid" | "verbatim";
   craftApplies?: string[];
   projectsRoot?: string | undefined;
   onProgress?: ((stage: string) => void) | undefined;
 };
 
-
 export type DesignSystemProjectSource =
   | {
-    type: 'local';
-    path: string;
-    importedAt?: string;
-  }
+      type: "local";
+      path: string;
+      importedAt?: string;
+    }
   | {
-    type: 'github';
-    url: string;
-    branch?: string;
-    commit?: string;
-    importedAt?: string;
-  }
+      type: "github";
+      url: string;
+      branch?: string;
+      commit?: string;
+      importedAt?: string;
+    }
   | {
-    type: 'git';
-    url: string;
-    branch?: string;
-    commit?: string;
-    importedAt?: string;
-  }
+      type: "git";
+      url: string;
+      branch?: string;
+      commit?: string;
+      importedAt?: string;
+    }
   | {
-    type: 'shadcn';
-    reference: string;
-    registryUrl?: string;
-    item?: string;
-    homepage?: string;
-    importedAt?: string;
-  };
+      type: "shadcn";
+      reference: string;
+      registryUrl?: string;
+      item?: string;
+      homepage?: string;
+      importedAt?: string;
+    };
 
 type ProjectScan = {
   sourceRoot: string;
@@ -111,63 +123,82 @@ type ComponentSignal = {
 };
 
 const IGNORED_DIRS = new Set([
-  '.git',
-  '.hg',
-  '.next',
-  '.nuxt',
-  '.od',
-  '.tmp',
-  'build',
-  'coverage',
-  'dist',
-  'node_modules',
-  'out',
-  'target',
+  ".git",
+  ".hg",
+  ".next",
+  ".nuxt",
+  ".od",
+  ".tmp",
+  "build",
+  "coverage",
+  "dist",
+  "node_modules",
+  "out",
+  "target",
 ]);
 
-const STYLE_EXTENSIONS = new Set(['.css', '.scss', '.sass', '.less']);
-const COMPONENT_EXTENSIONS = new Set(['.tsx', '.jsx', '.vue', '.svelte']);
-const ASSET_EXTENSIONS = new Set(['.svg', '.png', '.jpg', '.jpeg', '.webp', '.ico']);
-const FONT_EXTENSIONS = new Set(['.woff', '.woff2', '.ttf', '.otf']);
-const COMPONENT_NAMES = ['Button', 'Input', 'Card', 'Nav', 'Navbar', 'Sidebar'];
+const STYLE_EXTENSIONS = new Set([".css", ".scss", ".sass", ".less"]);
+const COMPONENT_EXTENSIONS = new Set([".tsx", ".jsx", ".vue", ".svelte"]);
+const ASSET_EXTENSIONS = new Set([
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".ico",
+]);
+const FONT_EXTENSIONS = new Set([".woff", ".woff2", ".ttf", ".otf"]);
+const COMPONENT_NAMES = ["Button", "Input", "Card", "Nav", "Navbar", "Sidebar"];
 
 async function getExistingPackageName(
   dirId: string,
   userDesignSystemsRoot: string,
   projectsRoot?: string,
 ): Promise<string | undefined> {
-  const manifestPath = path.join(userDesignSystemsRoot, dirId, 'manifest.json');
+  const manifestPath = path.join(userDesignSystemsRoot, dirId, "manifest.json");
   if (await exists(manifestPath)) {
     try {
-      const content = await readFile(manifestPath, 'utf8');
+      const content = await readFile(manifestPath, "utf8");
       const parsed = JSON.parse(content) as Record<string, unknown>;
-      if (parsed && typeof parsed === 'object' && typeof parsed.packageName === 'string') {
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.packageName === "string"
+      ) {
         return parsed.packageName;
       }
-    } catch { }
+    } catch {}
   }
 
-  const pkgPath = path.join(userDesignSystemsRoot, dirId, 'package.json');
+  const pkgPath = path.join(userDesignSystemsRoot, dirId, "package.json");
   if (await exists(pkgPath)) {
     try {
-      const content = await readFile(pkgPath, 'utf8');
+      const content = await readFile(pkgPath, "utf8");
       const parsed = JSON.parse(content) as Record<string, unknown>;
-      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.name === "string"
+      ) {
         return parsed.name;
       }
-    } catch { }
+    } catch {}
   }
 
   if (projectsRoot) {
-    const projPkgPath = path.join(projectsRoot, `ds-${dirId}`, 'package.json');
+    const projPkgPath = path.join(projectsRoot, `ds-${dirId}`, "package.json");
     if (await exists(projPkgPath)) {
       try {
-        const content = await readFile(projPkgPath, 'utf8');
+        const content = await readFile(projPkgPath, "utf8");
         const parsed = JSON.parse(content) as Record<string, unknown>;
-        if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          typeof parsed.name === "string"
+        ) {
           return parsed.name;
         }
-      } catch { }
+      } catch {}
     }
   }
   return undefined;
@@ -192,10 +223,13 @@ async function validateAndScanProject(
   const sourceRoot = await realpath(sourceRootInput);
   const sourceStats = await stat(sourceRoot);
   if (!sourceStats.isDirectory()) {
-    throw new LocalDesignSystemImportError('BAD_REQUEST', 'local project path must be a directory');
+    throw new LocalDesignSystemImportError(
+      "BAD_REQUEST",
+      "local project path must be a directory",
+    );
   }
 
-  options.onProgress?.('Scanning project files...');
+  options.onProgress?.("Scanning project files...");
   const scan = await scanProject(sourceRoot);
 
   if (scan.packageName) {
@@ -207,27 +241,41 @@ async function validateAndScanProject(
     }
     for (const entry of entries) {
       if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
-      const existingPkgName = await getExistingPackageName(entry.name, userDesignSystemsRoot, options.projectsRoot);
-      if (existingPkgName && existingPkgName.toLowerCase() === scan.packageName.toLowerCase()) {
+      const existingPkgName = await getExistingPackageName(
+        entry.name,
+        userDesignSystemsRoot,
+        options.projectsRoot,
+      );
+      if (
+        existingPkgName &&
+        existingPkgName.toLowerCase() === scan.packageName.toLowerCase()
+      ) {
         throw new LocalDesignSystemImportError(
-          'BAD_REQUEST',
+          "BAD_REQUEST",
           `A design system with the package name "${scan.packageName}" has already been imported.`,
         );
       }
     }
   }
   const isGitProject =
-    options.source?.type === 'github' ||
-    options.source?.type === 'git' ||
-    (await exists(path.join(sourceRoot, '.git')));
-  const hasManifest = await exists(path.join(sourceRoot, 'manifest.json'));
+    options.source?.type === "github" ||
+    options.source?.type === "git" ||
+    (await exists(path.join(sourceRoot, ".git")));
+  const hasManifest = await exists(path.join(sourceRoot, "manifest.json"));
 
   let manifestName: string | undefined;
   if (hasManifest) {
     try {
-      const content = await readFile(path.join(sourceRoot, 'manifest.json'), 'utf8');
+      const content = await readFile(
+        path.join(sourceRoot, "manifest.json"),
+        "utf8",
+      );
       const parsed = JSON.parse(content) as Record<string, any>;
-      if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.name === "string"
+      ) {
         manifestName = parsed.name;
       }
     } catch {
@@ -235,12 +283,31 @@ async function validateAndScanProject(
     }
   }
 
-  const displayName = cleanDisplayName(options.name ?? manifestName ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot));
-  const id = await nextAvailableSlug(userDesignSystemsRoot, slugify(displayName), options.reservedIds);
+  const displayName = cleanDisplayName(
+    options.name ??
+      manifestName ??
+      scan.packageName ??
+      options.fallbackName ??
+      path.basename(sourceRoot),
+  );
+  const id = await nextAvailableSlug(
+    userDesignSystemsRoot,
+    slugify(displayName),
+    options.reservedIds,
+  );
   const outDir = path.join(userDesignSystemsRoot, id);
   await mkdir(outDir, { recursive: true });
 
-  return { sourceRoot, scan, isGitProject, hasManifest, manifestName, displayName, id, outDir };
+  return {
+    sourceRoot,
+    scan,
+    isGitProject,
+    hasManifest,
+    manifestName,
+    displayName,
+    id,
+    outDir,
+  };
 }
 
 async function copyProjectToProjectsRoot(
@@ -250,7 +317,10 @@ async function copyProjectToProjectsRoot(
 ): Promise<void> {
   const projectDestDir = path.join(projectsRoot, `ds-${id}`);
   await mkdir(projectDestDir, { recursive: true });
-  await cp(sourceRoot, projectDestDir, { recursive: true, filter: skipNodeModules });
+  await cp(sourceRoot, projectDestDir, {
+    recursive: true,
+    filter: skipNodeModules,
+  });
 }
 
 async function copySpecificFiles(
@@ -276,58 +346,70 @@ async function copyDocAndManifestFiles(
     if (entry.isFile()) {
       const nameLower = entry.name.toLowerCase();
       if (
-        nameLower === 'design.md' ||
-        nameLower === 'readme.md' ||
-        nameLower.startsWith('readme.') ||
-        (hasManifest && (nameLower === 'manifest.json' || nameLower === 'metadata.json'))
+        nameLower === "design.md" ||
+        nameLower === "readme.md" ||
+        nameLower.startsWith("readme.") ||
+        (hasManifest &&
+          (nameLower === "manifest.json" || nameLower === "metadata.json"))
       ) {
-        await copyFile(path.join(sourceRoot, entry.name), path.join(destDir, entry.name));
+        await copyFile(
+          path.join(sourceRoot, entry.name),
+          path.join(destDir, entry.name),
+        );
       }
     }
   }
 
   if (hasManifest) {
     try {
-      const manifestPath = path.join(sourceRoot, 'manifest.json');
-      const content = await readFile(manifestPath, 'utf8');
+      const manifestPath = path.join(sourceRoot, "manifest.json");
+      const content = await readFile(manifestPath, "utf8");
       const manifest = JSON.parse(content);
-      if (manifest && typeof manifest === 'object') {
+      if (manifest && typeof manifest === "object") {
         const pathsToCopy = new Set<string>();
 
         // 1. Files from files object (design, tokens, designTokens, tailwind, components)
-        if (manifest.files && typeof manifest.files === 'object') {
+        if (manifest.files && typeof manifest.files === "object") {
           for (const key of Object.keys(manifest.files)) {
             const fileVal = manifest.files[key];
-            if (typeof fileVal === 'string') {
+            if (typeof fileVal === "string") {
               pathsToCopy.add(fileVal);
             }
           }
         }
 
         // 2. Usage file
-        if (typeof manifest.usage === 'string') {
+        if (typeof manifest.usage === "string") {
           pathsToCopy.add(manifest.usage);
         }
 
         // 3. Components manifest
-        if (typeof manifest.componentsManifest === 'string') {
+        if (typeof manifest.componentsManifest === "string") {
           pathsToCopy.add(manifest.componentsManifest);
         }
 
         // 4. Fonts
         if (Array.isArray(manifest.fonts)) {
           for (const font of manifest.fonts) {
-            if (font && typeof font === 'object' && typeof font.file === 'string') {
+            if (
+              font &&
+              typeof font === "object" &&
+              typeof font.file === "string"
+            ) {
               pathsToCopy.add(font.file);
             }
           }
         }
 
         // 5. Preview pages
-        if (manifest.preview && typeof manifest.preview === 'object') {
+        if (manifest.preview && typeof manifest.preview === "object") {
           if (Array.isArray(manifest.preview.pages)) {
             for (const page of manifest.preview.pages) {
-              if (page && typeof page === 'object' && typeof page.path === 'string') {
+              if (
+                page &&
+                typeof page === "object" &&
+                typeof page.path === "string"
+              ) {
                 pathsToCopy.add(page.path);
               }
             }
@@ -335,17 +417,17 @@ async function copyDocAndManifestFiles(
         }
 
         // 6. SourceFiles
-        if (manifest.sourceFiles && typeof manifest.sourceFiles === 'object') {
+        if (manifest.sourceFiles && typeof manifest.sourceFiles === "object") {
           for (const key of Object.keys(manifest.sourceFiles)) {
             const fileVal = manifest.sourceFiles[key];
-            if (typeof fileVal === 'string') {
+            if (typeof fileVal === "string") {
               pathsToCopy.add(fileVal);
             }
           }
         }
 
         // 7. Assets directory
-        if (typeof manifest.assetsDir === 'string') {
+        if (typeof manifest.assetsDir === "string") {
           const srcAssets = path.join(sourceRoot, manifest.assetsDir);
           const destAssets = path.join(destDir, manifest.assetsDir);
           try {
@@ -374,7 +456,10 @@ async function copyDocAndManifestFiles(
         }
       }
     } catch (err) {
-      console.warn(`[design-system-import] Failed to copy registered manifest files:`, err);
+      console.warn(
+        `[design-system-import] Failed to copy registered manifest files:`,
+        err,
+      );
     }
   }
 }
@@ -386,24 +471,31 @@ async function updateManifestIdAndSource(
   scan: ProjectScan,
   options: LocalDesignSystemImportOptions,
 ): Promise<LocalDesignSystemImportResult> {
-  const srcManifestPath = path.join(sourceRoot, 'manifest.json');
-  const manifestPath = path.join(outDir, 'manifest.json');
+  const srcManifestPath = path.join(sourceRoot, "manifest.json");
+  const manifestPath = path.join(outDir, "manifest.json");
   try {
-    const content = await readFile(srcManifestPath, 'utf8');
+    const content = await readFile(srcManifestPath, "utf8");
     const parsed = JSON.parse(content) as Record<string, any>;
     parsed.id = id;
     parsed.source = options.source ?? {
-      type: 'local',
+      type: "local",
       path: sourceRoot,
     };
 
-    console.log("source", parsed.source), options.source
+    (console.log("source", parsed.source), options.source);
     if (scan.packageName) {
       parsed.packageName = scan.packageName;
     }
-    await writeFile(manifestPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+    await writeFile(
+      manifestPath,
+      `${JSON.stringify(parsed, null, 2)}\n`,
+      "utf8",
+    );
   } catch (err) {
-    throw new LocalDesignSystemImportError('INTERNAL_ERROR', `failed to update manifest.json: ${String(err)}`);
+    throw new LocalDesignSystemImportError(
+      "INTERNAL_ERROR",
+      `failed to update manifest.json: ${String(err)}`,
+    );
   }
   const files = await getFileList(outDir);
   return { id, dir: outDir, files };
@@ -419,18 +511,21 @@ async function generateDesignSystemArtifacts(
   const now = options.now ?? new Date();
 
   const files = [
-    'USAGE.md',
-    'DESIGN.md',
-    'tokens.css',
-    'design-tokens.json',
-    'tailwind-v4.css',
-    'components.html',
-    'components.manifest.json',
-    'manifest.json',
+    "USAGE.md",
+    "DESIGN.md",
+    "tokens.css",
+    "design-tokens.json",
+    "tailwind-v4.css",
+    "components.html",
+    "components.manifest.json",
+    "manifest.json",
   ];
-  options.onProgress?.('Extracting design tokens & compiling CSS...');
+  options.onProgress?.("Extracting design tokens & compiling CSS...");
   const designMd = renderDesignMd(id, displayName, scan);
-  const tokenContract = buildDesignTokenContract({ sourceTokens: scan.cssVariables, generatedAt: now });
+  const tokenContract = buildDesignTokenContract({
+    sourceTokens: scan.cssVariables,
+    generatedAt: now,
+  });
   const tokensCss = tokenContract.tokensCss;
   const componentsHtml = renderComponentsHtml(displayName, tokensCss);
   const tokenContractReport = buildReportWithSelfCheck(
@@ -443,34 +538,63 @@ async function generateDesignSystemArtifacts(
     tokensCss,
   });
 
-  options.onProgress?.('Generating design system configuration...');
-  await writeFile(path.join(outDir, 'USAGE.md'), renderUsageMd(displayName, scan), 'utf8');
-  await writeFile(path.join(outDir, 'DESIGN.md'), designMd, 'utf8');
-  await writeFile(path.join(outDir, 'tokens.css'), tokensCss, 'utf8');
-  await writeFile(path.join(outDir, 'design-tokens.json'), renderDesignTokensJson({
-    bindings: tokenContract.bindings,
-    report: tokenContractReport,
-  }), 'utf8');
-  await writeFile(path.join(outDir, 'tailwind-v4.css'), renderTailwindV4Css(tokenContract.bindings), 'utf8');
-  await writeFile(path.join(outDir, 'components.html'), componentsHtml, 'utf8');
+  options.onProgress?.("Generating design system configuration...");
   await writeFile(
-    path.join(outDir, 'components.manifest.json'),
-    `${JSON.stringify(componentsManifest, null, 2)}\n`,
-    'utf8',
+    path.join(outDir, "USAGE.md"),
+    renderUsageMd(displayName, scan),
+    "utf8",
   );
-  files.push(...(await writePreviewFiles(outDir, displayName, scan, tokenContract.bindings)));
-  files.push(...(await writeSourceEvidenceFiles(outDir, scan, tokenContractReport)));
+  await writeFile(path.join(outDir, "DESIGN.md"), designMd, "utf8");
+  await writeFile(path.join(outDir, "tokens.css"), tokensCss, "utf8");
   await writeFile(
-    path.join(outDir, 'manifest.json'),
+    path.join(outDir, "design-tokens.json"),
+    renderDesignTokensJson({
+      bindings: tokenContract.bindings,
+      report: tokenContractReport,
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(outDir, "tailwind-v4.css"),
+    renderTailwindV4Css(tokenContract.bindings),
+    "utf8",
+  );
+  await writeFile(path.join(outDir, "components.html"), componentsHtml, "utf8");
+  await writeFile(
+    path.join(outDir, "components.manifest.json"),
+    `${JSON.stringify(componentsManifest, null, 2)}\n`,
+    "utf8",
+  );
+  files.push(
+    ...(await writePreviewFiles(
+      outDir,
+      displayName,
+      scan,
+      tokenContract.bindings,
+    )),
+  );
+  files.push(
+    ...(await writeSourceEvidenceFiles(outDir, scan, tokenContractReport)),
+  );
+  await writeFile(
+    path.join(outDir, "manifest.json"),
     `${JSON.stringify(
-      renderManifest(id, displayName, scan, now, options.source, importMode, craftApplies),
+      renderManifest(
+        id,
+        displayName,
+        scan,
+        now,
+        options.source,
+        importMode,
+        craftApplies,
+      ),
       null,
       2,
     )}\n`,
-    'utf8',
+    "utf8",
   );
 
-  options.onProgress?.('Finalizing import...');
+  options.onProgress?.("Finalizing import...");
   const copiedAssets = await copyAssets(scan.assets, outDir);
   const copiedFonts = await copyFonts(scan.fonts, outDir);
   files.push(...copiedAssets);
@@ -483,7 +607,11 @@ export async function importLocalDesignSystemProject(
   userDesignSystemsRoot: string,
   options: LocalDesignSystemImportOptions = {},
 ): Promise<LocalDesignSystemImportResult> {
-  const setup = await validateAndScanProject(sourceRootInput, userDesignSystemsRoot, options);
+  const setup = await validateAndScanProject(
+    sourceRootInput,
+    userDesignSystemsRoot,
+    options,
+  );
   const { sourceRoot, isGitProject, hasManifest, id, outDir } = setup;
 
   if (hasManifest) {
@@ -492,9 +620,18 @@ export async function importLocalDesignSystemProject(
       await copyProjectToProjectsRoot(sourceRoot, options.projectsRoot, id);
     } else {
       await mkdir(outDir, { recursive: true });
-      await cp(sourceRoot, outDir, { recursive: true, filter: skipNodeModules });
+      await cp(sourceRoot, outDir, {
+        recursive: true,
+        filter: skipNodeModules,
+      });
     }
-    return await updateManifestIdAndSource(sourceRoot, outDir, id, setup.scan, options);
+    return await updateManifestIdAndSource(
+      sourceRoot,
+      outDir,
+      id,
+      setup.scan,
+      options,
+    );
   }
 
   // hasManifest is false: Scaffold
@@ -512,7 +649,11 @@ export async function importLocalDesignSystemProjectAsReference(
   userDesignSystemsRoot: string,
   options: LocalDesignSystemImportOptions = {},
 ): Promise<LocalDesignSystemImportResult> {
-  const setup = await validateAndScanProject(sourceRootInput, userDesignSystemsRoot, options);
+  const setup = await validateAndScanProject(
+    sourceRootInput,
+    userDesignSystemsRoot,
+    options,
+  );
   const { sourceRoot, hasManifest, id, outDir } = setup;
 
   await copyDocAndManifestFiles(sourceRoot, outDir, hasManifest);
@@ -522,7 +663,13 @@ export async function importLocalDesignSystemProjectAsReference(
   }
 
   if (hasManifest) {
-    return await updateManifestIdAndSource(sourceRoot, outDir, id, setup.scan, options);
+    return await updateManifestIdAndSource(
+      sourceRoot,
+      outDir,
+      id,
+      setup.scan,
+      options,
+    );
   }
 
   return await generateDesignSystemArtifacts(setup, options);
@@ -530,11 +677,11 @@ export async function importLocalDesignSystemProjectAsReference(
 
 export class LocalDesignSystemImportError extends Error {
   constructor(
-    readonly code: 'BAD_REQUEST' | 'INTERNAL_ERROR',
+    readonly code: "BAD_REQUEST" | "INTERNAL_ERROR",
     message: string,
   ) {
     super(message);
-    this.name = 'LocalDesignSystemImportError';
+    this.name = "LocalDesignSystemImportError";
   }
 }
 
@@ -545,9 +692,15 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
     walkProject(sourceRoot),
   ]);
   const styleFiles = files
-    .filter((file) => STYLE_EXTENSIONS.has(path.extname(file.absPath).toLowerCase()))
+    .filter((file) =>
+      STYLE_EXTENSIONS.has(path.extname(file.absPath).toLowerCase()),
+    )
     .slice(0, 80);
-  const cssVariables = (await Promise.all(styleFiles.map((file) => readCssVariables(file.absPath, file.relPath))))
+  const cssVariables = (
+    await Promise.all(
+      styleFiles.map((file) => readCssVariables(file.absPath, file.relPath)),
+    )
+  )
     .flat()
     .slice(0, 80);
   return {
@@ -565,22 +718,34 @@ async function scanProject(sourceRoot: string): Promise<ProjectScan> {
   };
 }
 
-async function readPackageJson(
-  sourceRoot: string,
-): Promise<{ name: string | undefined; description: string | undefined; tech: string[] }> {
+async function readPackageJson(sourceRoot: string): Promise<{
+  name: string | undefined;
+  description: string | undefined;
+  tech: string[];
+}> {
   try {
-    const parsed = JSON.parse(await readFile(path.join(sourceRoot, 'package.json'), 'utf8')) as Record<string, unknown>;
+    const parsed = JSON.parse(
+      await readFile(path.join(sourceRoot, "package.json"), "utf8"),
+    ) as Record<string, unknown>;
     const deps = {
       ...(isRecord(parsed.dependencies) ? parsed.dependencies : {}),
       ...(isRecord(parsed.devDependencies) ? parsed.devDependencies : {}),
     };
     return {
-      name: typeof parsed.name === 'string' ? parsed.name : undefined,
-      description: typeof parsed.description === 'string' ? parsed.description : undefined,
+      name: typeof parsed.name === "string" ? parsed.name : undefined,
+      description:
+        typeof parsed.description === "string" ? parsed.description : undefined,
       tech: Object.keys(deps).filter((name) =>
-        ['@tailwindcss', 'tailwindcss', 'react', 'vue', 'svelte', 'next', 'vite', 'framer-motion'].some((needle) =>
-          name.includes(needle),
-        ),
+        [
+          "@tailwindcss",
+          "tailwindcss",
+          "react",
+          "vue",
+          "svelte",
+          "next",
+          "vite",
+          "framer-motion",
+        ].some((needle) => name.includes(needle)),
       ),
     };
   } catch {
@@ -589,9 +754,9 @@ async function readPackageJson(
 }
 
 async function readReadme(sourceRoot: string): Promise<string | undefined> {
-  for (const name of ['README.md', 'README.zh-CN.md', 'readme.md']) {
+  for (const name of ["README.md", "README.zh-CN.md", "readme.md"]) {
     try {
-      const raw = await readFile(path.join(sourceRoot, name), 'utf8');
+      const raw = await readFile(path.join(sourceRoot, name), "utf8");
       return compactMarkdown(raw).slice(0, 1400);
     } catch {
       // Try the next common readme name.
@@ -600,19 +765,21 @@ async function readReadme(sourceRoot: string): Promise<string | undefined> {
   return undefined;
 }
 
-async function walkProject(sourceRoot: string): Promise<Array<{ absPath: string; relPath: string; size: number }>> {
+async function walkProject(
+  sourceRoot: string,
+): Promise<Array<{ absPath: string; relPath: string; size: number }>> {
   const out: Array<{ absPath: string; relPath: string; size: number }> = [];
   const queue = [sourceRoot];
   while (queue.length > 0 && out.length < 900) {
     const current = queue.shift()!;
-    let entries = [];
+    let entries: Dirent[] = [];
     try {
       entries = await readdir(current, { withFileTypes: true });
     } catch {
       continue;
     }
     for (const entry of entries) {
-      if (entry.name.startsWith('.') && entry.name !== '.storybook') continue;
+      if (entry.name.startsWith(".") && entry.name !== ".storybook") continue;
       const absPath = path.join(current, entry.name);
       const relPath = path.relative(sourceRoot, absPath);
       if (entry.isDirectory()) {
@@ -632,9 +799,12 @@ async function walkProject(sourceRoot: string): Promise<Array<{ absPath: string;
   return out;
 }
 
-async function readCssVariables(absPath: string, relPath: string): Promise<CssVariable[]> {
+async function readCssVariables(
+  absPath: string,
+  relPath: string,
+): Promise<CssVariable[]> {
   try {
-    const raw = await readFile(absPath, 'utf8');
+    const raw = await readFile(absPath, "utf8");
     return extractCssCustomProperties(raw, relPath);
   } catch {
     return [];
@@ -643,16 +813,22 @@ async function readCssVariables(absPath: string, relPath: string): Promise<CssVa
 
 async function readTailwindSignals(sourceRoot: string): Promise<string[]> {
   const candidates = [
-    'tailwind.config.ts',
-    'tailwind.config.js',
-    'tailwind.config.mjs',
-    'tailwind.config.cjs',
+    "tailwind.config.ts",
+    "tailwind.config.js",
+    "tailwind.config.mjs",
+    "tailwind.config.cjs",
   ];
   for (const candidate of candidates) {
     try {
-      const raw = await readFile(path.join(sourceRoot, candidate), 'utf8');
+      const raw = await readFile(path.join(sourceRoot, candidate), "utf8");
       const signals = new Set<string>();
-      for (const key of ['colors', 'fontFamily', 'borderRadius', 'spacing', 'boxShadow']) {
+      for (const key of [
+        "colors",
+        "fontFamily",
+        "borderRadius",
+        "spacing",
+        "boxShadow",
+      ]) {
         if (new RegExp(`\\b${key}\\s*:`).test(raw)) signals.add(key);
       }
       return Array.from(signals);
@@ -671,10 +847,18 @@ async function findAssets(
     .filter((file) => {
       const ext = path.extname(file.relPath).toLowerCase();
       const rel = normalizeRel(file.relPath);
-      if (!ASSET_EXTENSIONS.has(ext) || file.size > 2 * 1024 * 1024) return false;
+      if (!ASSET_EXTENSIONS.has(ext) || file.size > 2 * 1024 * 1024)
+        return false;
       const isAssetRoot =
-        rel.startsWith('assets/') || rel.startsWith('public/') || rel.startsWith('src/assets/');
-      return isAssetRoot && /(logo|icon|favicon|mark|brand|avatar)/i.test(path.basename(file.relPath));
+        rel.startsWith("assets/") ||
+        rel.startsWith("public/") ||
+        rel.startsWith("src/assets/");
+      return (
+        isAssetRoot &&
+        /(logo|icon|favicon|mark|brand|avatar)/i.test(
+          path.basename(file.relPath),
+        )
+      );
     })
     .slice(0, 12)
     .map((file) => ({
@@ -687,11 +871,19 @@ async function findAssets(
 function findComponentSignals(files: ProjectFile[]): ComponentSignal[] {
   const found = new Map<string, ComponentSignal>();
   for (const file of files) {
-    if (!COMPONENT_EXTENSIONS.has(path.extname(file.relPath).toLowerCase())) continue;
-    const basename = path.basename(file.relPath).replace(/\.[^.]+$/, '');
-    const component = COMPONENT_NAMES.find((name) => basename.toLowerCase().includes(name.toLowerCase()));
+    if (!COMPONENT_EXTENSIONS.has(path.extname(file.relPath).toLowerCase()))
+      continue;
+    const basename = path.basename(file.relPath).replace(/\.[^.]+$/, "");
+    const component = COMPONENT_NAMES.find((name) =>
+      basename.toLowerCase().includes(name.toLowerCase()),
+    );
     if (component && !found.has(component)) {
-      found.set(component, { name: component, relPath: normalizeRel(file.relPath), absPath: file.absPath, size: file.size });
+      found.set(component, {
+        name: component,
+        relPath: normalizeRel(file.relPath),
+        absPath: file.absPath,
+        size: file.size,
+      });
     }
   }
   return Array.from(found.values()).slice(0, 10);
@@ -699,7 +891,11 @@ function findComponentSignals(files: ProjectFile[]): ComponentSignal[] {
 
 function findFonts(sourceRoot: string, files: ProjectFile[]): FileCandidate[] {
   return files
-    .filter((file) => FONT_EXTENSIONS.has(path.extname(file.relPath).toLowerCase()) && file.size <= 2 * 1024 * 1024)
+    .filter(
+      (file) =>
+        FONT_EXTENSIONS.has(path.extname(file.relPath).toLowerCase()) &&
+        file.size <= 2 * 1024 * 1024,
+    )
     .slice(0, 8)
     .map((file) => ({
       absPath: file.absPath,
@@ -708,26 +904,36 @@ function findFonts(sourceRoot: string, files: ProjectFile[]): FileCandidate[] {
     }));
 }
 
-async function copyAssets(assets: AssetCandidate[], outDir: string): Promise<string[]> {
+async function copyAssets(
+  assets: AssetCandidate[],
+  outDir: string,
+): Promise<string[]> {
   if (assets.length === 0) return [];
-  const assetsDir = path.join(outDir, 'assets');
+  const assetsDir = path.join(outDir, "assets");
   await mkdir(assetsDir, { recursive: true });
   const copied: string[] = [];
   for (const asset of assets) {
-    const targetName = slugify(path.basename(asset.relPath, path.extname(asset.relPath))) + path.extname(asset.relPath).toLowerCase();
+    const targetName =
+      slugify(path.basename(asset.relPath, path.extname(asset.relPath))) +
+      path.extname(asset.relPath).toLowerCase();
     await copyFile(asset.absPath, path.join(assetsDir, targetName));
     copied.push(`assets/${targetName}`);
   }
   return copied;
 }
 
-async function copyFonts(fonts: FileCandidate[], outDir: string): Promise<string[]> {
+async function copyFonts(
+  fonts: FileCandidate[],
+  outDir: string,
+): Promise<string[]> {
   if (fonts.length === 0) return [];
-  const fontsDir = path.join(outDir, 'fonts');
+  const fontsDir = path.join(outDir, "fonts");
   await mkdir(fontsDir, { recursive: true });
   const copied: string[] = [];
   for (const font of fonts) {
-    const targetName = slugify(path.basename(font.relPath, path.extname(font.relPath))) + path.extname(font.relPath).toLowerCase();
+    const targetName =
+      slugify(path.basename(font.relPath, path.extname(font.relPath))) +
+      path.extname(font.relPath).toLowerCase();
     await copyFile(font.absPath, path.join(fontsDir, targetName));
     copied.push(`fonts/${targetName}`);
   }
@@ -740,7 +946,7 @@ async function nextAvailableSlug(
   reservedIds: Iterable<string> = [],
 ): Promise<string> {
   await mkdir(root, { recursive: true });
-  const base = preferred || 'imported-design-system';
+  const base = preferred || "imported-design-system";
   const reserved = new Set(reservedIds);
   for (let index = 1; index < 1000; index += 1) {
     const id = index === 1 ? base : `${base}-${index}`;
@@ -751,7 +957,10 @@ async function nextAvailableSlug(
       return id;
     }
   }
-  throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'could not allocate design system id');
+  throw new LocalDesignSystemImportError(
+    "INTERNAL_ERROR",
+    "could not allocate design system id",
+  );
 }
 
 function renderManifest(
@@ -760,67 +969,83 @@ function renderManifest(
   scan: ProjectScan,
   now: Date,
   sourceOverride: DesignSystemProjectSource | undefined,
-  importMode: 'normalized' | 'hybrid' | 'verbatim',
+  importMode: "normalized" | "hybrid" | "verbatim",
   craftApplies: string[],
 ) {
   const importedAt = now.toISOString();
   const source = sourceOverride ?? {
-    type: 'local',
+    type: "local",
     path: scan.sourceRoot,
     importedAt,
   };
   return {
-    schemaVersion: 'od-design-system-project/v1',
+    schemaVersion: "od-design-system-project/v1",
     id,
     name,
-    category: 'Imported',
+    category: "Imported",
     packageName: scan.packageName,
-    description: scan.packageDescription ?? `Extracted from local project ${path.basename(scan.sourceRoot)}.`,
+    description:
+      scan.packageDescription ??
+      `Extracted from local project ${path.basename(scan.sourceRoot)}.`,
     source: {
       ...source,
       importedAt: source.importedAt ?? importedAt,
     },
     files: {
-      design: 'DESIGN.md',
-      tokens: 'tokens.css',
-      designTokens: 'design-tokens.json',
-      tailwind: 'tailwind-v4.css',
-      components: 'components.html',
+      design: "DESIGN.md",
+      tokens: "tokens.css",
+      designTokens: "design-tokens.json",
+      tailwind: "tailwind-v4.css",
+      components: "components.html",
     },
-    usage: 'USAGE.md',
-    componentsManifest: 'components.manifest.json',
+    usage: "USAGE.md",
+    componentsManifest: "components.manifest.json",
     importMode,
     craft: {
       applies: craftApplies,
-      suggested: craftApplies.includes('color') ? [] : ['color'],
+      suggested: craftApplies.includes("color") ? [] : ["color"],
       exemptions: [],
     },
-    ...(scan.assets.length > 0 ? { assetsDir: 'assets' } : {}),
+    ...(scan.assets.length > 0 ? { assetsDir: "assets" } : {}),
     ...(scan.fonts.length > 0
       ? {
-        fonts: scan.fonts.map((font) => ({
-          family: cleanDisplayName(path.basename(font.relPath, path.extname(font.relPath))),
-          file: `fonts/${slugify(path.basename(font.relPath, path.extname(font.relPath)))}${path.extname(font.relPath).toLowerCase()}`,
-        })),
-      }
+          fonts: scan.fonts.map((font) => ({
+            family: cleanDisplayName(
+              path.basename(font.relPath, path.extname(font.relPath)),
+            ),
+            file: `fonts/${slugify(path.basename(font.relPath, path.extname(font.relPath)))}${path.extname(font.relPath).toLowerCase()}`,
+          })),
+        }
       : {}),
     preview: {
-      dir: 'preview',
+      dir: "preview",
       pages: [
-        { path: 'preview/colors.html', role: 'colors', title: 'Colors' },
-        { path: 'preview/typography.html', role: 'typography', title: 'Typography' },
-        { path: 'preview/spacing.html', role: 'spacing', title: 'Spacing' },
-        { path: 'preview/components-buttons.html', role: 'buttons', title: 'Buttons' },
-        { path: 'preview/components-inputs.html', role: 'inputs', title: 'Inputs' },
-        { path: 'preview/app.html', role: 'app', title: 'App Preview' },
+        { path: "preview/colors.html", role: "colors", title: "Colors" },
+        {
+          path: "preview/typography.html",
+          role: "typography",
+          title: "Typography",
+        },
+        { path: "preview/spacing.html", role: "spacing", title: "Spacing" },
+        {
+          path: "preview/components-buttons.html",
+          role: "buttons",
+          title: "Buttons",
+        },
+        {
+          path: "preview/components-inputs.html",
+          role: "inputs",
+          title: "Inputs",
+        },
+        { path: "preview/app.html", role: "app", title: "App Preview" },
       ],
     },
     sourceFiles: {
-      scanned: 'source/scanned-files.json',
-      evidence: 'source/evidence.md',
-      tokens: 'source/tokens.source.json',
-      report: 'source/token-contract.report.json',
-      snippets: 'source/snippets/INDEX.json',
+      scanned: "source/scanned-files.json",
+      evidence: "source/evidence.md",
+      tokens: "source/tokens.source.json",
+      report: "source/token-contract.report.json",
+      snippets: "source/snippets/INDEX.json",
     },
   };
 }
@@ -834,23 +1059,25 @@ function renderManifest(
  */
 function skipNodeModules(src: string): boolean {
   const parts = src.split(path.sep);
-  return !parts.includes('node_modules');
+  return !parts.includes("node_modules");
 }
-
 
 // ────────────────────────────────────────────────────────────────────────────
 
-function normalizeImportMode(value: unknown): 'normalized' | 'hybrid' | 'verbatim' {
-  return value === 'normalized' || value === 'verbatim' || value === 'hybrid' ? value : 'hybrid';
+function normalizeImportMode(
+  value: unknown,
+): "normalized" | "hybrid" | "verbatim" {
+  return value === "normalized" || value === "verbatim" || value === "hybrid"
+    ? value
+    : "hybrid";
 }
-
 
 function normalizeCraftList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const entry of value) {
-    if (typeof entry !== 'string') continue;
+    if (typeof entry !== "string") continue;
     const slug = entry.trim().toLowerCase();
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || seen.has(slug)) continue;
     seen.add(slug);
@@ -860,90 +1087,121 @@ function normalizeCraftList(value: unknown): string[] {
 }
 
 function renderDesignMd(id: string, name: string, scan: ProjectScan): string {
-  const colors = tokenCandidates(scan.cssVariables, ['color', 'accent', 'primary', 'background', 'surface', 'border'])
+  const colors = tokenCandidates(scan.cssVariables, [
+    "color",
+    "accent",
+    "primary",
+    "background",
+    "surface",
+    "border",
+  ])
     .slice(0, 16)
-    .map((token) => `- \`${token.name}: ${token.value}\` from \`${token.source}\``);
-  const components = scan.components.map((component) => `- ${component.name}: \`${component.relPath}\``);
+    .map(
+      (token) => `- \`${token.name}: ${token.value}\` from \`${token.source}\``,
+    );
+  const components = scan.components.map(
+    (component) => `- ${component.name}: \`${component.relPath}\``,
+  );
   const assets = scan.assets.map((asset) => `- \`${asset.relPath}\``);
   return [
     `# ${name}`,
-    '',
-    '> Category: Imported',
-    '> Surface: web',
-    '',
-    scan.packageDescription ?? `Imported design system extracted from \`${scan.sourceRoot}\`.`,
-    '',
-    '## Source',
-    '',
+    "",
+    "> Category: Imported",
+    "> Surface: web",
+    "",
+    scan.packageDescription ??
+      `Imported design system extracted from \`${scan.sourceRoot}\`.`,
+    "",
+    "## Source",
+    "",
     `- Project path: \`${scan.sourceRoot}\``,
     `- Design system id: \`${id}\``,
-    scan.packageTech.length > 0 ? `- Detected stack: ${scan.packageTech.map((item) => `\`${item}\``).join(', ')}` : '- Detected stack: not declared',
-    scan.tailwindSignals.length > 0 ? `- Tailwind signals: ${scan.tailwindSignals.join(', ')}` : '- Tailwind signals: none detected',
-    '',
-    '## Product Notes',
-    '',
-    scan.readmeExcerpt ?? 'No README summary was found. Preserve the imported tokens and component proportions when generating new work.',
-    '',
-    '## Visual Tokens',
-    '',
-    colors.length > 0 ? colors.join('\n') : '- No CSS custom properties were found; tokens.css uses a neutral fallback palette.',
-    '',
-    '## Component Signals',
-    '',
-    components.length > 0 ? components.join('\n') : '- No common Button/Input/Card/Nav/Sidebar component files were detected.',
-    '',
-    '## Assets',
-    '',
-    assets.length > 0 ? assets.join('\n') : '- No logo/icon assets were copied for this import.',
-    '',
-    '## Agent Guidance',
-    '',
-    '- Use `tokens.css` as the first source of truth for color, radius, spacing, and type.',
-    '- Treat `components.html` as a compact fixture for proportions and state styling.',
-    '- When a token is a direct extraction from the source project, preserve its semantic role before inventing new values.',
-    '',
-  ].join('\n');
+    scan.packageTech.length > 0
+      ? `- Detected stack: ${scan.packageTech.map((item) => `\`${item}\``).join(", ")}`
+      : "- Detected stack: not declared",
+    scan.tailwindSignals.length > 0
+      ? `- Tailwind signals: ${scan.tailwindSignals.join(", ")}`
+      : "- Tailwind signals: none detected",
+    "",
+    "## Product Notes",
+    "",
+    scan.readmeExcerpt ??
+      "No README summary was found. Preserve the imported tokens and component proportions when generating new work.",
+    "",
+    "## Visual Tokens",
+    "",
+    colors.length > 0
+      ? colors.join("\n")
+      : "- No CSS custom properties were found; tokens.css uses a neutral fallback palette.",
+    "",
+    "## Component Signals",
+    "",
+    components.length > 0
+      ? components.join("\n")
+      : "- No common Button/Input/Card/Nav/Sidebar component files were detected.",
+    "",
+    "## Assets",
+    "",
+    assets.length > 0
+      ? assets.join("\n")
+      : "- No logo/icon assets were copied for this import.",
+    "",
+    "## Agent Guidance",
+    "",
+    "- Use `tokens.css` as the first source of truth for color, radius, spacing, and type.",
+    "- Treat `components.html` as a compact fixture for proportions and state styling.",
+    "- When a token is a direct extraction from the source project, preserve its semantic role before inventing new values.",
+    "",
+  ].join("\n");
 }
 
 function renderUsageMd(name: string, scan: ProjectScan): string {
   const highlights = [
     scan.packageDescription,
-    scan.packageTech.length > 0 ? `Detected stack: ${scan.packageTech.join(', ')}` : undefined,
-    scan.cssVariables.length > 0 ? `${scan.cssVariables.length} CSS custom properties found` : undefined,
-    scan.components.length > 0 ? `Representative source components: ${scan.components.map((component) => component.name).join(', ')}` : undefined,
+    scan.packageTech.length > 0
+      ? `Detected stack: ${scan.packageTech.join(", ")}`
+      : undefined,
+    scan.cssVariables.length > 0
+      ? `${scan.cssVariables.length} CSS custom properties found`
+      : undefined,
+    scan.components.length > 0
+      ? `Representative source components: ${scan.components.map((component) => component.name).join(", ")}`
+      : undefined,
   ].filter((line): line is string => line !== undefined);
 
   return [
     `# ${name} Usage`,
-    '',
-    '> Auto-generated by Open Design importer. Review and edit before treating it as a canonical brand guide.',
-    '',
-    '## Read Order',
-    '',
-    '1. Read `DESIGN.md` for product context and visual principles.',
-    '2. Paste `tokens.css` into the first `<style>` block of generated artifacts.',
-    '3. Use `components.manifest.json` for available component patterns.',
-    '4. Pull `preview/app.html` when layout fidelity matters.',
-    '5. Pull `source/snippets/*` only when verbatim source behavior matters.',
-    '',
-    '## Design Highlights',
-    '',
-    ...(highlights.length > 0 ? highlights.map((line) => `- ${line}`) : ['- Imported web design system with generated OD tokens.']),
-    '',
-    '## Do',
-    '',
-    '- Preserve semantic roles from the source project before inventing new values.',
-    '- Use `tokens.css` as the normalized OD token contract.',
-    '- Check `source/tokens.source.json` when a source variable name matters.',
-    '- Check `source/token-contract.report.json` before trusting fallback-heavy imports.',
-    '',
-    '## Avoid',
-    '',
-    '- Do not paste source snippets blindly into production code.',
-    '- Do not treat fallback token values as high-confidence source evidence.',
-    '- Do not rename OD standard tokens in generated artifacts.',
-    '',
-  ].join('\n');
+    "",
+    "> Auto-generated by Open Design importer. Review and edit before treating it as a canonical brand guide.",
+    "",
+    "## Read Order",
+    "",
+    "1. Read `DESIGN.md` for product context and visual principles.",
+    "2. Paste `tokens.css` into the first `<style>` block of generated artifacts.",
+    "3. Use `components.manifest.json` for available component patterns.",
+    "4. Pull `preview/app.html` when layout fidelity matters.",
+    "5. Pull `source/snippets/*` only when verbatim source behavior matters.",
+    "",
+    "## Design Highlights",
+    "",
+    ...(highlights.length > 0
+      ? highlights.map((line) => `- ${line}`)
+      : ["- Imported web design system with generated OD tokens."]),
+    "",
+    "## Do",
+    "",
+    "- Preserve semantic roles from the source project before inventing new values.",
+    "- Use `tokens.css` as the normalized OD token contract.",
+    "- Check `source/tokens.source.json` when a source variable name matters.",
+    "- Check `source/token-contract.report.json` before trusting fallback-heavy imports.",
+    "",
+    "## Avoid",
+    "",
+    "- Do not paste source snippets blindly into production code.",
+    "- Do not treat fallback token values as high-confidence source evidence.",
+    "- Do not rename OD standard tokens in generated artifacts.",
+    "",
+  ].join("\n");
 }
 
 function renderComponentsHtml(name: string, tokensCss: string): string {
@@ -997,17 +1255,21 @@ async function writePreviewFiles(
   scan: ProjectScan,
   bindings: readonly DesignTokenBinding[],
 ): Promise<string[]> {
-  const previewDir = path.join(outDir, 'preview');
+  const previewDir = path.join(outDir, "preview");
   await mkdir(previewDir, { recursive: true });
   const pages: Array<[string, string]> = [
-    ['colors.html', renderColorsPreview(name, bindings)],
-    ['typography.html', renderTypographyPreview(name)],
-    ['spacing.html', renderSpacingPreview(name)],
-    ['components-buttons.html', renderButtonsPreview(name)],
-    ['components-inputs.html', renderInputsPreview(name)],
-    ['app.html', renderAppPreview(name, scan)],
+    ["colors.html", renderColorsPreview(name, bindings)],
+    ["typography.html", renderTypographyPreview(name)],
+    ["spacing.html", renderSpacingPreview(name)],
+    ["components-buttons.html", renderButtonsPreview(name)],
+    ["components-inputs.html", renderInputsPreview(name)],
+    ["app.html", renderAppPreview(name, scan)],
   ];
-  await Promise.all(pages.map(([fileName, html]) => writeFile(path.join(previewDir, fileName), html, 'utf8')));
+  await Promise.all(
+    pages.map(([fileName, html]) =>
+      writeFile(path.join(previewDir, fileName), html, "utf8"),
+    ),
+  );
   return pages.map(([fileName]) => `preview/${fileName}`);
 }
 
@@ -1016,8 +1278,8 @@ async function writeSourceEvidenceFiles(
   scan: ProjectScan,
   tokenContractReport: DesignTokenContractReport,
 ): Promise<string[]> {
-  const sourceDir = path.join(outDir, 'source');
-  const snippetsDir = path.join(sourceDir, 'snippets');
+  const sourceDir = path.join(outDir, "source");
+  const snippetsDir = path.join(sourceDir, "snippets");
   await mkdir(snippetsDir, { recursive: true });
 
   const snippetEntries: Array<{
@@ -1038,7 +1300,7 @@ async function writeSourceEvidenceFiles(
     snippetEntries.push({
       path: targetRel,
       role: component.name.toLowerCase(),
-      language: ext.replace(/^\./, '') || 'text',
+      language: ext.replace(/^\./, "") || "text",
       sourcePath: component.relPath,
       bytes: component.size,
       reason: `Representative ${component.name} component detected by filename.`,
@@ -1048,103 +1310,136 @@ async function writeSourceEvidenceFiles(
 
   await Promise.all([
     writeFile(
-      path.join(sourceDir, 'scanned-files.json'),
-      `${JSON.stringify({
-        schemaVersion: 1,
-        sourceRoot: scan.sourceRoot,
-        files: scan.files.map((file) => ({
-          path: normalizeRel(file.relPath),
-          bytes: file.size,
-          kind: classifyScannedFile(file.relPath),
-        })),
-      }, null, 2)}\n`,
-      'utf8',
-    ),
-    writeFile(path.join(sourceDir, 'evidence.md'), renderEvidenceMd(scan), 'utf8'),
-    writeFile(
-      path.join(sourceDir, 'tokens.source.json'),
-      `${JSON.stringify({
-        schemaVersion: 1,
-        strategy: ['css-vars', ...(scan.tailwindSignals.length > 0 ? ['tailwind-config'] : [])],
-        tokenCount: scan.cssVariables.length,
-        confidence: {
-          color: scan.cssVariables.some((token) => isColorValue(token.value)) ? 'high' : 'low',
-          type: scan.fonts.length > 0 ? 'medium' : 'low',
-          spacing: scan.tailwindSignals.includes('spacing') ? 'medium' : 'low',
+      path.join(sourceDir, "scanned-files.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          sourceRoot: scan.sourceRoot,
+          files: scan.files.map((file) => ({
+            path: normalizeRel(file.relPath),
+            bytes: file.size,
+            kind: classifyScannedFile(file.relPath),
+          })),
         },
-        tokens: scan.cssVariables.map((token) => ({
-          name: token.name,
-          value: token.value,
-          source: token.source,
-          normalizedRole: inferTokenRole(token),
-        })),
-      }, null, 2)}\n`,
-      'utf8',
+        null,
+        2,
+      )}\n`,
+      "utf8",
     ),
     writeFile(
-      path.join(sourceDir, 'token-contract.report.json'),
+      path.join(sourceDir, "evidence.md"),
+      renderEvidenceMd(scan),
+      "utf8",
+    ),
+    writeFile(
+      path.join(sourceDir, "tokens.source.json"),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          strategy: [
+            "css-vars",
+            ...(scan.tailwindSignals.length > 0 ? ["tailwind-config"] : []),
+          ],
+          tokenCount: scan.cssVariables.length,
+          confidence: {
+            color: scan.cssVariables.some((token) => isColorValue(token.value))
+              ? "high"
+              : "low",
+            type: scan.fonts.length > 0 ? "medium" : "low",
+            spacing: scan.tailwindSignals.includes("spacing")
+              ? "medium"
+              : "low",
+          },
+          tokens: scan.cssVariables.map((token) => ({
+            name: token.name,
+            value: token.value,
+            source: token.source,
+            normalizedRole: inferTokenRole(token),
+          })),
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    ),
+    writeFile(
+      path.join(sourceDir, "token-contract.report.json"),
       `${JSON.stringify(tokenContractReport, null, 2)}\n`,
-      'utf8',
+      "utf8",
     ),
     writeFile(
-      path.join(snippetsDir, 'INDEX.json'),
+      path.join(snippetsDir, "INDEX.json"),
       `${JSON.stringify({ schemaVersion: 1, snippets: snippetEntries }, null, 2)}\n`,
-      'utf8',
+      "utf8",
     ),
   ]);
 
   return [
-    'source/scanned-files.json',
-    'source/evidence.md',
-    'source/tokens.source.json',
-    'source/token-contract.report.json',
-    'source/snippets/INDEX.json',
+    "source/scanned-files.json",
+    "source/evidence.md",
+    "source/tokens.source.json",
+    "source/token-contract.report.json",
+    "source/snippets/INDEX.json",
     ...writtenSnippetFiles,
   ];
 }
 
-function renderColorsPreview(name: string, bindings: readonly DesignTokenBinding[]): string {
-  const values = new Map(bindings.map((binding) => [binding.name, binding.value]));
+function renderColorsPreview(
+  name: string,
+  bindings: readonly DesignTokenBinding[],
+): string {
+  const values = new Map(
+    bindings.map((binding) => [binding.name, binding.value]),
+  );
   return renderPreviewPage(
     `${name} colors`,
-    'Color evidence',
-    ([
-      ['Background', '--bg'],
-      ['Surface', '--surface'],
-      ['Foreground', '--fg'],
-      ['Muted', '--muted'],
-      ['Border', '--border'],
-      ['Accent', '--accent'],
-      ['Success', '--success'],
-      ['Warning', '--warn'],
-      ['Danger', '--danger'],
-    ] satisfies Array<[string, string]>).map(([label, token]) => {
-      const value = values.get(token) ?? 'transparent';
-      return `<article class="swatch"><div style="background:${escapeHtml(value)}"></div><strong>${label}</strong><code>${token}: ${escapeHtml(value)}</code></article>`;
-    }).join('\n'),
+    "Color evidence",
+    (
+      [
+        ["Background", "--bg"],
+        ["Surface", "--surface"],
+        ["Foreground", "--fg"],
+        ["Muted", "--muted"],
+        ["Border", "--border"],
+        ["Accent", "--accent"],
+        ["Success", "--success"],
+        ["Warning", "--warn"],
+        ["Danger", "--danger"],
+      ] satisfies Array<[string, string]>
+    )
+      .map(([label, token]) => {
+        const value = values.get(token) ?? "transparent";
+        return `<article class="swatch"><div style="background:${escapeHtml(value)}"></div><strong>${label}</strong><code>${token}: ${escapeHtml(value)}</code></article>`;
+      })
+      .join("\n"),
   );
 }
 
 function renderTypographyPreview(name: string): string {
   return renderPreviewPage(
     `${name} typography`,
-    'Typography',
-    '<h1>Build focused product surfaces</h1><h2>Section heading</h2><p>Body text uses the imported body token stack and normalized rhythm.</p><code>Code and metadata use the mono token.</code>',
+    "Typography",
+    "<h1>Build focused product surfaces</h1><h2>Section heading</h2><p>Body text uses the imported body token stack and normalized rhythm.</p><code>Code and metadata use the mono token.</code>",
   );
 }
 
 function renderSpacingPreview(name: string): string {
   return renderPreviewPage(
     `${name} spacing`,
-    'Spacing and radius',
-    [1, 2, 3, 4, 5, 6, 8].map((step) => `<article class="meter"><strong>--space-${step}</strong><span style="width:var(--space-${step})"></span></article>`).join('\n'),
+    "Spacing and radius",
+    [1, 2, 3, 4, 5, 6, 8]
+      .map(
+        (step) =>
+          `<article class="meter"><strong>--space-${step}</strong><span style="width:var(--space-${step})"></span></article>`,
+      )
+      .join("\n"),
   );
 }
 
 function renderButtonsPreview(name: string): string {
   return renderPreviewPage(
     `${name} buttons`,
-    'Buttons',
+    "Buttons",
     '<p><button class="primary">Primary action</button> <button class="secondary">Secondary action</button></p>',
   );
 }
@@ -1152,21 +1447,30 @@ function renderButtonsPreview(name: string): string {
 function renderInputsPreview(name: string): string {
   return renderPreviewPage(
     `${name} inputs`,
-    'Inputs',
+    "Inputs",
     '<label>Project name<input value="Imported design system" /></label><label>Notes<textarea>Preserve source evidence.</textarea></label>',
   );
 }
 
 function renderAppPreview(name: string, scan: ProjectScan): string {
-  const componentItems = scan.components.map((component) => `<li>${escapeHtml(component.name)} <code>${escapeHtml(component.relPath)}</code></li>`).join('');
+  const componentItems = scan.components
+    .map(
+      (component) =>
+        `<li>${escapeHtml(component.name)} <code>${escapeHtml(component.relPath)}</code></li>`,
+    )
+    .join("");
   return renderPreviewPage(
     `${name} app preview`,
-    'App preview',
-    `<section class="app-shell"><aside><strong>${escapeHtml(name)}</strong><nav>Overview<br/>Components<br/>Assets</nav></aside><main><h1>${escapeHtml(name)}</h1><p>${escapeHtml(scan.packageDescription ?? 'Imported design system preview.')}</p><ul>${componentItems || '<li>No representative components detected.</li>'}</ul></main></section>`,
+    "App preview",
+    `<section class="app-shell"><aside><strong>${escapeHtml(name)}</strong><nav>Overview<br/>Components<br/>Assets</nav></aside><main><h1>${escapeHtml(name)}</h1><p>${escapeHtml(scan.packageDescription ?? "Imported design system preview.")}</p><ul>${componentItems || "<li>No representative components detected.</li>"}</ul></main></section>`,
   );
 }
 
-function renderPreviewPage(title: string, heading: string, body: string): string {
+function renderPreviewPage(
+  title: string,
+  heading: string,
+  body: string,
+): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -1205,108 +1509,138 @@ function renderPreviewPage(title: string, heading: string, body: string): string
 
 function renderEvidenceMd(scan: ProjectScan): string {
   return [
-    '# Import Evidence',
-    '',
+    "# Import Evidence",
+    "",
     `- Source root: \`${scan.sourceRoot}\``,
-    `- Package: ${scan.packageName === undefined ? 'not declared' : `\`${scan.packageName}\``}`,
-    `- Description: ${scan.packageDescription ?? 'not declared'}`,
+    `- Package: ${scan.packageName === undefined ? "not declared" : `\`${scan.packageName}\``}`,
+    `- Description: ${scan.packageDescription ?? "not declared"}`,
     `- CSS variables: ${scan.cssVariables.length}`,
-    `- Tailwind signals: ${scan.tailwindSignals.length > 0 ? scan.tailwindSignals.join(', ') : 'none detected'}`,
+    `- Tailwind signals: ${scan.tailwindSignals.length > 0 ? scan.tailwindSignals.join(", ") : "none detected"}`,
     `- Assets copied: ${scan.assets.length}`,
     `- Fonts copied: ${scan.fonts.length}`,
     `- Representative snippets: ${scan.components.length}`,
-    '',
-    '## Representative Components',
-    '',
+    "",
+    "## Representative Components",
+    "",
     scan.components.length > 0
-      ? scan.components.map((component) => `- ${component.name}: \`${component.relPath}\``).join('\n')
-      : '- None detected.',
-    '',
-    '## Token Evidence',
-    '',
+      ? scan.components
+          .map((component) => `- ${component.name}: \`${component.relPath}\``)
+          .join("\n")
+      : "- None detected.",
+    "",
+    "## Token Evidence",
+    "",
     scan.cssVariables.length > 0
-      ? scan.cssVariables.slice(0, 40).map((token) => `- \`${token.name}: ${token.value}\` from \`${token.source}\``).join('\n')
-      : '- No CSS custom properties detected; normalized tokens use fallback values.',
-    '',
-  ].join('\n');
+      ? scan.cssVariables
+          .slice(0, 40)
+          .map(
+            (token) =>
+              `- \`${token.name}: ${token.value}\` from \`${token.source}\``,
+          )
+          .join("\n")
+      : "- No CSS custom properties detected; normalized tokens use fallback values.",
+    "",
+  ].join("\n");
 }
 
-function tokenCandidates(tokens: CssVariable[], needles: string[]): CssVariable[] {
-  return tokens.filter((token) => needles.some((needle) => token.name.toLowerCase().includes(needle)));
+function tokenCandidates(
+  tokens: CssVariable[],
+  needles: string[],
+): CssVariable[] {
+  return tokens.filter((token) =>
+    needles.some((needle) => token.name.toLowerCase().includes(needle)),
+  );
 }
 
 function isColorValue(value: string): boolean {
-  return /^(#(?:[0-9a-f]{3,8})|rgb[a]?\(|hsl[a]?\(|oklch\(|color-mix\(|var\()/i.test(value.trim());
+  return /^(#(?:[0-9a-f]{3,8})|rgb[a]?\(|hsl[a]?\(|oklch\(|color-mix\(|var\()/i.test(
+    value.trim(),
+  );
 }
 
 function classifyScannedFile(relPath: string): string {
   const ext = path.extname(relPath).toLowerCase();
-  if (STYLE_EXTENSIONS.has(ext)) return 'style';
-  if (COMPONENT_EXTENSIONS.has(ext)) return 'component';
-  if (ASSET_EXTENSIONS.has(ext)) return 'asset';
-  if (FONT_EXTENSIONS.has(ext)) return 'font';
-  if (path.basename(relPath).toLowerCase().includes('readme')) return 'readme';
-  if (path.basename(relPath) === 'package.json') return 'package';
-  return 'other';
+  if (STYLE_EXTENSIONS.has(ext)) return "style";
+  if (COMPONENT_EXTENSIONS.has(ext)) return "component";
+  if (ASSET_EXTENSIONS.has(ext)) return "asset";
+  if (FONT_EXTENSIONS.has(ext)) return "font";
+  if (path.basename(relPath).toLowerCase().includes("readme")) return "readme";
+  if (path.basename(relPath) === "package.json") return "package";
+  return "other";
 }
 
 function inferTokenRole(token: CssVariable): string | undefined {
   const name = token.name.toLowerCase();
-  if (['background', 'bg'].some((needle) => name.includes(needle))) return 'background';
-  if (['surface', 'card'].some((needle) => name.includes(needle))) return 'surface';
-  if (['foreground', 'text', 'fg'].some((needle) => name.includes(needle))) return 'foreground';
-  if (name.includes('border')) return 'border';
-  if (['accent', 'primary', 'brand'].some((needle) => name.includes(needle))) return 'accent';
-  if (name.includes('radius')) return 'radius';
-  if (name.includes('font')) return 'font';
-  if (name.includes('space') || name.includes('gap')) return 'spacing';
+  if (["background", "bg"].some((needle) => name.includes(needle)))
+    return "background";
+  if (["surface", "card"].some((needle) => name.includes(needle)))
+    return "surface";
+  if (["foreground", "text", "fg"].some((needle) => name.includes(needle)))
+    return "foreground";
+  if (name.includes("border")) return "border";
+  if (["accent", "primary", "brand"].some((needle) => name.includes(needle)))
+    return "accent";
+  if (name.includes("radius")) return "radius";
+  if (name.includes("font")) return "font";
+  if (name.includes("space") || name.includes("gap")) return "spacing";
   return undefined;
 }
 
 function compactMarkdown(raw: string): string {
   return raw
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/!\[[^\]]*]\([^)]*\)/g, '')
-    .replace(/\[[^\]]+]\([^)]*\)/g, (match) => match.replace(/^\[([^\]]+)].*$/, '$1'))
-    .split('\n')
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[[^\]]+]\([^)]*\)/g, (match) =>
+      match.replace(/^\[([^\]]+)].*$/, "$1"),
+    )
+    .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 16)
-    .join('\n');
+    .join("\n");
 }
 
 function cleanDisplayName(value: string): string {
-  return value.replace(/^@[^/]+\//, '').replace(/[-_]+/g, ' ').trim() || 'Imported Design System';
+  return (
+    value
+      .replace(/^@[^/]+\//, "")
+      .replace(/[-_]+/g, " ")
+      .trim() || "Imported Design System"
+  );
 }
 
 function slugify(value: string): string {
   const slug = value
     .toLowerCase()
-    .replace(/^@[^/]+\//, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'imported-design-system';
+    .replace(/^@[^/]+\//, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "imported-design-system";
 }
 
 function normalizeRel(value: string): string {
-  return value.split(path.sep).join('/');
+  return value.split(path.sep).join("/");
 }
 
 function indentCss(css: string, spaces: number): string {
-  const prefix = ' '.repeat(spaces);
-  return css.trimEnd().split('\n').map((line) => `${prefix}${line}`).join('\n');
+  const prefix = " ".repeat(spaces);
+  return css
+    .trimEnd()
+    .split("\n")
+    .map((line) => `${prefix}${line}`)
+    .join("\n");
 }
 
 function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -1318,24 +1652,27 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
-async function getFileList(dir: string, baseDir: string = dir): Promise<string[]> {
+async function getFileList(
+  dir: string,
+  baseDir: string = dir,
+): Promise<string[]> {
   const files: string[] = [];
   const queue = [dir];
   while (queue.length > 0) {
     const current = queue.shift()!;
-    let entries = [];
+    let entries: Dirent[] = [];
     try {
       entries = await readdir(current, { withFileTypes: true });
     } catch {
       continue;
     }
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
+      if (entry.name.startsWith(".")) continue;
       const absPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
         queue.push(absPath);
       } else if (entry.isFile()) {
-        files.push(path.relative(baseDir, absPath).split(path.sep).join('/'));
+        files.push(path.relative(baseDir, absPath).split(path.sep).join("/"));
       }
     }
   }

@@ -36,7 +36,7 @@ export function allowedBrowserPorts(
   port: number | string | null | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): number[] {
-  const ports = [];
+  const ports: number[] = [];
   const primary = Number(port);
   if (primary) ports.push(primary);
   const webPort = Number(env.OD_WEB_PORT);

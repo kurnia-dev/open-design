@@ -4,39 +4,44 @@
 // (HTML artifacts, sketches, uploads); this database tracks the metadata
 // that used to live in localStorage.
 
-import Database from 'better-sqlite3';
-import path from 'node:path';
-import fs from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import type { ProjectBrowserWorkspaceTab, ProjectTabsState } from '@open-design/contracts';
-import { migrateCritique } from './critique/persistence.js';
-import { migrateMediaTasks } from './media-tasks.js';
+import Database from "better-sqlite3";
+import path from "node:path";
+import fs from "node:fs";
+import { randomUUID } from "node:crypto";
+import type {
+  ProjectBrowserWorkspaceTab,
+  ProjectTabsState,
+} from "@open-design/contracts";
+import { migrateCritique } from "./critique/persistence.js";
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
 type JsonObject = Record<string, unknown>;
-type ChatSessionMode = 'design' | 'chat';
+type ChatSessionMode = "design" | "chat";
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
 
 function row(value: unknown): DbRow | null {
-  return value && typeof value === 'object' ? value as DbRow : null;
+  return value && typeof value === "object" ? (value as DbRow) : null;
 }
 
 function rows(value: unknown[]): DbRow[] {
   return value.map((item) => row(item) ?? {});
 }
 
-export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: string } = {}): SqliteDb {
-  const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, '.od');
-  const file = path.join(dir, 'app.sqlite');
+export function openDatabase(
+  projectRoot: string,
+  { dataDir }: { dataDir?: string } = {},
+): SqliteDb {
+  const dir = dataDir ? path.resolve(dataDir) : path.join(projectRoot, ".od");
+  const file = path.join(dir, "app.sqlite");
   if (dbInstance && dbFile === file) return dbInstance;
   if (dbInstance) closeDatabase();
   fs.mkdirSync(dir, { recursive: true });
   const db = new Database(file);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
   migrate(db);
   dbInstance = db;
   dbFile = file;
@@ -240,86 +245,104 @@ function migrate(db: SqliteDb): void {
   // Forward-compatible column add for databases created before metadata_json.
   // SQLite has no IF NOT EXISTS for ALTER, so we check pragma_table_info.
   const cols = db.prepare(`PRAGMA table_info(projects)`).all() as DbRow[];
-  if (!cols.some((c: DbRow) => c.name === 'metadata_json')) {
+  if (!cols.some((c: DbRow) => c.name === "metadata_json")) {
     db.exec(`ALTER TABLE projects ADD COLUMN metadata_json TEXT`);
   }
-  if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
+  if (!cols.some((c: DbRow) => c.name === "custom_instructions")) {
     db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
   }
-  const conversationCols = db.prepare(`PRAGMA table_info(conversations)`).all() as DbRow[];
-  if (!conversationCols.some((c: DbRow) => c.name === 'session_mode')) {
-    db.exec(`ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`);
+  const conversationCols = db
+    .prepare(`PRAGMA table_info(conversations)`)
+    .all() as DbRow[];
+  if (!conversationCols.some((c: DbRow) => c.name === "session_mode")) {
+    db.exec(
+      `ALTER TABLE conversations ADD COLUMN session_mode TEXT NOT NULL DEFAULT 'design'`,
+    );
   }
-  const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
-  if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
+  const messageCols = db
+    .prepare(`PRAGMA table_info(messages)`)
+    .all() as DbRow[];
+  if (!messageCols.some((c: DbRow) => c.name === "agent_id")) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'agent_name')) {
+  if (!messageCols.some((c: DbRow) => c.name === "agent_name")) {
     db.exec(`ALTER TABLE messages ADD COLUMN agent_name TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'run_id')) {
+  if (!messageCols.some((c: DbRow) => c.name === "run_id")) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_id TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
+  if (!messageCols.some((c: DbRow) => c.name === "run_status")) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'last_run_event_id')) {
+  if (!messageCols.some((c: DbRow) => c.name === "last_run_event_id")) {
     db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'comment_attachments_json')) {
+  if (!messageCols.some((c: DbRow) => c.name === "comment_attachments_json")) {
     db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
+  if (!messageCols.some((c: DbRow) => c.name === "feedback_json")) {
     db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'pre_turn_file_names_json')) {
+  if (!messageCols.some((c: DbRow) => c.name === "pre_turn_file_names_json")) {
     db.exec(`ALTER TABLE messages ADD COLUMN pre_turn_file_names_json TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'session_mode')) {
+  if (!messageCols.some((c: DbRow) => c.name === "session_mode")) {
     db.exec(`ALTER TABLE messages ADD COLUMN session_mode TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'run_context_json')) {
+  if (!messageCols.some((c: DbRow) => c.name === "run_context_json")) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_context_json TEXT`);
   }
-  if (!messageCols.some((c: DbRow) => c.name === 'applied_plugin_snapshot_json')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`);
+  if (
+    !messageCols.some((c: DbRow) => c.name === "applied_plugin_snapshot_json")
+  ) {
+    db.exec(
+      `ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`,
+    );
   }
-  const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
-  if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
+  const routineRunCols = db
+    .prepare(`PRAGMA table_info(routine_runs)`)
+    .all() as DbRow[];
+  if (!routineRunCols.some((c: DbRow) => c.name === "error_code")) {
     db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
   }
 
-  const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'selection_kind')) {
+  const previewCommentCols = db
+    .prepare(`PRAGMA table_info(preview_comments)`)
+    .all() as DbRow[];
+  if (!previewCommentCols.some((c: DbRow) => c.name === "selection_kind")) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN selection_kind TEXT`);
   }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'member_count')) {
+  if (!previewCommentCols.some((c: DbRow) => c.name === "member_count")) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN member_count INTEGER`);
   }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'pod_members_json')) {
+  if (!previewCommentCols.some((c: DbRow) => c.name === "pod_members_json")) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN pod_members_json TEXT`);
   }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'style_json')) {
+  if (!previewCommentCols.some((c: DbRow) => c.name === "style_json")) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN style_json TEXT`);
   }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'attachments_json')) {
+  if (!previewCommentCols.some((c: DbRow) => c.name === "attachments_json")) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN attachments_json TEXT`);
   }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'slide_index')) {
+  if (!previewCommentCols.some((c: DbRow) => c.name === "slide_index")) {
     db.exec(`ALTER TABLE preview_comments ADD COLUMN slide_index INTEGER`);
   }
   migratePreviewCommentsSlideKey(db);
-  const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
-  if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
-    db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
+  const deploymentCols = db
+    .prepare(`PRAGMA table_info(deployments)`)
+    .all() as DbRow[];
+  if (!deploymentCols.some((c: DbRow) => c.name === "status")) {
+    db.exec(
+      `ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`,
+    );
   }
-  if (!deploymentCols.some((c: DbRow) => c.name === 'status_message')) {
+  if (!deploymentCols.some((c: DbRow) => c.name === "status_message")) {
     db.exec(`ALTER TABLE deployments ADD COLUMN status_message TEXT`);
   }
-  if (!deploymentCols.some((c: DbRow) => c.name === 'reachable_at')) {
+  if (!deploymentCols.some((c: DbRow) => c.name === "reachable_at")) {
     db.exec(`ALTER TABLE deployments ADD COLUMN reachable_at INTEGER`);
   }
-  if (!deploymentCols.some((c: DbRow) => c.name === 'provider_metadata_json')) {
+  if (!deploymentCols.some((c: DbRow) => c.name === "provider_metadata_json")) {
     db.exec(`ALTER TABLE deployments ADD COLUMN provider_metadata_json TEXT`);
   }
   // schedule_json holds the full RoutineSchedule object (kind discriminator
@@ -327,33 +350,54 @@ function migrate(db: SqliteDb): void {
   // schedule_kind/schedule_value columns are kept populated for query
   // convenience and as a fallback when reading rows written before this
   // column existed.
-  const routineCols = db.prepare(`PRAGMA table_info(routines)`).all() as DbRow[];
-  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'schedule_json')) {
+  const routineCols = db
+    .prepare(`PRAGMA table_info(routines)`)
+    .all() as DbRow[];
+  if (
+    routineCols.length > 0 &&
+    !routineCols.some((c: DbRow) => c.name === "schedule_json")
+  ) {
     db.exec(`ALTER TABLE routines ADD COLUMN schedule_json TEXT`);
   }
-  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
+  if (
+    routineCols.length > 0 &&
+    !routineCols.some((c: DbRow) => c.name === "context_json")
+  ) {
     db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
   }
-  const agentSessionCols = db.prepare(`PRAGMA table_info(agent_sessions)`).all() as DbRow[];
-  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'stable_prompt_hash')) {
+  const agentSessionCols = db
+    .prepare(`PRAGMA table_info(agent_sessions)`)
+    .all() as DbRow[];
+  if (
+    agentSessionCols.length > 0 &&
+    !agentSessionCols.some((c: DbRow) => c.name === "stable_prompt_hash")
+  ) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN stable_prompt_hash TEXT`);
   }
-  const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
-  if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
+  const tabsStateCols = db
+    .prepare(`PRAGMA table_info(tabs_state)`)
+    .all() as DbRow[];
+  if (
+    tabsStateCols.length > 0 &&
+    !tabsStateCols.some((c: DbRow) => c.name === "state_json")
+  ) {
     db.exec(`ALTER TABLE tabs_state ADD COLUMN state_json TEXT`);
   }
   migrateCritique(db);
-  migrateMediaTasks(db);
 }
 
 function migratePreviewCommentsSlideKey(db: SqliteDb): void {
   const table = db
-    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`)
+    .prepare(
+      `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'preview_comments'`,
+    )
     .get() as DbRow | undefined;
-  const tableSql = String(table?.sql ?? '');
+  const tableSql = String(table?.sql ?? "");
   const hasSlideKey = /\bslide_key\b/i.test(tableSql);
-  const hasLegacyUnique = /UNIQUE\s*\(\s*project_id\s*,\s*conversation_id\s*,\s*file_path\s*,\s*element_id\s*\)/i
-    .test(tableSql);
+  const hasLegacyUnique =
+    /UNIQUE\s*\(\s*project_id\s*,\s*conversation_id\s*,\s*file_path\s*,\s*element_id\s*\)/i.test(
+      tableSql,
+    );
   if (hasSlideKey && !hasLegacyUnique) return;
 
   db.exec(`
@@ -410,18 +454,24 @@ const DEPLOYMENT_COLS = `id, project_id AS projectId, file_name AS fileName,
   created_at AS createdAt, updated_at AS updatedAt`;
 
 export function listDeployments(db: SqliteDb, projectId: string) {
-  return (db
-    .prepare(
-      `SELECT ${DEPLOYMENT_COLS}
+  return (
+    db
+      .prepare(
+        `SELECT ${DEPLOYMENT_COLS}
          FROM deployments
         WHERE project_id = ?
         ORDER BY updated_at DESC`,
-    )
-    .all(projectId) as DbRow[])
-    .map(normalizeDeployment);
+      )
+      .all(projectId) as DbRow[]
+  ).map(normalizeDeployment);
 }
 
-export function getDeployment(db: SqliteDb, projectId: string, fileName: string, providerId: string) {
+export function getDeployment(
+  db: SqliteDb,
+  projectId: string,
+  fileName: string,
+  providerId: string,
+) {
   const row = db
     .prepare(
       `SELECT ${DEPLOYMENT_COLS}
@@ -456,9 +506,11 @@ export function upsertDeployment(db: SqliteDb, deployment: DbRow) {
       ? existing?.providerMetadata
       : deployment.providerMetadata;
   const providerMetadata =
-    deployment.cloudflarePages && typeof deployment.cloudflarePages === 'object'
+    deployment.cloudflarePages && typeof deployment.cloudflarePages === "object"
       ? {
-          ...(inputProviderMetadata && typeof inputProviderMetadata === 'object' && !Array.isArray(inputProviderMetadata)
+          ...(inputProviderMetadata &&
+          typeof inputProviderMetadata === "object" &&
+          !Array.isArray(inputProviderMetadata)
             ? inputProviderMetadata
             : {}),
           cloudflarePages: deployment.cloudflarePages,
@@ -472,11 +524,11 @@ export function upsertDeployment(db: SqliteDb, deployment: DbRow) {
     url: deployment.url,
     deploymentId: deployment.deploymentId ?? null,
     deploymentCount:
-      typeof deployment.deploymentCount === 'number'
+      typeof deployment.deploymentCount === "number"
         ? deployment.deploymentCount
         : (existing?.deploymentCount ?? 0) + 1,
-    target: deployment.target ?? 'preview',
-    status: deployment.status ?? existing?.status ?? 'ready',
+    target: deployment.target ?? "preview",
+    status: deployment.status ?? existing?.status ?? "ready",
     statusMessage: deployment.statusMessage ?? null,
     reachableAt: deployment.reachableAt ?? null,
     providerMetadata,
@@ -522,7 +574,9 @@ export function upsertDeployment(db: SqliteDb, deployment: DbRow) {
 function normalizeDeployment(row: DbRow) {
   const providerMetadata = parseJsonOrUndef(row.providerMetadataJson);
   const normalizedProviderMetadata =
-    providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
+    providerMetadata &&
+    typeof providerMetadata === "object" &&
+    !Array.isArray(providerMetadata)
       ? providerMetadata
       : undefined;
   return {
@@ -533,13 +587,13 @@ function normalizeDeployment(row: DbRow) {
     url: row.url,
     deploymentId: row.deploymentId ?? undefined,
     deploymentCount: Number(row.deploymentCount ?? 1),
-    target: 'preview',
-    status: row.status || 'ready',
+    target: "preview",
+    status: row.status || "ready",
     statusMessage: row.statusMessage ?? undefined,
     reachableAt: row.reachableAt == null ? undefined : Number(row.reachableAt),
     cloudflarePages:
       normalizedProviderMetadata?.cloudflarePages &&
-      typeof normalizedProviderMetadata.cloudflarePages === 'object' &&
+      typeof normalizedProviderMetadata.cloudflarePages === "object" &&
       !Array.isArray(normalizedProviderMetadata.cloudflarePages)
         ? normalizedProviderMetadata.cloudflarePages
         : undefined,
@@ -550,7 +604,7 @@ function normalizeDeployment(row: DbRow) {
 }
 
 function stringifyJsonObjectOrNull(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return Object.keys(value).length > 0 ? JSON.stringify(value) : null;
 }
 
@@ -669,7 +723,8 @@ export function updateProject(db: SqliteDb, id: string, patch: DbRow) {
   const merged = {
     ...existing,
     ...patch,
-    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+    updatedAt:
+      typeof patch.updatedAt === "number" ? patch.updatedAt : Date.now(),
   };
   db.prepare(
     `UPDATE projects
@@ -722,32 +777,33 @@ function normalizeProject(row: DbRow) {
 }
 
 function normalizeProjectRunStatus(status: unknown) {
-  if (status === 'starting') return 'running';
-  if (status === 'cancelled') return 'canceled';
+  if (status === "starting") return "running";
+  if (status === "cancelled") return "canceled";
   if (
-    status === 'queued' ||
-    status === 'running' ||
-    status === 'succeeded' ||
-    status === 'failed' ||
-    status === 'canceled'
+    status === "queued" ||
+    status === "running" ||
+    status === "succeeded" ||
+    status === "failed" ||
+    status === "canceled"
   ) {
     return status;
   }
-  return 'not_started';
+  return "not_started";
 }
 
 // ---------- templates ----------
 
 export function listTemplates(db: SqliteDb) {
-  return (db
-    .prepare(
-      `SELECT id, name, description, source_project_id AS sourceProjectId,
+  return (
+    db
+      .prepare(
+        `SELECT id, name, description, source_project_id AS sourceProjectId,
               files_json AS filesJson, created_at AS createdAt
          FROM templates
         ORDER BY created_at DESC`,
-    )
-    .all() as DbRow[])
-    .map(normalizeTemplate);
+      )
+      .all() as DbRow[]
+  ).map(normalizeTemplate);
 }
 
 export function getTemplate(db: SqliteDb, id: string) {
@@ -810,7 +866,7 @@ export function deleteTemplate(db: SqliteDb, id: string) {
 function normalizeTemplate(row: DbRow) {
   let files = [];
   try {
-    files = JSON.parse(row.filesJson || '[]');
+    files = JSON.parse(row.filesJson || "[]");
   } catch {
     files = [];
   }
@@ -827,9 +883,10 @@ function normalizeTemplate(row: DbRow) {
 // ---------- conversations ----------
 
 export function listConversations(db: SqliteDb, projectId: string) {
-  return rows(db
-    .prepare(
-      `WITH project_conversations AS (
+  return rows(
+    db
+      .prepare(
+        `WITH project_conversations AS (
           SELECT id, project_id AS projectId, title, session_mode AS sessionMode,
                  created_at AS createdAt, updated_at AS updatedAt
             FROM conversations
@@ -867,7 +924,7 @@ export function listConversations(db: SqliteDb, projectId: string) {
         ),
         total_run_durations AS (
           SELECT m.conversation_id AS conversationId,
-                 SUM(${terminalRunDurationSql('m')}) AS totalDurationMs
+                 SUM(${terminalRunDurationSql("m")}) AS totalDurationMs
             FROM messages m
             JOIN project_conversations c ON c.id = m.conversation_id
            WHERE m.role = 'assistant'
@@ -884,8 +941,9 @@ export function listConversations(db: SqliteDb, projectId: string) {
           LEFT JOIN message_counts mc ON mc.conversationId = c.id
           LEFT JOIN total_run_durations trd ON trd.conversationId = c.id
          ORDER BY c.updatedAt DESC`,
-    )
-    .all(projectId)).map(normalizeConversation);
+      )
+      .all(projectId),
+  ).map(normalizeConversation);
 }
 
 export function getConversation(db: SqliteDb, id: string) {
@@ -901,7 +959,10 @@ export function getConversation(db: SqliteDb, id: string) {
   return {
     ...normalizeConversation(r),
     latestRun: latestConversationRunSummary(db, r.id) ?? undefined,
-    ...numberProperty('totalDurationMs', totalConversationRunDurationMs(db, r.id)),
+    ...numberProperty(
+      "totalDurationMs",
+      totalConversationRunDurationMs(db, r.id),
+    ),
   };
 }
 
@@ -920,18 +981,20 @@ function normalizeConversation(r: DbRow) {
     messageCount: Number(r.messageCount ?? 0),
     createdAt: Number(r.createdAt),
     updatedAt: Number(r.updatedAt),
-    ...numberProperty('totalDurationMs', r.totalDurationMs),
+    ...numberProperty("totalDurationMs", r.totalDurationMs),
     latestRun: latestRun ?? undefined,
   };
 }
 
-export function normalizeConversationSessionMode(value: unknown): ChatSessionMode {
-  return value === 'chat' ? 'chat' : 'design';
+export function normalizeConversationSessionMode(
+  value: unknown,
+): ChatSessionMode {
+  return value === "chat" ? "chat" : "design";
 }
 
 function numberProperty(key: string, value: unknown) {
   const n = value == null ? undefined : Number(value);
-  return typeof n === 'number' && Number.isFinite(n) ? { [key]: n } : {};
+  return typeof n === "number" && Number.isFinite(n) ? { [key]: n } : {};
 }
 
 function latestConversationRunSummary(db: SqliteDb, conversationId: string) {
@@ -952,7 +1015,10 @@ function latestConversationRunSummary(db: SqliteDb, conversationId: string) {
   return conversationRunSummaryFromRow(row);
 }
 
-function totalConversationRunDurationMs(db: SqliteDb, conversationId: string): number | undefined {
+function totalConversationRunDurationMs(
+  db: SqliteDb,
+  conversationId: string,
+): number | undefined {
   const row = db
     .prepare(
       `SELECT SUM(${terminalRunDurationSql()}) AS totalDurationMs
@@ -966,7 +1032,7 @@ function totalConversationRunDurationMs(db: SqliteDb, conversationId: string): n
 }
 
 function terminalRunDurationSql(alias?: string) {
-  const p = alias ? `${alias}.` : '';
+  const p = alias ? `${alias}.` : "";
   return `CASE
             WHEN ${p}started_at IS NOT NULL AND ${p}ended_at IS NOT NULL THEN
               CASE
@@ -997,7 +1063,7 @@ function terminalRunDurationSql(alias?: string) {
 }
 
 function conversationRunSummaryFromRow(row: DbRow | undefined) {
-  if (!row || typeof row.runStatus !== 'string') return null;
+  if (!row || typeof row.runStatus !== "string") return null;
   const startedAt = row.startedAt == null ? undefined : Number(row.startedAt);
   const endedAt = row.endedAt == null ? undefined : Number(row.endedAt);
   const usageDurationMs = latestUsageDurationMs(row.eventsJson);
@@ -1009,14 +1075,15 @@ function conversationRunSummaryFromRow(row: DbRow | undefined) {
     status: row.runStatus,
     ...(Number.isFinite(startedAt) ? { startedAt } : {}),
     ...(Number.isFinite(endedAt) ? { endedAt } : {}),
-    ...(typeof durationMs === 'number' && Number.isFinite(durationMs)
+    ...(typeof durationMs === "number" && Number.isFinite(durationMs)
       ? { durationMs }
       : {}),
   };
 }
 
 function latestUsageDurationMs(eventsJson: unknown): number | undefined {
-  if (typeof eventsJson !== 'string' || eventsJson.length === 0) return undefined;
+  if (typeof eventsJson !== "string" || eventsJson.length === 0)
+    return undefined;
   try {
     const events = JSON.parse(eventsJson);
     if (!Array.isArray(events)) return undefined;
@@ -1024,9 +1091,9 @@ function latestUsageDurationMs(eventsJson: unknown): number | undefined {
       const event = events[i];
       if (
         event &&
-        typeof event === 'object' &&
-        event.kind === 'usage' &&
-        typeof event.durationMs === 'number' &&
+        typeof event === "object" &&
+        event.kind === "usage" &&
+        typeof event.durationMs === "number" &&
         Number.isFinite(event.durationMs)
       ) {
         return Math.max(0, event.durationMs);
@@ -1060,10 +1127,11 @@ export function updateConversation(db: SqliteDb, id: string, patch: DbRow) {
   const merged = {
     ...existing,
     ...patch,
-    sessionMode: Object.prototype.hasOwnProperty.call(patch, 'sessionMode')
+    sessionMode: Object.prototype.hasOwnProperty.call(patch, "sessionMode")
       ? normalizeConversationSessionMode(patch.sessionMode)
       : existing.sessionMode,
-    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+    updatedAt:
+      typeof patch.updatedAt === "number" ? patch.updatedAt : Date.now(),
   };
   db.prepare(
     `UPDATE conversations
@@ -1089,7 +1157,7 @@ export function getAgentSession(
         WHERE conversation_id = ? AND agent_id = ?`,
     )
     .get(conversationId, agentId) as DbRow | undefined;
-  return row && typeof row.session_id === 'string' ? row.session_id : null;
+  return row && typeof row.session_id === "string" ? row.session_id : null;
 }
 
 export function upsertAgentSession(
@@ -1128,11 +1196,13 @@ export function getAgentSessionRecord(
         WHERE conversation_id = ? AND agent_id = ?`,
     )
     .get(conversationId, agentId) as DbRow | undefined;
-  if (!row || typeof row.session_id !== 'string') return null;
+  if (!row || typeof row.session_id !== "string") return null;
   return {
     sessionId: row.session_id,
     stablePromptHash:
-      typeof row.stable_prompt_hash === 'string' ? row.stable_prompt_hash : null,
+      typeof row.stable_prompt_hash === "string"
+        ? row.stable_prompt_hash
+        : null,
   };
 }
 
@@ -1161,9 +1231,10 @@ export function clearAgentSession(
 // ---------- messages ----------
 
 export function listMessages(db: SqliteDb, conversationId: string) {
-  return (db
-    .prepare(
-      `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
+  return (
+    db
+      .prepare(
+        `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
               run_id AS runId, run_status AS runStatus,
               last_run_event_id AS lastRunEventId,
               events_json AS eventsJson,
@@ -1180,9 +1251,9 @@ export function listMessages(db: SqliteDb, conversationId: string) {
          FROM messages
         WHERE conversation_id = ?
         ORDER BY position ASC`,
-    )
-    .all(conversationId) as DbRow[])
-    .map(normalizeMessage);
+      )
+      .all(conversationId) as DbRow[]
+  ).map(normalizeMessage);
 }
 
 export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
@@ -1295,9 +1366,13 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   return row ? normalizeMessage(row) : null;
 }
 
-export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event: DbRow) {
-  const label = typeof event?.label === 'string' ? event.label.trim() : '';
-  const detail = typeof event?.detail === 'string' ? event.detail.trim() : '';
+export function appendMessageStatusEvent(
+  db: SqliteDb,
+  messageId: string,
+  event: DbRow,
+) {
+  const label = typeof event?.label === "string" ? event.label.trim() : "";
+  const detail = typeof event?.detail === "string" ? event.detail.trim() : "";
   if (!label) return null;
   const row = db
     .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
@@ -1306,24 +1381,36 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
   const parsed = parseJsonOrUndef(row.eventsJson);
   const events = Array.isArray(parsed) ? parsed : [];
   const last = events[events.length - 1];
-  if (last?.kind === 'status' && last.label === label && (last.detail ?? '') === detail) {
+  if (
+    last?.kind === "status" &&
+    last.label === label &&
+    (last.detail ?? "") === detail
+  ) {
     return events;
   }
   const nextEvent = detail
-    ? { kind: 'status', label, detail }
-    : { kind: 'status', label };
+    ? { kind: "status", label, detail }
+    : { kind: "status", label };
   const next = [...events, nextEvent];
-  db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`)
-    .run(JSON.stringify(next), messageId);
+  db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`).run(
+    JSON.stringify(next),
+    messageId,
+  );
   return next;
 }
 
-export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: DbRow) {
-  if (!event || typeof event !== 'object') return null;
-  const kind = typeof event.kind === 'string' ? event.kind : '';
+export function appendMessageAgentEvent(
+  db: SqliteDb,
+  messageId: string,
+  event: DbRow,
+) {
+  if (!event || typeof event !== "object") return null;
+  const kind = typeof event.kind === "string" ? event.kind : "";
   if (!kind) return null;
   const row = db
-    .prepare(`SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`)
+    .prepare(
+      `SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`,
+    )
     .get(messageId) as DbRow | undefined;
   if (!row) return null;
   const parsed = parseJsonOrUndef(row.eventsJson);
@@ -1333,9 +1420,11 @@ export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: 
     return events;
   }
   const next = [...events, event];
-  const textDelta = kind === 'text' && typeof event.text === 'string' ? event.text : '';
-  db.prepare(`UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`)
-    .run(textDelta, JSON.stringify(next), messageId);
+  const textDelta =
+    kind === "text" && typeof event.text === "string" ? event.text : "";
+  db.prepare(
+    `UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`,
+  ).run(textDelta, JSON.stringify(next), messageId);
   return next;
 }
 
@@ -1346,18 +1435,23 @@ export function deleteMessage(db: SqliteDb, id: string) {
 // ---------- preview comments ----------
 
 const PREVIEW_COMMENT_STATUSES = new Set([
-  'open',
-  'attached',
-  'applying',
-  'needs_review',
-  'resolved',
-  'failed',
+  "open",
+  "attached",
+  "applying",
+  "needs_review",
+  "resolved",
+  "failed",
 ]);
 
-export function listPreviewComments(db: SqliteDb, projectId: string, conversationId: string) {
-  return (db
-    .prepare(
-      `SELECT id, project_id AS projectId, conversation_id AS conversationId,
+export function listPreviewComments(
+  db: SqliteDb,
+  projectId: string,
+  conversationId: string,
+) {
+  return (
+    db
+      .prepare(
+        `SELECT id, project_id AS projectId, conversation_id AS conversationId,
               file_path AS filePath, element_id AS elementId, selector, label,
               text, position_json AS positionJson, html_hint AS htmlHint,
               selection_kind AS selectionKind, member_count AS memberCount,
@@ -1368,34 +1462,54 @@ export function listPreviewComments(db: SqliteDb, projectId: string, conversatio
          FROM preview_comments
         WHERE project_id = ? AND conversation_id = ?
         ORDER BY created_at ASC, rowid ASC`,
-    )
-    .all(projectId, conversationId) as DbRow[])
-    .map(normalizePreviewComment);
+      )
+      .all(projectId, conversationId) as DbRow[]
+  ).map(normalizePreviewComment);
 }
 
-export function upsertPreviewComment(db: SqliteDb, projectId: string, conversationId: string, input: DbRow) {
+export function upsertPreviewComment(
+  db: SqliteDb,
+  projectId: string,
+  conversationId: string,
+  input: DbRow,
+) {
   const target = input?.target ?? {};
-  const note = typeof input?.note === 'string' ? input.note.trim() : '';
-  const attachmentsProvided = Object.prototype.hasOwnProperty.call(input ?? {}, 'attachments');
-  const incomingAttachments = normalizePreviewCommentAttachments(input?.attachments);
-  const filePath = cleanRequiredString(target.filePath, 'filePath');
-  const elementId = cleanRequiredString(target.elementId, 'elementId');
-  const selector = cleanRequiredString(target.selector, 'selector');
-  const label = cleanRequiredString(target.label, 'label');
-  const text = typeof target.text === 'string' ? compactWhitespace(target.text).slice(0, 160) : '';
-  const htmlHint = typeof target.htmlHint === 'string' ? compactWhitespace(target.htmlHint).slice(0, 180) : '';
+  const note = typeof input?.note === "string" ? input.note.trim() : "";
+  const attachmentsProvided = Object.prototype.hasOwnProperty.call(
+    input ?? {},
+    "attachments",
+  );
+  const incomingAttachments = normalizePreviewCommentAttachments(
+    input?.attachments,
+  );
+  const filePath = cleanRequiredString(target.filePath, "filePath");
+  const elementId = cleanRequiredString(target.elementId, "elementId");
+  const selector = cleanRequiredString(target.selector, "selector");
+  const label = cleanRequiredString(target.label, "label");
+  const text =
+    typeof target.text === "string"
+      ? compactWhitespace(target.text).slice(0, 160)
+      : "";
+  const htmlHint =
+    typeof target.htmlHint === "string"
+      ? compactWhitespace(target.htmlHint).slice(0, 180)
+      : "";
   const position = normalizePosition(target.position);
-  const selectionKind = target.selectionKind === 'pod' ? 'pod' : 'element';
-  const podMembers = selectionKind === 'pod' ? normalizePodMembers(target.podMembers) : [];
+  const selectionKind = target.selectionKind === "pod" ? "pod" : "element";
+  const podMembers =
+    selectionKind === "pod" ? normalizePodMembers(target.podMembers) : [];
   const style = normalizeAnnotationStyle(target.style);
-  const memberCount = selectionKind === 'pod'
-    ? (podMembers.length > 0
+  const memberCount =
+    selectionKind === "pod"
+      ? podMembers.length > 0
         ? podMembers.length
         : Number.isFinite(target.memberCount)
           ? Math.max(0, Math.round(target.memberCount))
-          : 0)
-    : 0;
-  const slideIndex = Number.isFinite(target.slideIndex) ? Math.max(0, Math.round(target.slideIndex)) : null;
+          : 0
+      : 0;
+  const slideIndex = Number.isFinite(target.slideIndex)
+    ? Math.max(0, Math.round(target.slideIndex))
+    : null;
   const slideKey = slideIndex ?? -1;
   const now = Date.now();
   const existing = db
@@ -1404,13 +1518,20 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
          FROM preview_comments
         WHERE project_id = ? AND conversation_id = ? AND file_path = ? AND element_id = ? AND slide_key = ?`,
     )
-    .get(projectId, conversationId, filePath, elementId, slideKey) as DbRow | undefined;
+    .get(projectId, conversationId, filePath, elementId, slideKey) as
+    | DbRow
+    | undefined;
   const id = existing?.id ?? randomCommentId();
   const createdAt = existing?.createdAt ?? now;
-  const existingAttachments = normalizePreviewCommentAttachments(parseJsonOrUndef(existing?.attachmentsJson));
-  const attachments = attachmentsProvided ? incomingAttachments : existingAttachments;
+  const existingAttachments = normalizePreviewCommentAttachments(
+    parseJsonOrUndef(existing?.attachmentsJson),
+  );
+  const attachments = attachmentsProvided
+    ? incomingAttachments
+    : existingAttachments;
   // A comment must carry either a note or at least one image attachment.
-  if (!note && attachments.length === 0) throw new Error('comment note required');
+  if (!note && attachments.length === 0)
+    throw new Error("comment note required");
   db.prepare(
     `INSERT INTO preview_comments
        (id, project_id, conversation_id, file_path, element_id, selector, label,
@@ -1444,22 +1565,29 @@ export function upsertPreviewComment(db: SqliteDb, projectId: string, conversati
     JSON.stringify(position),
     htmlHint,
     selectionKind,
-    selectionKind === 'pod' ? memberCount : null,
-    selectionKind === 'pod' ? JSON.stringify(podMembers) : null,
+    selectionKind === "pod" ? memberCount : null,
+    selectionKind === "pod" ? JSON.stringify(podMembers) : null,
     style ? JSON.stringify(style) : null,
     attachments.length > 0 ? JSON.stringify(attachments) : null,
     slideIndex,
     slideKey,
     note,
-    'open',
+    "open",
     createdAt,
     now,
   );
   return getPreviewComment(db, projectId, conversationId, id);
 }
 
-export function updatePreviewCommentStatus(db: SqliteDb, projectId: string, conversationId: string, id: string, status: string) {
-  if (!PREVIEW_COMMENT_STATUSES.has(status)) throw new Error('invalid comment status');
+export function updatePreviewCommentStatus(
+  db: SqliteDb,
+  projectId: string,
+  conversationId: string,
+  id: string,
+  status: string,
+) {
+  if (!PREVIEW_COMMENT_STATUSES.has(status))
+    throw new Error("invalid comment status");
   const now = Date.now();
   db.prepare(
     `UPDATE preview_comments
@@ -1469,7 +1597,12 @@ export function updatePreviewCommentStatus(db: SqliteDb, projectId: string, conv
   return getPreviewComment(db, projectId, conversationId, id);
 }
 
-export function deletePreviewComment(db: SqliteDb, projectId: string, conversationId: string, id: string) {
+export function deletePreviewComment(
+  db: SqliteDb,
+  projectId: string,
+  conversationId: string,
+  id: string,
+) {
   const result = db
     .prepare(
       `DELETE FROM preview_comments
@@ -1479,7 +1612,12 @@ export function deletePreviewComment(db: SqliteDb, projectId: string, conversati
   return result.changes > 0;
 }
 
-function getPreviewComment(db: SqliteDb, projectId: string, conversationId: string, id: string) {
+function getPreviewComment(
+  db: SqliteDb,
+  projectId: string,
+  conversationId: string,
+  id: string,
+) {
   const row = db
     .prepare(
       `SELECT id, project_id AS projectId, conversation_id AS conversationId,
@@ -1499,7 +1637,9 @@ function getPreviewComment(db: SqliteDb, projectId: string, conversationId: stri
 
 function normalizePreviewComment(row: DbRow) {
   const podMembers = parseJsonOrUndef(row.podMembersJson);
-  const normalizedPodMembers = Array.isArray(podMembers) ? podMembers : undefined;
+  const normalizedPodMembers = Array.isArray(podMembers)
+    ? podMembers
+    : undefined;
   return {
     id: row.id,
     projectId: row.projectId,
@@ -1509,10 +1649,15 @@ function normalizePreviewComment(row: DbRow) {
     selector: row.selector,
     label: row.label,
     text: row.text,
-    position: parseJsonOrUndef(row.positionJson) ?? { x: 0, y: 0, width: 0, height: 0 },
+    position: parseJsonOrUndef(row.positionJson) ?? {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+    },
     htmlHint: row.htmlHint,
     style: normalizeAnnotationStyle(parseJsonOrUndef(row.styleJson)),
-    selectionKind: row.selectionKind === 'pod' ? 'pod' : 'element',
+    selectionKind: row.selectionKind === "pod" ? "pod" : "element",
     memberCount:
       normalizedPodMembers && normalizedPodMembers.length > 0
         ? normalizedPodMembers.length
@@ -1522,7 +1667,9 @@ function normalizePreviewComment(row: DbRow) {
     podMembers: normalizedPodMembers,
     slideIndex: Number.isFinite(row.slideIndex) ? row.slideIndex : undefined,
     note: row.note,
-    attachments: normalizePreviewCommentAttachments(parseJsonOrUndef(row.attachmentsJson)),
+    attachments: normalizePreviewCommentAttachments(
+      parseJsonOrUndef(row.attachmentsJson),
+    ),
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -1533,18 +1680,25 @@ function normalizePreviewCommentAttachments(input: unknown) {
   if (!Array.isArray(input)) return [];
   return input
     .map((item) => {
-      if (!item || typeof item !== 'object') return null;
-      const path = typeof (item as DbRow).path === 'string' ? (item as DbRow).path.trim() : '';
+      if (!item || typeof item !== "object") return null;
+      const path =
+        typeof (item as DbRow).path === "string"
+          ? (item as DbRow).path.trim()
+          : "";
       if (!path) return null;
-      const rawName = typeof (item as DbRow).name === 'string' ? (item as DbRow).name.trim() : '';
-      return { path, name: rawName || path.split('/').pop() || path };
+      const rawName =
+        typeof (item as DbRow).name === "string"
+          ? (item as DbRow).name.trim()
+          : "";
+      return { path, name: rawName || path.split("/").pop() || path };
     })
     .filter(Boolean)
     .slice(0, 20);
 }
 
 function cleanRequiredString(value: unknown, name: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} required`);
+  if (typeof value !== "string" || !value.trim())
+    throw new Error(`${name} required`);
   return value.trim();
 }
 
@@ -1552,23 +1706,29 @@ function normalizePodMembers(input: unknown) {
   if (!Array.isArray(input)) return [];
   return input
     .map((member) => {
-      if (!member || typeof member !== 'object') return null;
-      const elementId = cleanRequiredString(member.elementId, 'podMember.elementId');
-      const selector = cleanRequiredString(member.selector, 'podMember.selector');
-      const label = cleanRequiredString(member.label, 'podMember.label');
+      if (!member || typeof member !== "object") return null;
+      const elementId = cleanRequiredString(
+        member.elementId,
+        "podMember.elementId",
+      );
+      const selector = cleanRequiredString(
+        member.selector,
+        "podMember.selector",
+      );
+      const label = cleanRequiredString(member.label, "podMember.label");
       return {
         elementId,
         selector,
         label,
         text:
-          typeof member.text === 'string'
+          typeof member.text === "string"
             ? compactWhitespace(member.text).slice(0, 160)
-            : '',
+            : "",
         position: normalizePosition(member.position),
         htmlHint:
-          typeof member.htmlHint === 'string'
+          typeof member.htmlHint === "string"
             ? compactWhitespace(member.htmlHint).slice(0, 180)
-            : '',
+            : "",
         style: normalizeAnnotationStyle(member.style),
       };
     })
@@ -1576,12 +1736,12 @@ function normalizePodMembers(input: unknown) {
 }
 
 function normalizeAnnotationStyle(input: unknown) {
-  if (!input || typeof input !== 'object') return undefined;
+  if (!input || typeof input !== "object") return undefined;
   const raw = input as DbRow;
   const style: DbRow = {};
   for (const key of ANNOTATION_STYLE_KEYS) {
     const value = raw[key];
-    if (typeof value !== 'string') continue;
+    if (typeof value !== "string") continue;
     const trimmed = compactWhitespace(value);
     if (trimmed) style[key] = trimmed.slice(0, 120);
   }
@@ -1589,26 +1749,27 @@ function normalizeAnnotationStyle(input: unknown) {
 }
 
 const ANNOTATION_STYLE_KEYS = [
-  'color',
-  'backgroundColor',
-  'fontSize',
-  'fontWeight',
-  'lineHeight',
-  'textAlign',
-  'fontFamily',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'borderRadius',
+  "color",
+  "backgroundColor",
+  "fontSize",
+  "fontWeight",
+  "lineHeight",
+  "textAlign",
+  "fontFamily",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "borderRadius",
 ] as const;
 
 function compactWhitespace(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function normalizePosition(input: unknown) {
-  const value: DbRow = input && typeof input === 'object' ? input as DbRow : {};
+  const value: DbRow =
+    input && typeof input === "object" ? (input as DbRow) : {};
   return {
     x: finiteNumber(value.x),
     y: finiteNumber(value.y),
@@ -1618,7 +1779,9 @@ function normalizePosition(input: unknown) {
 }
 
 function finiteNumber(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : 0;
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.round(value)
+    : 0;
 }
 
 function randomCommentId(): string {
@@ -1650,16 +1813,20 @@ function normalizeMessage(row: DbRow) {
   };
 }
 
-function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
-  return value === 'chat' || value === 'design' ? value : undefined;
+function normalizeMessageSessionMode(
+  value: unknown,
+): ChatSessionMode | undefined {
+  return value === "chat" || value === "design" ? value : undefined;
 }
 
-function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
-  return value === 'chat' || value === 'design' ? value : null;
+function normalizeMessageSessionModeForStorage(
+  value: unknown,
+): ChatSessionMode | null {
+  return value === "chat" || value === "design" ? value : null;
 }
 
 function parseJsonOrUndef(s: unknown): any {
-  if (typeof s !== 'string' || !s) return undefined;
+  if (typeof s !== "string" || !s) return undefined;
   try {
     return JSON.parse(s);
   } catch {
@@ -1683,10 +1850,11 @@ const ROUTINE_RUN_COLS = `id, routine_id AS routineId, trigger, status,
   completed_at AS completedAt, summary, error, error_code AS errorCode`;
 
 export function listRoutines(db: SqliteDb) {
-  return (db
-    .prepare(`SELECT ${ROUTINE_COLS} FROM routines ORDER BY created_at ASC`)
-    .all() as DbRow[])
-    .map(normalizeRoutine);
+  return (
+    db
+      .prepare(`SELECT ${ROUTINE_COLS} FROM routines ORDER BY created_at ASC`)
+      .all() as DbRow[]
+  ).map(normalizeRoutine);
 }
 
 export function getRoutine(db: SqliteDb, id: string) {
@@ -1728,7 +1896,8 @@ export function updateRoutine(db: SqliteDb, id: string, patch: DbRow) {
   const merged = {
     ...existing,
     ...patch,
-    updatedAt: typeof patch.updatedAt === 'number' ? patch.updatedAt : Date.now(),
+    updatedAt:
+      typeof patch.updatedAt === "number" ? patch.updatedAt : Date.now(),
   };
   db.prepare(
     `UPDATE routines
@@ -1781,16 +1950,17 @@ function normalizeRoutine(row: DbRow) {
 }
 
 export function listRoutineRuns(db: SqliteDb, routineId: string, limit = 20) {
-  return (db
-    .prepare(
-      `SELECT ${ROUTINE_RUN_COLS}
+  return (
+    db
+      .prepare(
+        `SELECT ${ROUTINE_RUN_COLS}
          FROM routine_runs
         WHERE routine_id = ?
         ORDER BY started_at DESC
         LIMIT ?`,
-    )
-    .all(routineId, limit) as DbRow[])
-    .map(normalizeRoutineRun);
+      )
+      .all(routineId, limit) as DbRow[]
+  ).map(normalizeRoutineRun);
 }
 
 export function getLatestRoutineRun(db: SqliteDb, routineId: string) {
@@ -1836,7 +2006,11 @@ export function insertRoutineRun(db: SqliteDb, r: DbRow) {
   return getRoutineRun(db, r.id);
 }
 
-export function insertScheduledRoutineRun(db: SqliteDb, r: DbRow, slotAt: number) {
+export function insertScheduledRoutineRun(
+  db: SqliteDb,
+  r: DbRow,
+  slotAt: number,
+) {
   const insertClaim = db.prepare(
     `INSERT OR IGNORE INTO routine_schedule_claims
        (routine_id, slot_at, claimed_at)
@@ -1916,27 +2090,35 @@ function normalizeRoutineRun(row: DbRow) {
 
 // ---------- tabs ----------
 
-function normalizeBrowserWorkspaceTab(value: unknown): ProjectBrowserWorkspaceTab | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+function normalizeBrowserWorkspaceTab(
+  value: unknown,
+): ProjectBrowserWorkspaceTab | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (typeof record.id !== 'string' || !record.id.trim()) return null;
-  if (typeof record.label !== 'string' || !record.label.trim()) return null;
+  if (typeof record.id !== "string" || !record.id.trim()) return null;
+  if (typeof record.label !== "string" || !record.label.trim()) return null;
   const tab: ProjectBrowserWorkspaceTab = {
     id: record.id,
     label: record.label,
   };
   if (record.insertAfter === null) tab.insertAfter = null;
-  else if (typeof record.insertAfter === 'string') tab.insertAfter = record.insertAfter;
-  if (typeof record.title === 'string' && record.title.trim()) tab.title = record.title;
-  if (typeof record.url === 'string' && record.url.trim()) tab.url = record.url;
-  if (typeof record.iconUrl === 'string' && record.iconUrl.trim()) tab.iconUrl = record.iconUrl;
+  else if (typeof record.insertAfter === "string")
+    tab.insertAfter = record.insertAfter;
+  if (typeof record.title === "string" && record.title.trim())
+    tab.title = record.title;
+  if (typeof record.url === "string" && record.url.trim()) tab.url = record.url;
+  if (typeof record.iconUrl === "string" && record.iconUrl.trim())
+    tab.iconUrl = record.iconUrl;
   return tab;
 }
 
 function normalizeProjectTabsState(value: unknown): ProjectTabsState | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (!Array.isArray(record.tabs) || !record.tabs.every((tab) => typeof tab === 'string')) {
+  if (
+    !Array.isArray(record.tabs) ||
+    !record.tabs.every((tab) => typeof tab === "string")
+  ) {
     return null;
   }
   const browserTabs = Array.isArray(record.browserTabs)
@@ -1946,14 +2128,14 @@ function normalizeProjectTabsState(value: unknown): ProjectTabsState | null {
     : [];
   const state: ProjectTabsState = {
     tabs: record.tabs.slice(),
-    active: typeof record.active === 'string' ? record.active : null,
+    active: typeof record.active === "string" ? record.active : null,
   };
   if (browserTabs.length > 0) state.browserTabs = browserTabs;
   return state;
 }
 
 function parseProjectTabsStateJson(value: unknown): ProjectTabsState | null {
-  if (typeof value !== 'string' || !value.trim()) return null;
+  if (typeof value !== "string" || !value.trim()) return null;
   try {
     return normalizeProjectTabsState(JSON.parse(value));
   } catch {
@@ -1969,7 +2151,9 @@ export function listTabs(db: SqliteDb, projectId: string) {
     )
     .all(projectId) as DbRow[];
   const state = db
-    .prepare(`SELECT project_id, updated_at AS updatedAt, state_json AS stateJson FROM tabs_state WHERE project_id = ? LIMIT 1`)
+    .prepare(
+      `SELECT project_id, updated_at AS updatedAt, state_json AS stateJson FROM tabs_state WHERE project_id = ? LIMIT 1`,
+    )
     .get(projectId) as DbRow | undefined;
   const savedState = parseProjectTabsStateJson(state?.stateJson);
   if (savedState) {

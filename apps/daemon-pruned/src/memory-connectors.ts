@@ -6,14 +6,13 @@ import type {
 
 import type { BoundedJsonObject, BoundedJsonValue } from './live-artifacts/schema.js';
 import { extractWithLLM, suggestWithLLM } from './memory-llm.js';
-import { type ConnectorDetail, type ConnectorToolDetail } from './connectors/catalog.js';
-import {
-  ConnectorServiceError,
-  connectorService,
-  type ConnectorExecuteResponse,
-  type ConnectorService,
-} from './connectors/service.js';
-import { listConnectorTools } from './tools/connectors.js';
+type ConnectorDetail = any;
+type ConnectorToolDetail = any;
+type ConnectorExecuteResponse = any;
+type ConnectorService = any;
+const ConnectorServiceError = class extends Error { details?: any } as any;
+const connectorService: any = null as any;
+const listConnectorTools: any = async () => [];
 import type { ToolTokenGrant } from './tool-tokens.js';
 
 const DEFAULT_CONNECTOR_MEMORY_QUERY =
@@ -486,7 +485,7 @@ function errorDetailMessage(value: BoundedJsonValue | undefined): string | null 
 function connectorErrorMessage(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);
   if (!(err instanceof ConnectorServiceError)) return message;
-  const detailMessage = errorDetailMessage(err.details?.error);
+  const detailMessage = errorDetailMessage((err as any).details?.error);
   if (!detailMessage || message.includes(detailMessage)) return message;
   return `${message}: ${detailMessage}`;
 }

@@ -1,7 +1,6 @@
-import type { Express } from 'express';
-import type { SkillInfo } from './skills.js';
-import type { DesignSystemSummary } from './design-systems.js';
-import type { RoutineRoutesService } from './routes/routine.js';
+import type { Express } from "express";
+import type { SkillInfo } from "./skills.js";
+import type { DesignSystemSummary } from "./design-systems.js";
 
 export interface HttpDeps {
   createSseResponse: (...args: any[]) => any;
@@ -35,7 +34,9 @@ export interface PathDeps {
 }
 
 export interface ResourceDeps {
-  listAllDesignSystems: () => Promise<Array<DesignSystemSummary & { source?: string }>>;
+  listAllDesignSystems: () => Promise<
+    Array<DesignSystemSummary & { source?: string }>
+  >;
   listAllSkills: () => Promise<Array<SkillInfo & { source?: string }>>;
   // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates
   // surface only sees rendering-catalogue entries.
@@ -44,12 +45,10 @@ export interface ResourceDeps {
   // resolvers (chat run system prompt, orbit template resolver,
   // /api/skills/:id/example, /api/skills/:id/assets/*) keep working when
   // a stored project.skillId points at either root.
-  listAllSkillLikeEntries: () => Promise<Array<SkillInfo & { source?: string }>>;
+  listAllSkillLikeEntries: () => Promise<
+    Array<SkillInfo & { source?: string }>
+  >;
   mimeFor: (filePath: string) => string;
-}
-
-export interface RoutineDeps {
-  routineService: RoutineRoutesService;
 }
 
 export interface ProjectPreviewScopeDeps {
@@ -68,12 +67,12 @@ export interface TelemetryDeps {
    */
   reportFeedback?: (req: {
     runId: string;
-    rating: 'positive' | 'negative';
+    rating: "positive" | "negative";
     reasonCodes: string[];
     hasCustomReason: boolean;
     customReason: string;
     scoreMetadata?: Record<string, unknown>;
-  }) => Promise<{ status: 'accepted' | 'skipped_consent' | 'skipped_no_sink' }>;
+  }) => Promise<{ status: "accepted" | "skipped_consent" | "skipped_no_sink" }>;
 }
 
 export interface ServerContext {
@@ -104,7 +103,6 @@ export interface ServerContext {
   research: any;
   mcp: any;
   resources: ResourceDeps;
-  routines: RoutineDeps;
   projectPreviewScopes: ProjectPreviewScopeDeps;
   telemetry?: TelemetryDeps;
   validation: any;

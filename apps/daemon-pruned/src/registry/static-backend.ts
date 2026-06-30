@@ -115,7 +115,7 @@ export class StaticRegistryBackend implements RegistryBackend {
   }
 
   async doctor(): Promise<RegistryDoctorReport> {
-    const issues = [];
+    const issues: any[] = [];
     const plugins = this.getManifest().plugins ?? [];
     for (const entry of plugins) {
       if (!/^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/.test(entry.name)) {

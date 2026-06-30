@@ -15,8 +15,8 @@ This file is the single source of truth for agents entering this repository. Rea
 
 - Workspace packages come from `pnpm-workspace.yaml`: `apps/*`, `packages/*`, `tools/*`, and `e2e`.
 - Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
-- `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
-- `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
+- `apps/web` and `apps/web-pruned` are the Next.js 16 App Router + React 18 web runtimes (standard and pruned respectively); do not restore `apps/nextjs`.
+- `apps/daemon` and `apps/daemon-pruned` are the local privileged daemons and `od` bin (standard and pruned respectively). They own `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
 - `apps/desktop` is the Electron shell; it discovers the web URL through sidecar IPC.
 - `apps/packaged` is the thin packaged Electron runtime entry; it starts packaged sidecars and owns the `od://` entry glue only.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
@@ -51,6 +51,7 @@ This file is the single source of truth for agents entering this repository. Rea
 ## Local lifecycle
 
 - Use `pnpm tools-dev` as the only local development lifecycle entry point.
+- Local development should default to the pruned mode. When starting local dev servers, always include the `--pruned` flag (e.g. `pnpm tools-dev run web --pruned` or `pnpm tools-dev run daemon --pruned`) to ensure the pruned apps/packages are target compiled and run.
 - Do not add or restore root lifecycle aliases: `pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, or `pnpm start`.
 - Ports are governed by `tools-dev` flags: `--daemon-port` and `--web-port`.
 - `tools-dev` exports `OD_PORT` for the web proxy target and `OD_WEB_PORT` for the web listener; do not use `NEXT_PORT`.
@@ -94,7 +95,7 @@ Every user-facing capability must be reachable through both the web UI **and** t
 - Both surfaces must call the same `/api/*` endpoints; do not let the CLI talk to one shape and the UI to another. The daemon HTTP layer is the single source of truth, with `packages/contracts` carrying the shared DTOs.
 - The CLI form must support `--json` for machine-readable output and accept long-form prompts via `--prompt-file <path|->`, so jobs that pipe through `xargs`, `jq`, and `<heredoc` stay clean.
 - Adding a new capability is a three-step closure: HTTP endpoint in `apps/daemon/src/*-routes.ts` (with a contract type in `packages/contracts/src/api/`), UI surface in `apps/web/src/`, and `od <capability>` subcommand in `apps/daemon/src/cli.ts` registered through `SUBCOMMAND_MAP`. Land all three in the same PR; do not stage them across PRs.
-- The PR template's Surface area checklist must reflect *both* surfaces. If you ticked UI, tick CLI too — and vice-versa — or explain in the PR body why the missing surface is genuinely not applicable (e.g. an internal-only daemon health probe). "I'll do the CLI later" is not a valid reason.
+- The PR template's Surface area checklist must reflect _both_ surfaces. If you ticked UI, tick CLI too — and vice-versa — or explain in the PR body why the missing surface is genuinely not applicable (e.g. an internal-only daemon health probe). "I'll do the CLI later" is not a valid reason.
 - Existing reference points: `od automation …` mirrors the Automations tab against `/api/routines`; `od plugin …`, `od ui …`, `od project …`, `od media …`, `od mcp …`, `od research …` follow the same shape. Copy that pattern for new capabilities.
 
 ## Git commit policy
@@ -265,8 +266,8 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 
 The daemon writes `.od/` by default: SQLite at `.od/app.sqlite`, agent CWDs under `.od/projects/<id>/`, saved renders under `.od/artifacts/`, and credentials at `.od/media-config.json`. Two env vars override the storage root, in order:
 
-1. `OD_DATA_DIR=<dir>` — relocates *all* daemon runtime data to `<dir>` (used by Playwright for test isolation, and by the packaged daemon and the Home Manager / NixOS modules to point the daemon at a writable directory when the install root is read-only). The path is resolved with `~/` expansion and relative paths anchored to `<projectRoot>`.
-2. `OD_MEDIA_CONFIG_DIR=<dir>` — narrower override that relocates *only* `media-config.json`. Same resolution semantics. Most installs do not need this; it exists for setups that want to keep API credentials in a different location from the rest of the runtime data.
+1. `OD_DATA_DIR=<dir>` — relocates _all_ daemon runtime data to `<dir>` (used by Playwright for test isolation, and by the packaged daemon and the Home Manager / NixOS modules to point the daemon at a writable directory when the install root is read-only). The path is resolved with `~/` expansion and relative paths anchored to `<projectRoot>`.
+2. `OD_MEDIA_CONFIG_DIR=<dir>` — narrower override that relocates _only_ `media-config.json`. Same resolution semantics. Most installs do not need this; it exists for setups that want to keep API credentials in a different location from the rest of the runtime data.
 
 Default precedence is OD_MEDIA_CONFIG_DIR > OD_DATA_DIR > `<projectRoot>/.od`.
 

@@ -112,7 +112,6 @@ import { useByokImageModelOptions, useByokVideoModelOptions, useByokSpeechModelO
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
-import { PetSettings } from './pet/PetSettings';
 import { McpClientSection } from './McpClientSection';
 import { SkillsSection } from './SkillsSection';
 import { DesignSystemsSection } from './DesignSystemsSection';
@@ -171,7 +170,6 @@ export type SettingsSection =
   | 'appearance'
   | 'critiqueTheater'
   | 'notifications'
-  | 'pet'
   | 'skills'
   | 'designSystems'
   | 'projectLocations'
@@ -2692,7 +2690,6 @@ export function SettingsDialog({
     },
     notifications: { title: t('settings.notifications'), subtitle: t('settings.notificationsHint') },
     privacy: { title: t('settings.privacy'), subtitle: t('settings.privacyHint') },
-    pet: { title: t('pet.title'), subtitle: t('pet.subtitle') },
     skills: { title: t('settings.skills'), subtitle: t('settings.skillsHint') },
     designSystems: {
       title: t('settings.designSystems'),
@@ -3148,17 +3145,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.notifications')}</strong>
                 <small>{t('settings.notificationsHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'pet' ? ' active' : ''}`}
-              onClick={() => setActiveSection('pet')}
-            >
-              <Icon name="sparkles" size={18} />
-              <span>
-                <strong>{t('pet.navTitle')}</strong>
-                <small>{t('pet.navHint')}</small>
               </span>
             </button>
             <button
@@ -4465,9 +4451,6 @@ export function SettingsDialog({
               <NotificationsSection cfg={cfg} setCfg={setCfg} />
             ) : null}
 
-            {activeSection === 'pet' ? (
-              <PetSettings cfg={cfg} setCfg={setCfg} />
-            ) : null}
 
             {activeSection === 'skills' ? (
               <SkillsSection

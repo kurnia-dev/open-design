@@ -47,7 +47,6 @@ import { SessionModeToggle } from './SessionModeToggle';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
-import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
 import {
   inlineMentionToken,
   type InlineMentionEntity,
@@ -241,12 +240,6 @@ interface Props {
   // ChatPane → ProjectView → App. Omitted → the add rows are hidden.
   onBrowsePlugins?: () => void;
   onOpenConnectors?: () => void;
-  // Optional pet wiring. The composer no longer renders a visible pet
-  // entry, but existing manual `/pet` commands still route here.
-  petConfig?: AppConfig['pet'];
-  onAdoptPet?: (petId: string) => void;
-  onTogglePet?: () => void;
-  onOpenPetSettings?: () => void;
   researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
@@ -364,10 +357,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onOpenMcpSettings,
       onBrowsePlugins,
       onOpenConnectors,
-      petConfig,
-      onAdoptPet,
-      onTogglePet,
-      onOpenPetSettings,
       researchAvailable = false,
       projectMetadata,
       onProjectMetadataChange,
@@ -480,11 +469,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () => (draft ?? '').trim().length > 0,
     );
     const fileInputRef = useRef<HTMLInputElement | null>(null);
-    // The Lexical editor handle — drives text/mention/clear/focus from the
-    // host. Replaces the old textareaRef + manual selection plumbing. IME
-    // composition guarding now lives inside the editor's command handlers.
     const editorRef = useRef<LexicalComposerInputHandle | null>(null);
-    const petEnabled = Boolean(onAdoptPet && onTogglePet);
     const linkedDirs = projectMetadata?.linkedDirs ?? [];
     const visibleWorkspaceContext =
       activeWorkspaceContext && activeWorkspaceContext.id !== dismissedWorkspaceContextId
@@ -711,30 +696,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setSlash(null);
     }
 
-    // Expand a `/hatch <concept>` draft into the canonical hatch-pet
-    // skill prompt before sending. Returns null when the draft is not a
-    // hatch command so the caller can fall through to the regular
-    // submit path.
-    function expandHatchCommand(input: string): string | null {
-      const m = /^\/hatch(?:\s+([\s\S]*))?$/i.exec(input.trim());
-      if (!m) return null;
-      const concept = m[1]?.trim() ?? '';
-      const intro = concept
-        ? `Hatch a Codex-compatible animated pet for me. Concept: ${concept}.`
-        : 'Hatch a Codex-compatible animated pet for me.';
-      return [
-        intro,
-        '',
-        'Use the @hatch-pet skill end-to-end:',
-        '1. Generate the base look with $imagegen.',
-        '2. Generate every row strip (idle, running-right, waving, jumping, failed, waiting, running, review).',
-        '3. Mirror running-left from running-right only when the design is symmetric.',
-        '4. Run the deterministic scripts (extract / compose / validate / contact-sheet / videos).',
-        '5. Package the result into ${CODEX_HOME:-$HOME/.codex}/pets/<pet-name>/ with pet.json + spritesheet.webp.',
-        '',
-        'When the spritesheet is saved, tell me the absolute path and the pet folder name. I will adopt it from Settings → Pets → Recently hatched.',
-      ].join('\n');
-    }
 
     // `/mcp` (no arg) opens settings on the External MCP tab — pure UX hook,
     // never sent to the agent. `/mcp <id>` is intentionally NOT intercepted
@@ -780,43 +741,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }
 
-    // Parse a `/pet [arg]` slash command out of the draft. Recognized
-    // forms: `/pet` (toggle wake/tuck), `/pet wake`, `/pet tuck`,
-    // `/pet adopt` (open settings), or `/pet <id>` to adopt a built-in
-    // by id. The slash is stripped from the draft on a successful match
-    // so the user does not accidentally send the command to the agent.
-    function tryHandlePetSlash(): boolean {
-      if (!petEnabled) return false;
-      const trimmed = draft.trim();
-      const match = /^\/pet(?:\s+(\S+))?$/i.exec(trimmed);
-      if (!match) return false;
-      const arg = match[1]?.toLowerCase();
-      if (!arg || arg === 'toggle') {
-        onTogglePet?.();
-      } else if (arg === 'wake' || arg === 'show') {
-        if (petConfig?.adopted) {
-          if (!petConfig.enabled) onTogglePet?.();
-        } else {
-          onOpenPetSettings?.();
-        }
-      } else if (arg === 'tuck' || arg === 'hide') {
-        if (petConfig?.enabled) onTogglePet?.();
-      } else if (arg === 'adopt' || arg === 'settings' || arg === 'change') {
-        onOpenPetSettings?.();
-      } else if (arg === CUSTOM_PET_ID) {
-        onAdoptPet?.(CUSTOM_PET_ID);
-      } else {
-        const pet = BUILT_IN_PETS.find((p) => p.id === arg);
-        if (pet) {
-          onAdoptPet?.(pet.id);
-        } else {
-          return false;
-        }
-      }
-      setDraft('');
-      editorRef.current?.clear();
-      return true;
-    }
 
     useImperativeHandle(
       ref,
@@ -1754,24 +1678,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     async function submit() {
       const prompt = draft.trim();
       if (sendDisabled) return;
-      // Intercept `/pet …` and `/mcp` before sending so the slash command
+      // Intercept `/mcp` before sending so the slash command
       // never hits the agent — these are local UX hooks, not model prompts.
-      if (tryHandlePetSlash()) return;
       if (tryHandleMcpSlash()) return;
-      // `/hatch <concept>` expands into the canonical hatch-pet skill
-      // prompt and *is* sent to the agent — the agent runs the skill,
-      // packages a Codex pet under `~/.codex/pets/`, and the user
-      // adopts it from "Recently hatched" in pet settings afterwards.
       const contextMeta = currentRunContextMeta();
-      const hatched = expandHatchCommand(prompt);
       const nextCommentAttachments = currentCommentAttachments();
-      if (hatched) {
-        if (streaming) return;
-        setStreamingAnnotationSendPending(false);
-        onSend(hatched, staged, nextCommentAttachments, contextMeta);
-        reset();
-        return;
-      }
       const search = researchAvailable ? expandSearchCommand(prompt) : null;
       if (search) {
         if (streaming) return;

@@ -260,11 +260,6 @@ interface Props {
   onBrowsePlugins?: () => void;
   onOpenConnectors?: () => void;
   onOpenGitHubSettings?: () => void;
-  // Pet wiring forwarded to the chat composer so users can adopt /
-  // wake / tuck a pet without leaving the project view.
-  onAdoptPetInline?: (petId: string) => void;
-  onTogglePet?: () => void;
-  onOpenPetSettings?: () => void;
   onBack: () => void;
   onClearPendingPrompt: () => void;
   onTouchProject: () => void;
@@ -765,9 +760,6 @@ export function ProjectView({
   onBrowsePlugins,
   onOpenConnectors,
   onOpenGitHubSettings,
-  onAdoptPetInline,
-  onTogglePet,
-  onOpenPetSettings,
   onBack,
   onClearPendingPrompt,
   onTouchProject,
@@ -5543,10 +5535,6 @@ export function ProjectView({
               githubAuth={githubAuth}
               onConnectRepo={handleConnectRepo}
               composerDraftSignal={composerDraftSignal}
-              petConfig={config.pet}
-              onAdoptPet={onAdoptPetInline}
-              onTogglePet={onTogglePet}
-              onOpenPetSettings={onOpenPetSettings}
               researchAvailable={config.mode === 'daemon'}
               byokApiProtocol={config.apiProtocol}
               byokImageModel={byokImageModelOverride}

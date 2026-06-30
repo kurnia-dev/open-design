@@ -541,12 +541,6 @@ interface Props {
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
-  // Optional pet wiring forwarded straight through to ChatComposer's
-  // /pet button. When omitted the composer hides the button entirely.
-  petConfig?: AppConfig['pet'];
-  onAdoptPet?: (petId: string) => void;
-  onTogglePet?: () => void;
-  onOpenPetSettings?: () => void;
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
   activeWorkspaceContext?: WorkspaceContextItem | null;
@@ -700,10 +694,6 @@ export function ChatPane({
   githubAuth,
   onConnectRepo,
   composerDraftSignal,
-  petConfig,
-  onAdoptPet,
-  onTogglePet,
-  onOpenPetSettings,
   projectMetadata,
   onProjectMetadataChange,
   activeWorkspaceContext,
@@ -1644,10 +1634,6 @@ export function ChatPane({
       onOpenMcpSettings={onOpenMcpSettings}
       onBrowsePlugins={onBrowsePlugins}
       onOpenConnectors={onOpenConnectors}
-      petConfig={petConfig}
-      onAdoptPet={onAdoptPet}
-      onTogglePet={onTogglePet}
-      onOpenPetSettings={onOpenPetSettings}
       researchAvailable={researchAvailable}
       projectMetadata={projectMetadata}
       onProjectMetadataChange={onProjectMetadataChange}

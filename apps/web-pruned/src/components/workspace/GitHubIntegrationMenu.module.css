@@ -1,0 +1,257 @@
+.menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+  transition: width 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.githubCard {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.githubHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.githubAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+}
+
+.githubDetails {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.githubUser {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.githubStatusText {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.connectBtn {
+  font-size: 11px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s var(--ease);
+}
+
+.connectBtn:hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--accent-hover);
+}
+
+.connectBtn:disabled,
+.connectBtn[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.disconnectBtn {
+  font-size: 11px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.disconnectBtn:hover {
+  background: var(--bg-fill-tertiary);
+}
+
+.remoteBox {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.remoteHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.editRemoteBtn {
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.editRemoteBtn:hover {
+  text-decoration: underline;
+}
+
+.remoteUrl {
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-all;
+  font-family: var(--mono);
+}
+
+.connectForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connectInput {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.connectInput:focus {
+  border-color: var(--selected);
+}
+
+.selectMenu {
+  z-index: 10001 !important;
+}
+
+.connectActionGroup {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cancelBtn {
+  font-size: 11px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: var(--bg-fill-tertiary);
+}
+
+.createAltBox {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.createAltHint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.createAltForm {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: visible;
+}
+
+.modeToggleBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  width: 100%;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.modeToggleBtn:hover {
+  color: var(--accent);
+}
+
+.repoDetailsCard {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 10px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+
+.loadingWrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  width: 100%;
+}
+
+.repoIcon {
+  margin-top: 2px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.textWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.repoName {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.repoDesc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-soft);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}

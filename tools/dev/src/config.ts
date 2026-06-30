@@ -36,6 +36,7 @@ export type ToolDevOptions = {
   prod?: boolean;
   toolsDevRoot?: string;
   webPort?: number | string | null;
+  pruned?: boolean;
 };
 
 export type ToolDevAppConfig = {
@@ -66,6 +67,7 @@ export type ToolDevConfig = {
   toolsDevRoot: string;
   tsxCliPath: string;
   workspaceRoot: string;
+  pruned?: boolean;
 };
 
 function resolveTsxCliPath(): string {
@@ -167,7 +169,7 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
     apps: {
       daemon: {
         ...daemon,
-        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/daemon/src/sidecar/index.ts"),
+        sidecarEntryPath: path.join(WORKSPACE_ROOT, options.pruned ? "apps/daemon-pruned/src/sidecar/index.ts" : "apps/daemon/src/sidecar/index.ts"),
       },
       desktop: {
         ...desktop,
@@ -182,7 +184,7 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
         ...web,
         nextDistDir: resolveAppRuntimePath({ app: APP_KEYS.WEB, namespaceRoot, fileName: "next", contract: OPEN_DESIGN_SIDECAR_CONTRACT }),
         nextTsconfigPath: resolveAppRuntimePath({ app: APP_KEYS.WEB, namespaceRoot, fileName: "tsconfig.json", contract: OPEN_DESIGN_SIDECAR_CONTRACT }),
-        sidecarEntryPath: path.join(WORKSPACE_ROOT, "apps/web/sidecar/index.ts"),
+        sidecarEntryPath: path.join(WORKSPACE_ROOT, options.pruned ? "apps/web-pruned/sidecar/index.ts" : "apps/web/sidecar/index.ts"),
       },
     },
     namespace,
@@ -190,5 +192,6 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
     toolsDevRoot,
     tsxCliPath: resolveTsxCliPath(),
     workspaceRoot: WORKSPACE_ROOT,
+    pruned: !!options.pruned,
   };
 }

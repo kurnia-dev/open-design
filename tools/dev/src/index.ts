@@ -1,5 +1,14 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, open, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+  type FileHandle,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { cac } from "cac";
@@ -118,22 +127,38 @@ function colorizeLink(url: string): string {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value != null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+  return value != null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | null {
+function stringField(
+  record: Record<string, unknown>,
+  key: string,
+): string | null {
   const value = record[key];
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function numberField(record: Record<string, unknown>, key: string): number | null {
+function numberField(
+  record: Record<string, unknown>,
+  key: string,
+): number | null {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function numberArrayField(record: Record<string, unknown> | null, key: string): number[] {
+function numberArrayField(
+  record: Record<string, unknown> | null,
+  key: string,
+): number[] {
   const value = record?.[key];
-  return Array.isArray(value) ? value.filter((entry): entry is number => typeof entry === "number" && Number.isFinite(entry)) : [];
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is number =>
+          typeof entry === "number" && Number.isFinite(entry),
+      )
+    : [];
 }
 
 function formatProcessList(pids: readonly number[]): string | null {
@@ -154,7 +179,8 @@ function formatStatusSummary(status: unknown): string {
   if (url != null) parts.push(url);
   if (pid != null) parts.push(`pid ${pid}`);
   if (title != null) parts.push(`title ${JSON.stringify(title)}`);
-  if (typeof windowVisible === "boolean") parts.push(`window ${windowVisible ? "visible" : "hidden"}`);
+  if (typeof windowVisible === "boolean")
+    parts.push(`window ${windowVisible ? "visible" : "hidden"}`);
 
   return parts.join(" · ");
 }
@@ -165,7 +191,10 @@ function printStatusEntries(apps: Record<string, unknown>): void {
   }
 }
 
-function printStartSection(result: Partial<Record<ToolDevAppName, unknown>>, heading: string): void {
+function printStartSection(
+  result: Partial<Record<ToolDevAppName, unknown>>,
+  heading: string,
+): void {
   process.stdout.write(`${heading}\n`);
   const entries = Object.entries(result);
   if (entries.length === 0) {
@@ -176,14 +205,25 @@ function printStartSection(result: Partial<Record<ToolDevAppName, unknown>>, hea
   for (const [appName, rawEntry] of entries) {
     const entry = asRecord(rawEntry);
     const created = entry?.created;
-    const action = created === true ? "started" : created === false ? "already running" : "ready";
-    process.stdout.write(`- ${appName}: ${action} · ${formatStatusSummary(entry?.status)}\n`);
+    const action =
+      created === true
+        ? "started"
+        : created === false
+          ? "already running"
+          : "ready";
+    process.stdout.write(
+      `- ${appName}: ${action} · ${formatStatusSummary(entry?.status)}\n`,
+    );
     const logPath = entry == null ? null : stringField(entry, "logPath");
     if (logPath != null) process.stdout.write(`  log: ${logPath}\n`);
   }
 }
 
-function printStartResult(result: Partial<Record<ToolDevAppName, unknown>>, options: CliOptions, heading = "tools-dev start"): void {
+function printStartResult(
+  result: Partial<Record<ToolDevAppName, unknown>>,
+  options: CliOptions,
+  heading = "tools-dev start",
+): void {
   if (options.json === true) {
     printJson(result);
     return;
@@ -191,7 +231,10 @@ function printStartResult(result: Partial<Record<ToolDevAppName, unknown>>, opti
   printStartSection(result, heading);
 }
 
-function printStopSection(result: Partial<Record<ToolDevAppName, unknown>>, heading: string): void {
+function printStopSection(
+  result: Partial<Record<ToolDevAppName, unknown>>,
+  heading: string,
+): void {
   process.stdout.write(`${heading}\n`);
   const entries = Object.entries(result);
   if (entries.length === 0) {
@@ -202,9 +245,15 @@ function printStopSection(result: Partial<Record<ToolDevAppName, unknown>>, head
   for (const [appName, rawEntry] of entries) {
     const entry = asRecord(rawEntry);
     const stop = asRecord(entry?.stop);
-    const stoppedPids = formatProcessList(numberArrayField(stop, "stoppedPids"));
-    const remainingPids = formatProcessList(numberArrayField(stop, "remainingPids"));
-    const parts = [entry == null ? "unknown" : stringField(entry, "status") ?? "unknown"];
+    const stoppedPids = formatProcessList(
+      numberArrayField(stop, "stoppedPids"),
+    );
+    const remainingPids = formatProcessList(
+      numberArrayField(stop, "remainingPids"),
+    );
+    const parts = [
+      entry == null ? "unknown" : (stringField(entry, "status") ?? "unknown"),
+    ];
     const via = entry == null ? null : stringField(entry, "via");
     if (via != null) parts.push(`via ${via}`);
     if (stoppedPids != null) parts.push(`stopped pids ${stoppedPids}`);
@@ -213,7 +262,11 @@ function printStopSection(result: Partial<Record<ToolDevAppName, unknown>>, head
   }
 }
 
-function printStopResult(result: Partial<Record<ToolDevAppName, unknown>>, options: CliOptions, heading = "tools-dev stop"): void {
+function printStopResult(
+  result: Partial<Record<ToolDevAppName, unknown>>,
+  options: CliOptions,
+  heading = "tools-dev stop",
+): void {
   if (options.json === true) {
     printJson(result);
     return;
@@ -229,11 +282,21 @@ function printRestartResult(result: unknown, options: CliOptions): void {
 
   const record = asRecord(result);
   process.stdout.write("tools-dev restart\n");
-  printStopSection((asRecord(record?.stop) ?? {}) as Partial<Record<ToolDevAppName, unknown>>, "Stop");
-  printStartSection((asRecord(record?.start) ?? {}) as Partial<Record<ToolDevAppName, unknown>>, "Start");
+  printStopSection(
+    (asRecord(record?.stop) ?? {}) as Partial<Record<ToolDevAppName, unknown>>,
+    "Stop",
+  );
+  printStartSection(
+    (asRecord(record?.start) ?? {}) as Partial<Record<ToolDevAppName, unknown>>,
+    "Start",
+  );
 }
 
-function printStatusResult(result: unknown, options: CliOptions, appName: string | undefined): void {
+function printStatusResult(
+  result: unknown,
+  options: CliOptions,
+  appName: string | undefined,
+): void {
   if (options.json === true) {
     printJson(result);
     return;
@@ -244,17 +307,27 @@ function printStatusResult(result: unknown, options: CliOptions, appName: string
   if (apps != null) {
     const namespace = stringField(record ?? {}, "namespace");
     const statusLabel = stringField(record ?? {}, "status");
-    const details = [namespace == null ? null : `namespace ${namespace}`, statusLabel].filter((entry): entry is string => entry != null);
-    process.stdout.write(`tools-dev status${details.length > 0 ? ` (${details.join(" · ")})` : ""}\n`);
+    const details = [
+      namespace == null ? null : `namespace ${namespace}`,
+      statusLabel,
+    ].filter((entry): entry is string => entry != null);
+    process.stdout.write(
+      `tools-dev status${details.length > 0 ? ` (${details.join(" · ")})` : ""}\n`,
+    );
     printStatusEntries(apps);
     return;
   }
 
   process.stdout.write("tools-dev status\n");
-  process.stdout.write(`- ${appName ?? ALL_APPS.join("/")}: ${formatStatusSummary(result)}\n`);
+  process.stdout.write(
+    `- ${appName ?? ALL_APPS.join("/")}: ${formatStatusSummary(result)}\n`,
+  );
 }
 
-function printRunForegroundResult(started: Partial<Record<ToolDevAppName, unknown>>, options: CliOptions): void {
+function printRunForegroundResult(
+  started: Partial<Record<ToolDevAppName, unknown>>,
+  options: CliOptions,
+): void {
   if (options.json === true) {
     printJson({ mode: "foreground", started });
     return;
@@ -267,8 +340,14 @@ function printRunForegroundResult(started: Partial<Record<ToolDevAppName, unknow
 
   if (webUrl != null || daemonUrl != null) {
     process.stdout.write("\n  Open Design dev server ready\n\n");
-    if (webUrl != null) process.stdout.write(`  ➜  Web:    ${colorizeLink(normalizeDisplayUrl(webUrl))}\n`);
-    if (daemonUrl != null) process.stdout.write(`  ➜  Daemon: ${colorizeLink(normalizeDisplayUrl(daemonUrl))}\n`);
+    if (webUrl != null)
+      process.stdout.write(
+        `  ➜  Web:    ${colorizeLink(normalizeDisplayUrl(webUrl))}\n`,
+      );
+    if (daemonUrl != null)
+      process.stdout.write(
+        `  ➜  Daemon: ${colorizeLink(normalizeDisplayUrl(daemonUrl))}\n`,
+      );
     process.stdout.write("\n  Press Ctrl+C to stop\n\n");
     return;
   }
@@ -291,16 +370,30 @@ function urlPort(url: string): string {
   return parsed.protocol === "https:" ? "443" : "80";
 }
 
-function statusMatchesForcedPort(url: string | null | undefined, forcedPort: number | null): boolean {
-  return forcedPort == null || (url != null && urlPort(url) === String(forcedPort));
+function statusMatchesForcedPort(
+  url: string | null | undefined,
+  forcedPort: number | null,
+): boolean {
+  return (
+    forcedPort == null || (url != null && urlPort(url) === String(forcedPort))
+  );
 }
 
-function prependNodePath(entries: string[], current = process.env.NODE_PATH): string {
-  const existing = current == null || current.length === 0 ? [] : current.split(path.delimiter);
+function prependNodePath(
+  entries: string[],
+  current = process.env.NODE_PATH,
+): string {
+  const existing =
+    current == null || current.length === 0
+      ? []
+      : current.split(path.delimiter);
   return [...entries, ...existing].join(path.delimiter);
 }
 
-async function openAppLog(config: ToolDevConfig, appName: ToolDevAppName): Promise<FileHandle> {
+async function openAppLog(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+): Promise<FileHandle> {
   const logPath = appConfig(config, appName).latestLogPath;
   await mkdir(path.dirname(logPath), { recursive: true });
   return await open(logPath, "a");
@@ -329,7 +422,11 @@ async function runLoggedCommand(request: {
         resolveRun();
         return;
       }
-      rejectRun(new Error(`command failed: ${request.command} ${request.args.join(" ")} (${signal ?? code})`));
+      rejectRun(
+        new Error(
+          `command failed: ${request.command} ${request.args.join(" ")} (${signal ?? code})`,
+        ),
+      );
     });
   });
 }
@@ -355,16 +452,23 @@ function createAppStamp(config: ToolDevConfig, appName: ToolDevAppName) {
   };
 }
 
-async function findAppProcessTree(config: ToolDevConfig, appName: ToolDevAppName) {
+async function findAppProcessTree(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+) {
   const processes = await listProcessSnapshots();
   const rootPids = processes
     .filter((processInfo) =>
-      matchesStampedProcess(processInfo, {
-        app: appName,
-        mode: "dev",
-        namespace: config.namespace,
-        source: SIDECAR_SOURCES.TOOLS_DEV,
-      }, OPEN_DESIGN_SIDECAR_CONTRACT),
+      matchesStampedProcess(
+        processInfo,
+        {
+          app: appName,
+          mode: "dev",
+          namespace: config.namespace,
+          source: SIDECAR_SOURCES.TOOLS_DEV,
+        },
+        OPEN_DESIGN_SIDECAR_CONTRACT,
+      ),
     )
     .map((processInfo) => processInfo.pid);
   const pids = collectProcessTreePids(processes, rootPids);
@@ -372,7 +476,11 @@ async function findAppProcessTree(config: ToolDevConfig, appName: ToolDevAppName
   return { pids, rootPids };
 }
 
-async function waitForAppProcessExit(config: ToolDevConfig, appName: ToolDevAppName, timeoutMs = 5000): Promise<number[]> {
+async function waitForAppProcessExit(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+  timeoutMs = 5000,
+): Promise<number[]> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const current = await findAppProcessTree(config, appName);
@@ -382,10 +490,15 @@ async function waitForAppProcessExit(config: ToolDevConfig, appName: ToolDevAppN
   return (await findAppProcessTree(config, appName)).pids;
 }
 
-async function assertNoStaleActiveProcess(config: ToolDevConfig, appName: ToolDevAppName): Promise<void> {
+async function assertNoStaleActiveProcess(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+): Promise<void> {
   const active = await findAppProcessTree(config, appName);
   if (active.pids.length > 0) {
-    throw new Error(`${appName} has active stamped processes but no reachable IPC status; run tools-dev stop ${appName} first`);
+    throw new Error(
+      `${appName} has active stamped processes but no reachable IPC status; run tools-dev stop ${appName} first`,
+    );
   }
 }
 
@@ -395,10 +508,17 @@ async function spawnSidecarRuntime(request: {
   env: NodeJS.ProcessEnv;
   logHandle: FileHandle;
 }): Promise<{ pid: number }> {
-  const { args: stampArgs, env } = createAppStamp(request.config, request.appName);
+  const { args: stampArgs, env } = createAppStamp(
+    request.config,
+    request.appName,
+  );
   const sidecarConfig = request.config.apps[request.appName];
   const spawned = await spawnBackgroundProcess({
-    args: [request.config.tsxCliPath, sidecarConfig.sidecarEntryPath, ...stampArgs],
+    args: [
+      request.config.tsxCliPath,
+      sidecarConfig.sidecarEntryPath,
+      ...stampArgs,
+    ],
     command: process.execPath,
     cwd: request.config.workspaceRoot,
     detached: true,
@@ -423,8 +543,13 @@ async function spawnDaemonRuntime(
 
   try {
     await ensureDaemonCliBuild(config, logHandle);
-    await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
-    if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
+    await logHandle.write(
+      `\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`,
+    );
+    if (webPort != null)
+      await logHandle.write(
+        `[tools-dev] trusting web origin port ${webPort}\n`,
+      );
     if (spawnOptions.requireDesktopAuth) {
       // PR #974 round-4 P1: when this daemon is being spawned in a
       // desktop-bundled flow, hand it the env var that pins the
@@ -433,7 +558,9 @@ async function spawnDaemonRuntime(
       // process has finished registering, closing the
       // daemon-restart-mid-session bypass that the runtime-only
       // handshake left open.
-      await logHandle.write(`[tools-dev] requiring desktop auth on /api/import/folder\n`);
+      await logHandle.write(
+        `[tools-dev] requiring desktop auth on /api/import/folder\n`,
+      );
     }
     return await spawnSidecarRuntime({
       appName: APP_KEYS.DAEMON,
@@ -441,45 +568,11 @@ async function spawnDaemonRuntime(
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: String(daemonPort ?? 0),
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
-        ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-        ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
-      },
-      logHandle,
-    });
-  } finally {
-    await logHandle.close();
-  }
-}
-
-async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
-  const daemonStatus = await waitForDaemonRuntime(runtimeLookup(config));
-  if (daemonStatus.url == null) throw new Error("daemon must be running before web starts");
-
-  const webPort = parsePortOption(options.webPort, "--web-port");
-  const daemonPort = urlPort(daemonStatus.url);
-  const logHandle = await openAppLog(config, APP_KEYS.WEB);
-
-  try {
-    await ensureWebDevNodeModules(config);
-    await writeWebDevTsconfig(config);
-    await logHandle.write(`\n[tools-dev] launching web at ${new Date().toISOString()}\n`);
-    await logHandle.write(`[tools-dev] proxying web API requests to daemon port ${daemonPort}\n`);
-    return await spawnSidecarRuntime({
-      appName: APP_KEYS.WEB,
-      config,
-      env: {
-        NODE_PATH: prependNodePath([
-          path.join(config.workspaceRoot, "apps/web/node_modules"),
-          path.join(config.workspaceRoot, "node_modules"),
-        ]),
-        [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
-        [SIDECAR_ENV.WEB_DIST_DIR]: config.apps.web.nextDistDir,
-        [SIDECAR_ENV.WEB_TSCONFIG_PATH]: config.apps.web.nextTsconfigPath,
-        [SIDECAR_ENV.WEB_PORT]: String(webPort ?? 0),
-        PORT: String(webPort ?? 0),
-        ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-        ...(options.prod === true
-          ? { NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "server", OD_WEB_PROD: "1" }
+        ...(options.parentPid == null
+          ? {}
+          : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+        ...(spawnOptions.requireDesktopAuth
+          ? { OD_REQUIRE_DESKTOP_AUTH: "1" }
           : {}),
       },
       logHandle,
@@ -489,9 +582,70 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
   }
 }
 
-async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
+async function spawnWebRuntime(
+  config: ToolDevConfig,
+  options: CliOptions,
+): Promise<{ pid: number }> {
+  const daemonStatus = await waitForDaemonRuntime(runtimeLookup(config));
+  if (daemonStatus.url == null)
+    throw new Error("daemon must be running before web starts");
+
+  const webPort = parsePortOption(options.webPort, "--web-port");
+  const daemonPort = urlPort(daemonStatus.url);
+  const logHandle = await openAppLog(config, APP_KEYS.WEB);
+
+  try {
+    await ensureWebDevNodeModules(config);
+    await writeWebDevTsconfig(config);
+    await logHandle.write(
+      `\n[tools-dev] launching web at ${new Date().toISOString()}\n`,
+    );
+    await logHandle.write(
+      `[tools-dev] proxying web API requests to daemon port ${daemonPort}\n`,
+    );
+    const webDirName = config.pruned ? "web-pruned" : "web";
+    return await spawnSidecarRuntime({
+      appName: APP_KEYS.WEB,
+      config,
+      env: {
+        NODE_PATH: prependNodePath([
+          path.join(config.workspaceRoot, `apps/${webDirName}/node_modules`),
+          path.join(config.workspaceRoot, "node_modules"),
+        ]),
+        [SIDECAR_ENV.DAEMON_PORT]: daemonPort,
+        [SIDECAR_ENV.WEB_DIST_DIR]: config.apps.web.nextDistDir,
+        [SIDECAR_ENV.WEB_TSCONFIG_PATH]: config.apps.web.nextTsconfigPath,
+        [SIDECAR_ENV.WEB_PORT]: String(webPort ?? 0),
+        PORT: String(webPort ?? 0),
+        ...(options.parentPid == null
+          ? {}
+          : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+        ...(options.prod === true
+          ? {
+              NODE_ENV: "production",
+              OD_WEB_OUTPUT_MODE: "server",
+              OD_WEB_PROD: "1",
+            }
+          : {}),
+      },
+      logHandle,
+    });
+  } finally {
+    await logHandle.close();
+  }
+}
+
+async function buildDesktop(
+  config: ToolDevConfig,
+  logHandle: FileHandle,
+): Promise<void> {
+  await logHandle.write(
+    `\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`,
+  );
+  const invocation = createPackageManagerInvocation(
+    ["--filter", "@open-design/desktop", "build"],
+    process.env,
+  );
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -507,17 +661,34 @@ async function latestMtimeMs(filePath: string): Promise<number> {
   if (entry == null) return 0;
   if (!entry.isDirectory()) return entry.mtimeMs;
 
-  const children = await readdir(filePath, { withFileTypes: true }).catch(() => []);
+  const children = await readdir(filePath, { withFileTypes: true }).catch(
+    () => [],
+  );
   let latest = entry.mtimeMs;
   for (const child of children) {
-    if (child.name === "node_modules" || child.name === "dist" || child.name === ".tmp") continue;
-    latest = Math.max(latest, await latestMtimeMs(path.join(filePath, child.name)));
+    if (
+      child.name === "node_modules" ||
+      child.name === "dist" ||
+      child.name === ".tmp"
+    )
+      continue;
+    latest = Math.max(
+      latest,
+      await latestMtimeMs(path.join(filePath, child.name)),
+    );
   }
   return latest;
 }
 
-async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
-  const daemonRoot = path.join(config.workspaceRoot, "apps/daemon");
+async function ensureDaemonCliBuild(
+  config: ToolDevConfig,
+  logHandle: FileHandle,
+): Promise<void> {
+  const daemonDirName = config.pruned ? "daemon-pruned" : "daemon";
+  const daemonPackageName = config.pruned
+    ? "@open-design/daemon-pruned"
+    : "@open-design/daemon";
+  const daemonRoot = path.join(config.workspaceRoot, `apps/${daemonDirName}`);
   const distCliPath = path.join(daemonRoot, "dist/cli.js");
   const distMtime = await latestMtimeMs(distCliPath);
   const sourceMtime = Math.max(
@@ -527,9 +698,17 @@ async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle
   );
   if (distMtime > 0 && distMtime >= sourceMtime) return;
 
-  const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
-  await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
-  const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
+  const reason =
+    distMtime > 0
+      ? `source is newer than apps/${daemonDirName}/dist/cli.js`
+      : `apps/${daemonDirName}/dist/cli.js is missing`;
+  await logHandle.write(
+    `\n[tools-dev] building ${daemonPackageName} because ${reason} at ${new Date().toISOString()}\n`,
+  );
+  const invocation = createPackageManagerInvocation(
+    ["--filter", daemonPackageName, "build"],
+    process.env,
+  );
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -541,48 +720,67 @@ async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle
 }
 
 async function ensureWebDevNodeModules(config: ToolDevConfig): Promise<void> {
+  const webDirName = config.pruned ? "web-pruned" : "web";
   const webRuntimeRoot = path.dirname(config.apps.web.nextDistDir);
   const runtimeNodeModules = path.join(webRuntimeRoot, "node_modules");
-  const webNodeModules = path.join(config.workspaceRoot, "apps/web/node_modules");
+  const webNodeModules = path.join(
+    config.workspaceRoot,
+    `apps/${webDirName}/node_modules`,
+  );
 
   await mkdir(webRuntimeRoot, { recursive: true });
   const current = await lstat(runtimeNodeModules).catch(() => null);
   if (current?.isSymbolicLink()) return;
-  if (current != null) await rm(runtimeNodeModules, { force: true, recursive: true });
+  if (current != null)
+    await rm(runtimeNodeModules, { force: true, recursive: true });
   await symlink(webNodeModules, runtimeNodeModules, "junction");
 }
 
 async function writeWebDevTsconfig(config: ToolDevConfig): Promise<void> {
-  const webRoot = path.join(config.workspaceRoot, "apps/web");
+  const webDirName = config.pruned ? "web-pruned" : "web";
+  const webRoot = path.join(config.workspaceRoot, `apps/${webDirName}`);
   const tsconfigPath = config.apps.web.nextTsconfigPath;
   const tsconfigDir = path.dirname(tsconfigPath);
   const sourceTsconfig = path.join(webRoot, "tsconfig.json");
-  const relativeSourceTsconfig = (path.relative(tsconfigDir, sourceTsconfig) || "./tsconfig.json").replaceAll("\\", "/");
+  const relativeSourceTsconfig = (
+    path.relative(tsconfigDir, sourceTsconfig) || "./tsconfig.json"
+  ).replaceAll("\\", "/");
 
   await mkdir(tsconfigDir, { recursive: true });
   await writeFile(
     tsconfigPath,
-    `${JSON.stringify({
-      extends: relativeSourceTsconfig,
-      compilerOptions: {
-        plugins: [{ name: "next" }],
+    `${JSON.stringify(
+      {
+        extends: relativeSourceTsconfig,
+        compilerOptions: {
+          plugins: [{ name: "next" }],
+        },
       },
-    }, null, 2)}\n`,
+      null,
+      2,
+    )}\n`,
     "utf8",
   );
 }
 
-async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
+async function spawnDesktopRuntime(
+  config: ToolDevConfig,
+  options: CliOptions,
+): Promise<{ pid: number }> {
   const { args: stampArgs, env } = createAppStamp(config, APP_KEYS.DESKTOP);
   const logHandle = await openAppLog(config, APP_KEYS.DESKTOP);
 
   try {
     await buildDesktop(config, logHandle);
-    await logHandle.write(`[tools-dev] launching desktop at ${new Date().toISOString()}\n`);
+    await logHandle.write(
+      `[tools-dev] launching desktop at ${new Date().toISOString()}\n`,
+    );
     const spawnEnv: NodeJS.ProcessEnv = {
       ...process.env,
       ...env,
-      ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+      ...(options.parentPid == null
+        ? {}
+        : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
     };
     // ELECTRON_RUN_AS_NODE=1 makes Electron boot as plain Node and skip
     // main-process API injection (app, BrowserWindow, protocol all become
@@ -623,20 +821,32 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
 async function startDaemon(
   config: ToolDevConfig,
   options: CliOptions,
-  startOptions: { refreshWebOrigin?: boolean; requireDesktopAuth?: boolean } = {},
+  startOptions: {
+    refreshWebOrigin?: boolean;
+    requireDesktopAuth?: boolean;
+  } = {},
 ) {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
   let existing = await inspectDaemonRuntime(runtimeLookup(config));
-  const shouldRefreshWebOrigin = startOptions.refreshWebOrigin === true && webPort != null;
+  const shouldRefreshWebOrigin =
+    startOptions.refreshWebOrigin === true && webPort != null;
   const existingWeb = shouldRefreshWebOrigin
     ? await inspectWebRuntime(runtimeLookup(config))
     : null;
-  if (existingWeb?.url != null && !statusMatchesForcedPort(existingWeb.url, webPort)) {
-    throw new Error(`${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existingWeb.url}; stop it or choose another namespace`);
+  if (
+    existingWeb?.url != null &&
+    !statusMatchesForcedPort(existingWeb.url, webPort)
+  ) {
+    throw new Error(
+      `${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existingWeb.url}; stop it or choose another namespace`,
+    );
   }
   const daemonTrustedWebOriginPort = existing?.trustedWebOriginPort ?? null;
-  if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
+  if (
+    existing?.url != null &&
+    statusMatchesForcedPort(existing.url, daemonPort)
+  ) {
     if (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort) {
       if (existingWeb?.url != null) {
         await stopApp(config, APP_KEYS.WEB);
@@ -644,11 +854,18 @@ async function startDaemon(
       await stopApp(config, APP_KEYS.DAEMON);
       existing = null;
     } else {
-      return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
+      return {
+        app: APP_KEYS.DAEMON,
+        created: false,
+        logPath: config.apps.daemon.latestLogPath,
+        status: existing,
+      };
     }
   }
   if (existing?.url != null) {
-    throw new Error(`${APP_KEYS.DAEMON} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`);
+    throw new Error(
+      `${APP_KEYS.DAEMON} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`,
+    );
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.DAEMON);
 
@@ -657,11 +874,15 @@ async function startDaemon(
   // is already alive (revival case where the daemon died mid-session
   // and the user is bringing it back up while desktop kept running).
   // Both branches close the daemon-restart bypass.
-  const desktopAlreadyRunning = await inspectDesktopRuntime(runtimeLookup(config));
+  const desktopAlreadyRunning = await inspectDesktopRuntime(
+    runtimeLookup(config),
+  );
   const requireDesktopAuth =
     (startOptions.requireDesktopAuth ?? false) || desktopAlreadyRunning != null;
 
-  const spawned = await spawnDaemonRuntime(config, options, { requireDesktopAuth });
+  const spawned = await spawnDaemonRuntime(config, options, {
+    requireDesktopAuth,
+  });
   try {
     const status = await waitForDaemonRuntime(runtimeLookup(config));
     return {
@@ -675,7 +896,11 @@ async function startDaemon(
     const logPath = config.apps.daemon.latestLogPath;
     const lines = await readLogTail(logPath, 80).catch(() => []);
     await stopApp(config, APP_KEYS.DAEMON).catch(() => undefined);
-    throw appendStartupLogDiagnostics(error, APP_KEYS.DAEMON, createStartupLogDiagnostics(logPath, lines));
+    throw appendStartupLogDiagnostics(
+      error,
+      APP_KEYS.DAEMON,
+      createStartupLogDiagnostics(logPath, lines),
+    );
   }
 }
 
@@ -683,10 +908,17 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
   const webPort = parsePortOption(options.webPort, "--web-port");
   const existing = await inspectWebRuntime(runtimeLookup(config));
   if (existing?.url != null && statusMatchesForcedPort(existing.url, webPort)) {
-    return { app: APP_KEYS.WEB, created: false, logPath: config.apps.web.latestLogPath, status: existing };
+    return {
+      app: APP_KEYS.WEB,
+      created: false,
+      logPath: config.apps.web.latestLogPath,
+      status: existing,
+    };
   }
   if (existing?.url != null) {
-    throw new Error(`${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`);
+    throw new Error(
+      `${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`,
+    );
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.WEB);
 
@@ -704,14 +936,23 @@ async function startWeb(config: ToolDevConfig, options: CliOptions) {
     const logPath = config.apps.web.latestLogPath;
     const lines = await readLogTail(logPath, 80).catch(() => []);
     await stopApp(config, APP_KEYS.WEB).catch(() => undefined);
-    throw appendStartupLogDiagnostics(error, APP_KEYS.WEB, createStartupLogDiagnostics(logPath, lines));
+    throw appendStartupLogDiagnostics(
+      error,
+      APP_KEYS.WEB,
+      createStartupLogDiagnostics(logPath, lines),
+    );
   }
 }
 
 async function startDesktop(config: ToolDevConfig, options: CliOptions) {
   const existing = await inspectDesktopRuntime(runtimeLookup(config));
   if (existing != null) {
-    return { app: APP_KEYS.DESKTOP, created: false, logPath: config.apps.desktop.latestLogPath, status: existing };
+    return {
+      app: APP_KEYS.DESKTOP,
+      created: false,
+      logPath: config.apps.desktop.latestLogPath,
+      status: existing,
+    };
   }
   await assertNoStaleActiveProcess(config, APP_KEYS.DESKTOP);
 
@@ -746,7 +987,8 @@ async function startApp(
         // before desktop has had a chance to register. The introspection
         // case (desktop already running) is handled inside startDaemon.
         refreshWebOrigin: context.targets?.includes(APP_KEYS.WEB) === true,
-        requireDesktopAuth: context.targets?.includes(APP_KEYS.DESKTOP) === true,
+        requireDesktopAuth:
+          context.targets?.includes(APP_KEYS.DESKTOP) === true,
       });
     case APP_KEYS.WEB:
       return await startWeb(config, options);
@@ -785,9 +1027,16 @@ async function startApp(
   }
 }
 
-async function requestAppShutdown(config: ToolDevConfig, appName: ToolDevAppName): Promise<boolean> {
+async function requestAppShutdown(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+): Promise<boolean> {
   try {
-    await requestJsonIpc(appConfig(config, appName).ipcPath, { type: SIDECAR_MESSAGES.SHUTDOWN }, { timeoutMs: 1500 });
+    await requestJsonIpc(
+      appConfig(config, appName).ipcPath,
+      { type: SIDECAR_MESSAGES.SHUTDOWN },
+      { timeoutMs: 1500 },
+    );
     return true;
   } catch {
     return false;
@@ -829,7 +1078,10 @@ async function stopApp(config: ToolDevConfig, appName: ToolDevAppName) {
   };
 }
 
-async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) {
+async function inspectAppStatus(
+  config: ToolDevConfig,
+  appName: ToolDevAppName,
+) {
   if (appName === APP_KEYS.DAEMON) {
     const status = await inspectDaemonRuntime(runtimeLookup(config));
     if (status != null) return status;
@@ -850,13 +1102,21 @@ async function inspectAppStatus(config: ToolDevConfig, appName: ToolDevAppName) 
     const status = await inspectWebRuntime(runtimeLookup(config));
     if (status != null) return status;
     const active = await findAppProcessTree(config, appName);
-    return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "starting" : "idle", url: null } satisfies WebStatusSnapshot;
+    return {
+      pid: active.rootPids[0] ?? null,
+      state: active.pids.length > 0 ? "starting" : "idle",
+      url: null,
+    } satisfies WebStatusSnapshot;
   }
 
   const status = await inspectDesktopRuntime(runtimeLookup(config));
   if (status != null) return status;
   const active = await findAppProcessTree(config, appName);
-  return { pid: active.rootPids[0] ?? null, state: active.pids.length > 0 ? "unknown" : "idle", url: null };
+  return {
+    pid: active.rootPids[0] ?? null,
+    state: active.pids.length > 0 ? "unknown" : "idle",
+    url: null,
+  };
 }
 
 function summarizeStatus(apps: Record<ToolDevAppName, any>): string {
@@ -871,21 +1131,33 @@ async function status(config: ToolDevConfig, appName: string | undefined) {
   if (targets.length === 1) return await inspectAppStatus(config, targets[0]);
 
   const apps = Object.fromEntries(
-    await Promise.all(targets.map(async (target) => [target, await inspectAppStatus(config, target)] as const)),
+    await Promise.all(
+      targets.map(
+        async (target) =>
+          [target, await inspectAppStatus(config, target)] as const,
+      ),
+    ),
   ) as Record<ToolDevAppName, unknown>;
   return { apps, namespace: config.namespace, status: summarizeStatus(apps) };
 }
 
-async function restartTargets(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
+async function restartTargets(
+  config: ToolDevConfig,
+  appName: string | undefined,
+  options: CliOptions,
+) {
   const stopTargets = resolveStopApps(appName);
   const startTargets = resolveStartApps(appName);
   await resolveSharedPortsFromRunningState(startTargets, options, {
-    daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    daemonUrl: async () =>
+      (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
     webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
   });
   return {
     stop: await runSequential(stopTargets, (target) => stopApp(config, target)),
-    start: await runSequential(startTargets, (target) => startApp(config, target, options, { targets: startTargets })),
+    start: await runSequential(startTargets, (target) =>
+      startApp(config, target, options, { targets: startTargets }),
+    ),
   };
 }
 
@@ -894,28 +1166,43 @@ async function readLogs(config: ToolDevConfig, appName: ToolDevAppName) {
   return { app: appName, lines: await readLogTail(logPath, 200), logPath };
 }
 
-function createLogDiagnostics(logs: Record<string, LogResult>): Record<string, LogDiagnostic[]> {
+function createLogDiagnostics(
+  logs: Record<string, LogResult>,
+): Record<string, LogDiagnostic[]> {
   return Object.fromEntries(
-    Object.entries(logs).map(([appName, log]) => [appName, detectLogDiagnostics(log.lines)] as const),
+    Object.entries(logs).map(
+      ([appName, log]) => [appName, detectLogDiagnostics(log.lines)] as const,
+    ),
   );
 }
 
 type LogResult = Awaited<ReturnType<typeof readLogs>>;
 
-function isLogResult(value: LogResult | Record<string, LogResult>): value is LogResult {
+function isLogResult(
+  value: LogResult | Record<string, LogResult>,
+): value is LogResult {
   return Array.isArray((value as LogResult).lines);
 }
 
-function printLogs(result: LogResult | Record<string, LogResult>, options: CliOptions) {
+function printLogs(
+  result: LogResult | Record<string, LogResult>,
+  options: CliOptions,
+) {
   if (options.json === true) {
     printJson(result);
     return;
   }
 
-  const entries: Array<[string, LogResult]> = isLogResult(result) ? [[result.app, result]] : Object.entries(result);
+  const entries: Array<[string, LogResult]> = isLogResult(result)
+    ? [[result.app, result]]
+    : Object.entries(result);
   for (const [appName, entry] of entries) {
     process.stdout.write(`[${appName}] ${entry.logPath}\n`);
-    process.stdout.write(entry.lines.length > 0 ? `${entry.lines.join("\n")}\n` : "(no log lines)\n");
+    process.stdout.write(
+      entry.lines.length > 0
+        ? `${entry.lines.join("\n")}\n`
+        : "(no log lines)\n",
+    );
   }
 }
 
@@ -927,7 +1214,9 @@ function printCheckResult(result: unknown, options: CliOptions): void {
 
   const record = asRecord(result);
   const namespace = record == null ? null : stringField(record, "namespace");
-  process.stdout.write(`tools-dev check${namespace == null ? "" : ` (namespace ${namespace})`}\n`);
+  process.stdout.write(
+    `tools-dev check${namespace == null ? "" : ` (namespace ${namespace})`}\n`,
+  );
 
   const apps = asRecord(record?.apps);
   if (apps != null) {
@@ -944,7 +1233,15 @@ function printCheckResult(result: unknown, options: CliOptions): void {
   const diagnostics = asRecord(record?.diagnostics);
   if (diagnostics != null) {
     const entries = Object.entries(diagnostics)
-      .map(([appName, value]) => [appName, Array.isArray(value) ? formatLogDiagnostics(value as LogDiagnostic[]) : null] as const)
+      .map(
+        ([appName, value]) =>
+          [
+            appName,
+            Array.isArray(value)
+              ? formatLogDiagnostics(value as LogDiagnostic[])
+              : null,
+          ] as const,
+      )
       .filter((entry): entry is readonly [string, string] => entry[1] != null);
     if (entries.length > 0) {
       process.stdout.write("\nDiagnostics\n");
@@ -958,47 +1255,69 @@ function printCheckResult(result: unknown, options: CliOptions): void {
 function parseTimeoutMs(value: string | undefined): number | undefined {
   if (value == null) return undefined;
   const seconds = Number(value);
-  if (!Number.isFinite(seconds) || seconds <= 0) throw new Error("--timeout must be a positive number of seconds");
+  if (!Number.isFinite(seconds) || seconds <= 0)
+    throw new Error("--timeout must be a positive number of seconds");
   return seconds * 1000;
 }
 
-async function inspectDesktop(config: ToolDevConfig, target: string | undefined, options: CliOptions) {
+async function inspectDesktop(
+  config: ToolDevConfig,
+  target: string | undefined,
+  options: CliOptions,
+) {
   const operation = target ?? "status";
   const timeoutMs = parseTimeoutMs(options.timeout) ?? 30000;
 
   switch (operation) {
     case "status":
-      return (await inspectDesktopRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle" } satisfies DesktopStatusSnapshot);
+      return (
+        (await inspectDesktopRuntime(runtimeLookup(config), 1000)) ??
+        ({ state: "idle" } satisfies DesktopStatusSnapshot)
+      );
     case "eval":
-      if (options.expr == null) throw new Error("--expr is required for desktop eval");
+      if (options.expr == null)
+        throw new Error("--expr is required for desktop eval");
       return await requestJsonIpc<DesktopEvalResult>(
         config.apps.desktop.ipcPath,
         { input: { expression: options.expr }, type: SIDECAR_MESSAGES.EVAL },
         { timeoutMs },
       );
     case "screenshot":
-      if (options.path == null) throw new Error("--path is required for desktop screenshot");
+      if (options.path == null)
+        throw new Error("--path is required for desktop screenshot");
       return await requestJsonIpc<DesktopScreenshotResult>(
         config.apps.desktop.ipcPath,
         { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
         { timeoutMs },
       );
     case "console":
-      return await requestJsonIpc<DesktopConsoleResult>(config.apps.desktop.ipcPath, { type: SIDECAR_MESSAGES.CONSOLE }, { timeoutMs });
+      return await requestJsonIpc<DesktopConsoleResult>(
+        config.apps.desktop.ipcPath,
+        { type: SIDECAR_MESSAGES.CONSOLE },
+        { timeoutMs },
+      );
     case "update":
       if (
         options.updateAction != null &&
-        !["status", "check", "download", "install"].includes(options.updateAction)
+        !["status", "check", "download", "install"].includes(
+          options.updateAction,
+        )
       ) {
-        throw new Error("--update-action must be status, check, download, or install");
+        throw new Error(
+          "--update-action must be status, check, download, or install",
+        );
       }
       return await requestJsonIpc<DesktopUpdateResult>(
         config.apps.desktop.ipcPath,
-        { input: { action: options.updateAction ?? "status" }, type: SIDECAR_MESSAGES.UPDATE },
+        {
+          input: { action: options.updateAction ?? "status" },
+          type: SIDECAR_MESSAGES.UPDATE,
+        },
         { timeoutMs },
       );
     case "click":
-      if (options.selector == null) throw new Error("--selector is required for desktop click");
+      if (options.selector == null)
+        throw new Error("--selector is required for desktop click");
       return await requestJsonIpc<DesktopClickResult>(
         config.apps.desktop.ipcPath,
         { input: { selector: options.selector }, type: SIDECAR_MESSAGES.CLICK },
@@ -1009,23 +1328,41 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
   }
 }
 
-async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
+async function inspect(
+  config: ToolDevConfig,
+  appName: string,
+  target: string | undefined,
+  options: CliOptions,
+) {
   if (appName === APP_KEYS.DAEMON) {
-    if (target != null && target !== "status") throw new Error(`unsupported daemon inspect target: ${target}`);
+    if (target != null && target !== "status")
+      throw new Error(`unsupported daemon inspect target: ${target}`);
     return (
       (await inspectDaemonRuntime(runtimeLookup(config), 1000)) ??
-      ({ desktopAuthGateActive: false, state: "idle", url: null } satisfies DaemonStatusSnapshot)
+      ({
+        desktopAuthGateActive: false,
+        state: "idle",
+        url: null,
+      } satisfies DaemonStatusSnapshot)
     );
   }
   if (appName === APP_KEYS.WEB) {
-    if (target != null && target !== "status") throw new Error(`unsupported web inspect target: ${target}`);
-    return (await inspectWebRuntime(runtimeLookup(config), 1000)) ?? ({ state: "idle", url: null } satisfies WebStatusSnapshot);
+    if (target != null && target !== "status")
+      throw new Error(`unsupported web inspect target: ${target}`);
+    return (
+      (await inspectWebRuntime(runtimeLookup(config), 1000)) ??
+      ({ state: "idle", url: null } satisfies WebStatusSnapshot)
+    );
   }
-  if (appName !== APP_KEYS.DESKTOP) throw new Error(`unsupported tools-dev app: ${appName}`);
+  if (appName !== APP_KEYS.DESKTOP)
+    throw new Error(`unsupported tools-dev app: ${appName}`);
   return await inspectDesktop(config, target, options);
 }
 
-async function runSequential<T>(targets: readonly ToolDevAppName[], operation: (target: ToolDevAppName) => Promise<T>) {
+async function runSequential<T>(
+  targets: readonly ToolDevAppName[],
+  operation: (target: ToolDevAppName) => Promise<T>,
+) {
   const result: Partial<Record<ToolDevAppName, T>> = {};
   for (const target of targets) result[target] = await operation(target);
   return result;
@@ -1036,14 +1373,21 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
   return DEFAULT_STOP_APPS.filter((target) => selected.has(target));
 }
 
-async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
+async function runForeground(
+  config: ToolDevConfig,
+  appName: string | undefined,
+  options: CliOptions,
+) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
   await resolveSharedPortsFromRunningState(targets, foregroundOptions, {
-    daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    daemonUrl: async () =>
+      (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
     webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
   });
-  const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions, { targets }));
+  const started = await runSequential(targets, (target) =>
+    startApp(config, target, foregroundOptions, { targets }),
+  );
   printRunForegroundResult(started, options);
 
   let shuttingDown = false;
@@ -1054,7 +1398,9 @@ async function runForeground(config: ToolDevConfig, appName: string | undefined,
       shuttingDown = true;
       clearInterval(keepAlive);
       process.stderr.write("\nStopping Open Design dev server...\n");
-      void runSequential(stopOrderFor(targets), (target) => stopApp(config, target)).finally(() => {
+      void runSequential(stopOrderFor(targets), (target) =>
+        stopApp(config, target),
+      ).finally(() => {
         for (const sig of ["SIGINT", "SIGTERM"] as const) {
           process.off(sig, shutdown);
         }
@@ -1074,6 +1420,10 @@ function addSharedOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--namespace <name>", "runtime namespace (default: default)")
     .option("--tools-dev-root <path>", "tools-dev runtime root")
+    .option(
+      "--pruned",
+      "use pruned versions of apps (daemon-pruned and web-pruned)",
+    )
     .option("--json", "print JSON");
 }
 
@@ -1081,88 +1431,167 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
-    .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
+    .option(
+      "--prod",
+      "use production build (requires pnpm --filter @open-design/web build first)",
+    );
 }
 
-addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    assertSupportedNodeRuntimeForStart();
-    const config = resolveToolDevConfig(options);
-    const targets = resolveStartApps(appName);
-    await resolveSharedPortsFromRunningState(targets, options, {
-      daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
-      webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
-    });
-    const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
-    printStartResult(result, options);
-  },
-);
+addPortOptions(
+  addSharedOptions(
+    cli.command(
+      "start [app]",
+      "Start daemon, web, desktop, or all when app is omitted",
+    ),
+  ),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  assertSupportedNodeRuntimeForStart();
+  const config = resolveToolDevConfig(options);
+  const targets = resolveStartApps(appName);
+  await resolveSharedPortsFromRunningState(targets, options, {
+    daemonUrl: async () =>
+      (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+  });
+  const result = await runSequential(targets, (target) =>
+    startApp(config, target, options, { targets }),
+  );
+  printStartResult(result, options);
+});
 
-addPortOptions(addSharedOptions(cli.command("run [app]", "Start apps and keep this command alive until interrupted"))).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    assertSupportedNodeRuntimeForStart();
-    await runForeground(resolveToolDevConfig(options), appName, options);
-  },
-);
-
-addSharedOptions(cli.command("status [app]", "Show app status for daemon, web, desktop, or all")).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    printStatusResult(await status(resolveToolDevConfig(options), appName), options, appName);
-  },
-);
-
-addSharedOptions(cli.command("stop [app]", "Stop daemon, web, desktop, or all when app is omitted")).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    const config = resolveToolDevConfig(options);
-    const targets = resolveStopApps(appName);
-    const result = await runSequential(targets, (target) => stopApp(config, target));
-    printStopResult(result, options);
-  },
-);
-
-addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, web, desktop, or all when app is omitted"))).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    assertSupportedNodeRuntimeForStart();
-    printRestartResult(await restartTargets(resolveToolDevConfig(options), appName, options), options);
-  },
-);
-
-addSharedOptions(cli.command("logs [app]", "Show log tail for daemon, web, desktop, or all")).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    const config = resolveToolDevConfig(options);
-    const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
-    const result = targets.length === 1
-      ? await readLogs(config, targets[0])
-      : Object.fromEntries(await Promise.all(targets.map(async (target) => [target, await readLogs(config, target)] as const)));
-    printLogs(result, options);
-  },
-);
+addPortOptions(
+  addSharedOptions(
+    cli.command(
+      "run [app]",
+      "Start apps and keep this command alive until interrupted",
+    ),
+  ),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  assertSupportedNodeRuntimeForStart();
+  await runForeground(resolveToolDevConfig(options), appName, options);
+});
 
 addSharedOptions(
-  cli.command("inspect <app> [target]", "Inspect daemon/web status or desktop status/eval/screenshot/console/click"),
+  cli.command(
+    "status [app]",
+    "Show app status for daemon, web, desktop, or all",
+  ),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  printStatusResult(
+    await status(resolveToolDevConfig(options), appName),
+    options,
+    appName,
+  );
+});
+
+addSharedOptions(
+  cli.command(
+    "stop [app]",
+    "Stop daemon, web, desktop, or all when app is omitted",
+  ),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  const config = resolveToolDevConfig(options);
+  const targets = resolveStopApps(appName);
+  const result = await runSequential(targets, (target) =>
+    stopApp(config, target),
+  );
+  printStopResult(result, options);
+});
+
+addPortOptions(
+  addSharedOptions(
+    cli.command(
+      "restart [app]",
+      "Restart daemon, web, desktop, or all when app is omitted",
+    ),
+  ),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  assertSupportedNodeRuntimeForStart();
+  printRestartResult(
+    await restartTargets(resolveToolDevConfig(options), appName, options),
+    options,
+  );
+});
+
+addSharedOptions(
+  cli.command("logs [app]", "Show log tail for daemon, web, desktop, or all"),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  const config = resolveToolDevConfig(options);
+  const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
+  const result =
+    targets.length === 1
+      ? await readLogs(config, targets[0])
+      : Object.fromEntries(
+          await Promise.all(
+            targets.map(
+              async (target) =>
+                [target, await readLogs(config, target)] as const,
+            ),
+          ),
+        );
+  printLogs(result, options);
+});
+
+addSharedOptions(
+  cli.command(
+    "inspect <app> [target]",
+    "Inspect daemon/web status or desktop status/eval/screenshot/console/click",
+  ),
 )
   .option("--expr <js>", "JavaScript expression for desktop eval")
   .option("--path <file>", "Output path for desktop screenshot")
   .option("--selector <css>", "CSS selector for desktop click")
   .option("--timeout <seconds>", "Desktop inspect timeout in seconds")
-  .option("--update-action <action>", "Desktop update action: status|check|download|install")
-  .action(async (appName: string, target: string | undefined, options: CliOptions) => {
-    output(await inspect(resolveToolDevConfig(options), appName, target, options), options);
-  });
+  .option(
+    "--update-action <action>",
+    "Desktop update action: status|check|download|install",
+  )
+  .action(
+    async (
+      appName: string,
+      target: string | undefined,
+      options: CliOptions,
+    ) => {
+      output(
+        await inspect(resolveToolDevConfig(options), appName, target, options),
+        options,
+      );
+    },
+  );
 
-addSharedOptions(cli.command("check [app]", "Print status and recent logs for quick diagnostics")).action(
-  async (appName: string | undefined, options: CliOptions) => {
-    const config = resolveToolDevConfig(options);
-    const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
-    const apps = Object.fromEntries(
-      await Promise.all(targets.map(async (target) => [target, await inspectAppStatus(config, target)] as const)),
-    );
-    const logs = Object.fromEntries(
-      await Promise.all(targets.map(async (target) => [target, await readLogs(config, target)] as const)),
-    );
-    printCheckResult({ apps, diagnostics: createLogDiagnostics(logs), logs, namespace: config.namespace }, options);
-  },
-);
+addSharedOptions(
+  cli.command(
+    "check [app]",
+    "Print status and recent logs for quick diagnostics",
+  ),
+).action(async (appName: string | undefined, options: CliOptions) => {
+  const config = resolveToolDevConfig(options);
+  const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
+  const apps = Object.fromEntries(
+    await Promise.all(
+      targets.map(
+        async (target) =>
+          [target, await inspectAppStatus(config, target)] as const,
+      ),
+    ),
+  );
+  const logs = Object.fromEntries(
+    await Promise.all(
+      targets.map(
+        async (target) => [target, await readLogs(config, target)] as const,
+      ),
+    ),
+  );
+  printCheckResult(
+    {
+      apps,
+      diagnostics: createLogDiagnostics(logs),
+      logs,
+      namespace: config.namespace,
+    },
+    options,
+  );
+});
 
 cli.help();
 
@@ -1170,7 +1599,12 @@ const rawCliArgs = process.argv.slice(2);
 const cliArgs = rawCliArgs[0] === "--" ? rawCliArgs.slice(1) : rawCliArgs;
 process.argv.splice(2, process.argv.length - 2, ...cliArgs);
 
-if (cliArgs.length === 0 || (cliArgs[0]?.startsWith("-") && cliArgs[0] !== "--help" && cliArgs[0] !== "-h")) {
+if (
+  cliArgs.length === 0 ||
+  (cliArgs[0]?.startsWith("-") &&
+    cliArgs[0] !== "--help" &&
+    cliArgs[0] !== "-h")
+) {
   process.argv.splice(2, 0, "start");
 }
 

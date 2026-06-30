@@ -1,0 +1,366 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sectionOptional {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkboxLabel input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.formFields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.repoSelectorRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.fieldGroup {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flexGrow {
+  flex-grow: 1;
+}
+
+.fieldLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ownerTrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  min-width: 160px;
+  max-width: 220px;
+  padding: 0 12px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-align: left;
+}
+
+.ownerTrigger:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.ownerTrigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ownerAvatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-soft);
+}
+
+.ownerLogin {
+  flex-grow: 1;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--text-muted);
+}
+
+.divider {
+  font-size: 24px;
+  color: var(--border-strong);
+  line-height: 1;
+  padding-bottom: 5px;
+  user-select: none;
+}
+
+.nameInput {
+  height: 38px;
+  padding: 0 12px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13.5px;
+  outline: none;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.nameInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.ownersDropdown {
+  width: 240px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: od-popover-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+
+.dropdownHeader {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-app);
+}
+
+.searchIcon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+  width: 100%;
+}
+
+.ownersList {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ownerOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  width: 100%;
+}
+
+.ownerOption:hover {
+  background: var(--bg-subtle);
+}
+
+.ownerOption.selected {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.checkIcon {
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-left: -4px;
+}
+
+.dropdownAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border-soft);
+}
+
+.dropdownLogin {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.suggestionText {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.suggestionBtn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  outline: none;
+}
+
+.suggestionBtn:hover {
+  color: color-mix(in srgb, var(--accent) 80%, white);
+}
+
+.validationText {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  font-size: 12px;
+}
+
+.validationLoading {
+  color: var(--text-muted);
+}
+
+.validationSuccess {
+  color: var(--green);
+  font-weight: 500;
+}
+
+.validationError {
+  color: var(--red);
+  font-weight: 500;
+}
+
+.visibilityGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.visibilitySelectors {
+  display: flex;
+  gap: 12px;
+}
+
+.visibilityCard {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-app);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s var(--ease-out);
+  color: var(--text-soft);
+  outline: none;
+}
+
+.visibilityCard:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+
+.visibilityCard.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--bg-app));
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.visibilityCard svg {
+  color: var(--text-muted);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.visibilityCard.active svg {
+  color: var(--accent);
+}
+
+.visibilityMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.visibilityMeta strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.visibilityMeta span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}

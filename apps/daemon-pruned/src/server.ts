@@ -2377,22 +2377,6 @@ function reconcileAssistantMessageOnRunEnd(
     });
 }
 
-async function hasGeneratedPluginArtifacts(projectRoot: string | null) {
-  if (!projectRoot || typeof projectRoot !== "string") return false;
-  const required = [
-    path.join(projectRoot, "generated-plugin", "open-design.json"),
-    path.join(projectRoot, "generated-plugin", "SKILL.md"),
-  ];
-  try {
-    await Promise.all(
-      required.map((file) => fs.promises.access(file, fs.constants.F_OK)),
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // Canonical open tag is `<question-form>`; `<ask-question>` is an accepted
 // alias models drift to. Mirrors the open-tag set in the web parser.
 const QUESTION_FORM_OPEN_RE = /<(question-form|ask-question)\b[^>]*>/i;
@@ -11281,22 +11265,6 @@ export async function startServer({
             createSseErrorPayload(
               "AGENT_EXECUTION_FAILED",
               "Agent completed without producing any output. The model or provider may have returned an empty response — check the agent logs for upstream errors.",
-              { retryable: true },
-            ),
-          );
-          return finishWithRetryDecision("failed", code, signal);
-        }
-        if (
-          code === 0 &&
-          !run.cancelRequested &&
-          !(await hasGeneratedPluginArtifacts(cwd)) &&
-          !emittedRenderableQuestionForm(clarifyingQuestionText)
-        ) {
-          send(
-            "error",
-            createSseErrorPayload(
-              "AGENT_EXECUTION_FAILED",
-              "Plugin authoring ended before generating the required generated-plugin artifacts.",
               { retryable: true },
             ),
           );

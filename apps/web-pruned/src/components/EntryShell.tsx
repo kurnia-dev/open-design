@@ -174,8 +174,6 @@ const ONBOARDING_AMR_MODEL_OPTIONS: NonNullable<AgentInfo['models']> = [
   { id: 'glm-5.1', label: 'GLM 5.1' },
 ];
 
-
-
 interface Props {
   skills: SkillSummary[];
   designTemplates: SkillSummary[];
@@ -241,7 +239,6 @@ interface Props {
   // Design Systems tab; do not re-thread an onboarding renderer here.
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
-  onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: EntrySettingsSection) => void;
   onCompleteOnboarding: () => void;
 }
@@ -328,7 +325,6 @@ export function EntryShell({
   onCreateDesignSystem,
   onOpenDesignSystem,
   onDesignSystemsRefresh,
-  onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
 }: Props) {
@@ -372,8 +368,8 @@ export function EntryShell({
   const analytics = useAnalytics();
   const discordOnlineLabel = discordPresence
     ? t('entry.discordOnlineLabel', {
-        count: formatDiscordPresenceCount(discordPresence.onlineCount),
-      })
+      count: formatDiscordPresenceCount(discordPresence.onlineCount),
+    })
     : null;
   const discordAriaLabel = discordOnlineLabel
     ? t('entry.discordAriaWithOnline', { online: discordOnlineLabel })
@@ -590,9 +586,8 @@ export function EntryShell({
             {avatarMenu}
           </div>
           <div
-            className={`entry-main__inner${
-              view === 'home' ? '' : ' entry-main__inner--wide'
-            }`}
+            className={`entry-main__inner${view === 'home' ? '' : ' entry-main__inner--wide'
+              }`}
           >
             <div data-testid="entry-view-home" data-active={view === 'home' ? 'true' : 'false'} {...inactiveViewProps(view === 'home')}>
               <HomeView
@@ -672,8 +667,6 @@ export function EntryShell({
               <IntegrationsView
                 config={config}
                 initialTab={integrationTab}
-                composioConfigLoading={composioConfigLoading}
-                onPersistComposioKey={onPersistComposioKey}
               />
             ) : null}
           </div>
@@ -828,12 +821,12 @@ function OnboardingView({
     isLikelyHttpUrl(config.baseUrl);
   const visibleProviderTestState =
     providerTestState.status !== 'idle' &&
-    providerTestState.inputKey === providerTestInputKey
+      providerTestState.inputKey === providerTestInputKey
       ? providerTestState
       : { status: 'idle' as const };
   const visibleProviderModelsState =
     providerModelsState.status !== 'idle' &&
-    providerModelsState.inputKey === providerModelsInputKey
+      providerModelsState.inputKey === providerModelsInputKey
       ? providerModelsState
       : { status: 'idle' as const };
   const selectedProvider = KNOWN_PROVIDERS.find(
@@ -1029,9 +1022,9 @@ function OnboardingView({
     const liveProfile = profileRef.current;
     const hasAboutYou = Boolean(
       liveProfile.role
-        || liveProfile.orgSize
-        || liveProfile.useCase.length > 0
-        || liveProfile.source,
+      || liveProfile.orgSize
+      || liveProfile.useCase.length > 0
+      || liveProfile.source,
     );
     trackOnboardingCompleteResult(analytics.track, {
       page_name: 'onboarding',
@@ -1074,30 +1067,30 @@ function OnboardingView({
     body: string;
     onSelect: () => void;
   }> = [
-    {
-      id: 'local',
-      icon: 'hammer',
-      title: t('settings.onboardingLocalTitle'),
-      body: t('settings.onboardingLocalBody'),
-      onSelect: () => {
-        emitOnboardingClick('local_coding_agent', 'select_runtime', {
-          runtime_type: 'local_cli',
-        });
-        void scanCliAgents();
+      {
+        id: 'local',
+        icon: 'hammer',
+        title: t('settings.onboardingLocalTitle'),
+        body: t('settings.onboardingLocalBody'),
+        onSelect: () => {
+          emitOnboardingClick('local_coding_agent', 'select_runtime', {
+            runtime_type: 'local_cli',
+          });
+          void scanCliAgents();
+        },
       },
-    },
-    {
-      id: 'byok',
-      icon: 'sliders',
-      title: t('settings.onboardingByokTitle'),
-      body: t('settings.onboardingByokBody'),
-      onSelect: () => {
-        emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-        setRuntime('byok');
-        onModeChange('api');
+      {
+        id: 'byok',
+        icon: 'sliders',
+        title: t('settings.onboardingByokTitle'),
+        body: t('settings.onboardingByokBody'),
+        onSelect: () => {
+          emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
+          setRuntime('byok');
+          onModeChange('api');
+        },
       },
-    },
-  ];
+    ];
 
   const roleOptions = [
     { value: 'pm', label: t('settings.onboardingRolePm') },
@@ -1525,14 +1518,14 @@ function OnboardingView({
   const primaryActionLabel = isLastStep && newsletterSubmitting
     ? t('common.loading')
     : step === 0 && amrLoginPending
-    ? t('settings.amrSigningIn')
-    : step === 0 && amrSelectedAndSignedOut
-      ? t('settings.amrSignInToContinue')
-    : step === 1
-      ? t('settings.onboardingContinue')
-    : isLastStep
-      ? t('settings.onboardingFinish')
-      : t('settings.onboardingContinue');
+      ? t('settings.amrSigningIn')
+      : step === 0 && amrSelectedAndSignedOut
+        ? t('settings.amrSignInToContinue')
+        : step === 1
+          ? t('settings.onboardingContinue')
+          : isLastStep
+            ? t('settings.onboardingFinish')
+            : t('settings.onboardingContinue');
 
   return (
     <section className="onboarding-view" aria-labelledby="onboarding-title">
@@ -1878,9 +1871,8 @@ function OnboardingCliSetupPanel({
             <button
               key={agent.id}
               type="button"
-              className={`onboarding-view__agent-chip${
-                selectedAgentId === agent.id ? ' is-selected' : ''
-              }`}
+              className={`onboarding-view__agent-chip${selectedAgentId === agent.id ? ' is-selected' : ''
+                }`}
               style={{ animationDelay: `${index * 45}ms` }}
               onClick={() => onSelectAgent(agent.id)}
               aria-pressed={selectedAgentId === agent.id}
@@ -2034,15 +2026,15 @@ function OnboardingByokSetupPanel({
   onModelChange: (model: string) => void;
   onBaseUrlChange: (baseUrl: string) => void;
   testState:
-    | { status: 'idle' }
-    | { status: 'running'; inputKey: string }
-    | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
+  | { status: 'idle' }
+  | { status: 'running'; inputKey: string }
+  | { status: 'done'; inputKey: string; result: ConnectionTestResponse };
   canTest: boolean;
   onTest: () => void;
   modelsState:
-    | { status: 'idle' }
-    | { status: 'running'; inputKey: string }
-    | { status: 'done'; inputKey: string; result: ProviderModelsResponse };
+  | { status: 'idle' }
+  | { status: 'running'; inputKey: string }
+  | { status: 'done'; inputKey: string; result: ProviderModelsResponse };
   canFetchModels: boolean;
   onFetchModels: () => void;
 }) {
@@ -2315,15 +2307,15 @@ type OnboardingDropdownBaseProps = {
 
 type OnboardingDropdownProps =
   | (OnboardingDropdownBaseProps & {
-      value: string;
-      onChange: (value: string) => void;
-      multiple?: false;
-    })
+    value: string;
+    onChange: (value: string) => void;
+    multiple?: false;
+  })
   | (OnboardingDropdownBaseProps & {
-      value: string[];
-      onChange: (value: string[]) => void;
-      multiple: true;
-    });
+    value: string[];
+    onChange: (value: string[]) => void;
+    multiple: true;
+  });
 
 function OnboardingDropdown(props: OnboardingDropdownProps) {
   const {
@@ -2372,9 +2364,8 @@ function OnboardingDropdown(props: OnboardingDropdownProps) {
       <span className="onboarding-view__select-label">{label}</span>
       <button
         type="button"
-        className={`onboarding-view__select-trigger${open ? ' is-open' : ''}${
-          hasValue ? ' has-value' : ''
-        }`}
+        className={`onboarding-view__select-trigger${open ? ' is-open' : ''}${hasValue ? ' has-value' : ''
+          }`}
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
@@ -2476,9 +2467,8 @@ function OnboardingChoiceCard({
           {benefits.map((item, index) => (
             <span
               key={item}
-              className={`onboarding-view__benefit${
-                index >= 2 ? ' onboarding-view__benefit--hero' : ''
-              }`}
+              className={`onboarding-view__benefit${index >= 2 ? ' onboarding-view__benefit--hero' : ''
+                }`}
             >
               {item}
             </span>
@@ -2538,11 +2528,9 @@ function OnboardingChoiceCard({
     <div
       role="button"
       tabIndex={0}
-      className={`onboarding-view__card${selected ? ' is-selected' : ''}${
-        featured ? ' onboarding-view__card--featured' : ''
-      }${variant ? ` onboarding-view__card--${variant}` : ''}${
-        benefitPlacement === 'aside' ? ' onboarding-view__card--benefit-aside' : ''
-      }`}
+      className={`onboarding-view__card${selected ? ' is-selected' : ''}${featured ? ' onboarding-view__card--featured' : ''
+        }${variant ? ` onboarding-view__card--${variant}` : ''}${benefitPlacement === 'aside' ? ' onboarding-view__card--benefit-aside' : ''
+        }`}
       onClick={onClick}
       onKeyDown={handleKeyDown}
       aria-pressed={selected}

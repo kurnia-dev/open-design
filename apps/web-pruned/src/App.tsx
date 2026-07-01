@@ -1,103 +1,90 @@
+import type { AmrModelsResponse, ChatSessionMode, GitHubAuthStatusResponse } from '@open-design/contracts';
+import {
+  deriveConfigureGlobals,
+  fidelityToTracking,
+  projectKindToTracking,
+} from '@open-design/contracts/analytics';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { useAnalytics } from './analytics/provider';
 import {
   trackFileUploadResult,
   trackProjectCreateResult,
 } from './analytics/events';
-import { deriveUploadCohort } from './analytics/upload-tracking';
 import { detectClientType } from './analytics/identity';
-import {
-  deriveConfigureGlobals,
-  projectKindToTracking,
-  fidelityToTracking,
-} from '@open-design/contracts/analytics';
-import type { AmrModelsResponse, ChatSessionMode } from '@open-design/contracts';
-import { EntryView } from './components/EntryView';
-import type { IntegrationTab } from './components/IntegrationsView';
-import { MarketplaceView } from './components/MarketplaceView';
-const PluginDetailView = (props: any) => null;
-import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
-import { MemoryToast } from './components/MemoryToast';
-import { Toast } from './components/Toast';
-import { ProjectView } from './components/ProjectView';
-import { TooltipLayer } from './components/TooltipLayer';
-import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
+import { useAnalytics } from './analytics/provider';
+import { deriveUploadCohort } from './analytics/upload-tracking';
+import { isDesignSystemProject } from './components/design-system-project';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from './components/DesignSystemFlow';
+import { EntryView } from './components/EntryView';
 import {
   IframeKeepAliveProvider,
   useIframeKeepAlivePool,
 } from './components/IframeKeepAlivePool';
+import type { IntegrationTab } from './components/IntegrationsView';
+import { MarketplaceView } from './components/MarketplaceView';
+import { MemoryToast } from './components/MemoryToast';
+import type { CreateInput, ImportClaudeDesignOutcome } from './components/NewProjectPanel';
+import { PrivacyConsentModal } from './components/PrivacyConsentModal';
+import { ProjectView } from './components/ProjectView';
 import {
   SettingsDialog,
   switchApiProtocolConfig,
   updateCurrentApiProtocolConfig,
-  type SettingsSection,
   type SettingsHighlight,
+  type SettingsSection,
 } from './components/SettingsDialog';
-import { PrivacyConsentModal } from './components/PrivacyConsentModal';
+import { Toast } from './components/Toast';
+import { TooltipLayer } from './components/TooltipLayer';
+import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
+import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
+import { useI18n } from './i18n';
+import {
+  fetchAmrModels,
+  type VelaLoginStatus
+} from './providers/daemon';
 import {
   daemonIsLive,
-  fetchAppVersionInfo,
+  deleteDesignSystemDraft,
   fetchAgentsStream,
+  fetchAppVersionInfo,
   fetchDesignSystems,
   fetchDesignTemplates,
+  fetchGitHubAuthStatus,
   fetchPromptTemplates,
   fetchSkills,
-  uploadProjectFiles,
   replaceProjectWorkingDir,
-  fetchGitHubAuthStatus,
-  deleteDesignSystemDraft,
+  uploadProjectFiles,
 } from './providers/registry';
-import type { GitHubAuthStatusResponse } from '@open-design/contracts';
-import {
-  RUNS_CHANGED_EVENT,
-  fetchAmrModels,
-  listProjectRuns,
-  type VelaLoginStatus,
-} from './providers/daemon';
 import { navigate, useRoute } from './router';
+import { applyAppearanceToDocument } from './state/appearance';
 import {
   fetchDaemonConfig,
-  fetchMediaProvidersFromDaemon,
-  hasAnyConfiguredProvider,
-  fetchComposioConfigFromDaemon,
   loadConfig,
   mergeDaemonConfig,
-  mergeDaemonMediaProviders,
   saveConfig,
-  shouldSyncLocalMediaProvidersToDaemon,
-  syncComposioConfigToDaemon,
-  syncConfigToDaemon,
-  syncMediaProvidersToDaemon,
+  syncConfigToDaemon
 } from './state/config';
-import { applyAppearanceToDocument } from './state/appearance';
-import { isMacPlatform, isWailsShell } from './utils/platform';
+import type {
+  PluginShareAction,
+  PluginShareProjectOutcome,
+} from './state/projects';
 import {
-  createProject,
   createPluginShareProject,
+  createProject,
   deleteProject as deleteProjectApi,
+  deleteTemplate,
   getProject,
   importClaudeDesignZip,
   importFolderProject,
   listProjects,
   listTemplates,
-  deleteTemplate,
   patchProject,
 } from './state/projects';
-import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
-import { isDesignSystemProject } from './components/design-system-project';
-import type {
-  PluginShareAction,
-  PluginShareProjectOutcome,
-} from './state/projects';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
-import { useI18n } from './i18n';
-import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
   ApiProtocol,
@@ -108,48 +95,18 @@ import type {
   DesignSystemSummary,
   Project,
   ProjectTemplate,
-  ProviderModelOption,
   PromptTemplateSummary,
+  ProviderModelOption,
   SkillSummary,
 } from './types';
-
-export function shouldSyncMediaProvidersOnSave(
-  mediaProviders: AppConfig['mediaProviders'],
-  options?: { force?: boolean },
-): boolean {
-  return Boolean(options?.force) || hasAnyConfiguredProvider(mediaProviders);
-}
-
-function normalizeSavedComposioConfig(config: AppConfig['composio']): AppConfig['composio'] {
-  const apiKey = config?.apiKey?.trim() ?? '';
-  if (apiKey) {
-    return {
-      ...config,
-      apiKey: '',
-      apiKeyConfigured: true,
-      apiKeyTail: apiKey.slice(-4),
-    };
-  }
-  return { ...(config ?? {}) };
-}
+import { liveArtifactTabId } from './types';
+import { isMacPlatform, isWailsShell } from './utils/platform';
+const PluginDetailView = (props: any) => null;
 
 type ProjectListRequest = {
   generation: number;
   mutationVersion: number;
 };
-
-export async function persistComposioConfigChange(
-  current: AppConfig,
-  composio: AppConfig['composio'],
-  sync: (config: AppConfig['composio']) => Promise<boolean> = syncComposioConfigToDaemon,
-): Promise<AppConfig> {
-  const saved = await sync(composio);
-  if (!saved) throw new Error('Composio config save failed');
-  return {
-    ...current,
-    composio: normalizeSavedComposioConfig(composio),
-  };
-}
 
 export function buildPersistedConfig(next: AppConfig, current: AppConfig): AppConfig {
   const stalePrivacySnapshot =
@@ -793,29 +750,14 @@ function AppInner() {
       // before daemon overrides it.
       void Promise.all([
         fetchDaemonConfig(),
-        fetchComposioConfigFromDaemon(),
-        fetchMediaProvidersFromDaemon(),
         fetchGitHubAuthStatus().catch(() => ({ connected: false })),
       ]).then(([
         daemonConfig,
-        daemonComposioConfig,
-        daemonMediaProvidersResult,
         initialGithubAuth,
       ]) => {
         if (cancelled) return;
         setGitHubAuth(initialGithubAuth);
         setGitHubAuthLoading(false);
-        const daemonMediaProvidersLoaded =
-          daemonMediaProvidersResult.status === 'ok'
-            ? daemonMediaProvidersResult.providers
-            : null;
-        setDaemonMediaProviders(daemonMediaProvidersLoaded);
-        setDaemonMediaProvidersFetchState(daemonMediaProvidersResult.status);
-        setMediaProvidersNotice(
-          daemonMediaProvidersResult.status === 'error'
-            ? t('settings.mediaProviderLoadError')
-            : null,
-        );
         // Compute the next config outside the setConfig updater so we can
         // both (a) call navigate() after setConfig returns — calling it
         // inside the updater would trigger a Router setState during React's
@@ -824,33 +766,9 @@ function AppInner() {
         // the next render. latestPersistedConfigRef is kept in sync with
         // the rendered config and is safe to read here.
         const baseConfig = latestPersistedConfigRef.current;
-        const migratedLocalMediaProviders = shouldSyncLocalMediaProvidersToDaemon(
-          baseConfig.mediaProviders,
-          daemonMediaProvidersLoaded,
-        );
-        const next = mergeDaemonMediaProviders(
-          mergeDaemonConfig(baseConfig, daemonConfig),
-          daemonMediaProvidersLoaded,
-        );
-        const hasLocalComposioKey = Boolean(next.composio?.apiKey?.trim());
-        if (!hasLocalComposioKey && daemonComposioConfig) {
-          next.composio = daemonComposioConfig;
-        }
+        const next = mergeDaemonConfig(baseConfig, daemonConfig)
+
         saveConfig(next);
-        if (
-          daemonMediaProvidersResult.status === 'ok' &&
-          migratedLocalMediaProviders &&
-          hasAnyConfiguredProvider(next.mediaProviders)
-        ) {
-          void syncMediaProvidersToDaemon(next.mediaProviders, {
-            daemonProviders: daemonMediaProvidersLoaded,
-          });
-        }
-        // Migrate localStorage prefs to daemon on first boot with the new
-        // endpoint. If daemon already had values the merge above used them;
-        // writing back is idempotent and keeps both sides in sync.
-        void syncConfigToDaemon(next);
-        void syncComposioConfigToDaemon(next.composio);
         latestPersistedConfigRef.current = next;
         setConfig(next);
 
@@ -947,26 +865,6 @@ function AppInner() {
     return ok;
   }, [refreshTemplates]);
 
-  const reloadMediaProvidersFromDaemon = useCallback(async () => {
-    const result = await fetchMediaProvidersFromDaemon();
-    if (result.status !== 'ok') {
-      setDaemonMediaProvidersFetchState('error');
-      setMediaProvidersNotice(
-        t('settings.mediaProviderLoadError'),
-      );
-      return null;
-    }
-    setDaemonMediaProviders(result.providers);
-    setDaemonMediaProvidersFetchState('ok');
-    setMediaProvidersNotice(null);
-    setConfig((prev) => {
-      const merged = mergeDaemonMediaProviders(prev, result.providers);
-      saveConfig(merged);
-      return merged;
-    });
-    return result.providers;
-  }, []);
-
   /**
    * Autosave-driven persistence path. The settings dialog calls this on
    * every committed edit (via a debounced effect) so localStorage and
@@ -988,41 +886,7 @@ function AppInner() {
     latestPersistedConfigRef.current = persisted;
     saveConfig(persisted);
     setConfig(persisted);
-    const shouldSyncMediaProviders =
-      daemonMediaProvidersFetchState === 'ok'
-      && shouldSyncMediaProvidersOnSave(persisted.mediaProviders, {
-        force: options?.forceMediaProviderSync,
-      });
-    await Promise.all([
-      shouldSyncMediaProviders
-        ? syncMediaProvidersToDaemon(persisted.mediaProviders, {
-          force: options?.forceMediaProviderSync,
-          daemonProviders: daemonMediaProviders,
-          throwOnError: options?.forceMediaProviderSync,
-        })
-        : Promise.resolve(),
-      syncConfigToDaemon(persisted),
-    ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
-
-  /**
-   * Explicit Composio API-key save. Called from the section-local
-   * "Save key" button so secrets never ride the autosave keystroke
-   * loop. Once the daemon confirms, we normalize the saved config
-   * (strip the secret, store apiKeyConfigured + apiKeyTail) and feed
-   * it back into local state so the saved-key badge appears.
-   */
-  const handleConfigPersistComposioKey = useCallback(
-    async (composio: AppConfig['composio']) => {
-      const next = await persistComposioConfigChange(config, composio);
-      setConfig((curr) => {
-        const merged: AppConfig = { ...curr, composio: next.composio };
-        saveConfig(merged);
-        return merged;
-      });
-    },
-    [config],
-  );
 
   const handleModeChange = useCallback(
     (mode: AppConfig['mode']) => {
@@ -1875,7 +1739,6 @@ function AppInner() {
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}
         integrationInitialTab={integrationInitialTab}
-        composioConfigLoading={composioConfigLoading}
         daemonLive={daemonLive}
         onModeChange={handleModeChange}
         onAgentChange={handleAgentChange}
@@ -1901,7 +1764,6 @@ function AppInner() {
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
         onDesignSystemsRefresh={refreshDesignSystems}
-        onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
       />
@@ -1938,7 +1800,6 @@ function AppInner() {
             initialHighlight={settingsHighlight}
             composioConfigLoading={composioConfigLoading}
             onPersist={handleConfigPersist}
-            onPersistComposioKey={handleConfigPersistComposioKey}
             onClose={() => {
               // Closing the dialog is the canonical "I'm done" gesture
               // now that there is no global Save button. We mark
@@ -1956,12 +1817,7 @@ function AppInner() {
               setSettingsHighlight(null);
             }}
             onRefreshAgents={refreshAgents}
-            onAmrLoginStatusChange={handleAmrLoginStatusChange}
             onSkillsRefresh={refreshSkills}
-            daemonMediaProviders={daemonMediaProviders}
-            daemonMediaProvidersFetchState={daemonMediaProvidersFetchState}
-            mediaProvidersNotice={mediaProvidersNotice}
-            onReloadMediaProviders={reloadMediaProvidersFromDaemon}
             onProjectsRefresh={refreshProjects}
             onSkillsChanged={handleSkillsChanged}
             onDesignSystemsChanged={handleDesignSystemsChanged}

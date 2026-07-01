@@ -37,7 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body suppressHydrationWarning>
         <I18nProvider>
-          <AnalyticsProvider>{children}</AnalyticsProvider>
+          {children}
         </I18nProvider>
       </body>
     </html>

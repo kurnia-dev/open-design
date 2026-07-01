@@ -20,17 +20,15 @@ export type IntegrationTab = 'mcp' | 'connectors' | 'skills' | 'use-everywhere';
 interface Props {
   config: AppConfig;
   initialTab?: IntegrationTab;
-  composioConfigLoading?: boolean;
-  onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
 }
 
 const INTEGRATION_TABS: ReadonlyArray<{
   id: IntegrationTab;
 }> = [
-  { id: 'mcp' },
-  { id: 'skills' },
-  { id: 'use-everywhere' },
-];
+    { id: 'mcp' },
+    { id: 'skills' },
+    { id: 'use-everywhere' },
+  ];
 
 function integrationTabToTrackingElement(
   id: IntegrationTab,
@@ -42,8 +40,6 @@ function integrationTabToTrackingElement(
 export function IntegrationsView({
   config,
   initialTab = 'mcp',
-  composioConfigLoading = false,
-  onPersistComposioKey,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -126,8 +122,6 @@ export function IntegrationsView({
           <ConnectorSection
             cfg={localConfig}
             setCfg={setLocalConfig}
-            composioConfigLoading={composioConfigLoading}
-            onPersistComposioKey={onPersistComposioKey}
             onConnectorsTabClick={(element: any) =>
               trackIntegrationsConnectorsTabClick(analytics.track, {
                 page_name: 'integrations',

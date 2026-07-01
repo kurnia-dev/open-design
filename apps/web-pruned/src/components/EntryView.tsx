@@ -107,7 +107,6 @@ interface Props {
   onCreateDesignSystem?: () => void;
   onOpenDesignSystem?: (id: string) => void;
   onDesignSystemsRefresh?: () => Promise<void> | void;
-  onPersistComposioKey: (composio: AppConfig['composio']) => Promise<void> | void;
   onOpenSettings: (section?: 'execution' | 'media' | 'integrations' | 'mcpClient' | 'language' | 'appearance' | 'notifications' | 'projectLocations' | 'library' | 'about' | 'memory' | 'designSystems') => void;
   onCompleteOnboarding: () => void;
 }
@@ -246,7 +245,6 @@ export function EntryView({
   onCreateDesignSystem,
   onOpenDesignSystem,
   onDesignSystemsRefresh,
-  onPersistComposioKey,
   onOpenSettings,
   onCompleteOnboarding,
 }: Props) {
@@ -358,7 +356,6 @@ export function EntryView({
       onCreateDesignSystem={onCreateDesignSystem}
       onOpenDesignSystem={onOpenDesignSystem}
       onDesignSystemsRefresh={onDesignSystemsRefresh}
-      onPersistComposioKey={onPersistComposioKey}
       onOpenSettings={onOpenSettings}
       onCompleteOnboarding={onCompleteOnboarding}
     />

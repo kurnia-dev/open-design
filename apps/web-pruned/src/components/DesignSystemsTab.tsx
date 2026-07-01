@@ -439,7 +439,7 @@ export function DesignSystemsTab({
             >
               {t('dsManager.officialPresets')}
             </button>
-            <button
+            {/* <button
               type="button"
               role="tab"
               aria-selected={designSystemCollection === 'enterprise'}
@@ -447,7 +447,7 @@ export function DesignSystemsTab({
               onClick={() => setDesignSystemCollection('enterprise')}
             >
               {t('dsManager.enterprise')}
-            </button>
+            </button> */}
           </div>
         </div>
       ) : (
@@ -462,7 +462,7 @@ export function DesignSystemsTab({
             >
               {t('dsManager.yourTemplates')}
             </button>
-            <button
+            {/* <button
               type="button"
               role="tab"
               aria-selected={templateCollection === 'enterprise'}
@@ -470,7 +470,7 @@ export function DesignSystemsTab({
               onClick={() => setTemplateCollection('enterprise')}
             >
               {t('dsManager.enterprise')}
-            </button>
+            </button> */}
           </div>
         </div>
       )}
@@ -492,7 +492,7 @@ export function DesignSystemsTab({
               <option value="draft">{t('dsManager.filterDraft')}</option>
             </select>
           </div>
-
+          {/* 
           {onCreate ? (
             <button type="button" className="ds-create-row" onClick={onCreate}>
               <span>
@@ -501,7 +501,7 @@ export function DesignSystemsTab({
               </span>
               <span className="ds-create-row__action">{t('dsManager.createAction')}</span>
             </button>
-          ) : null}
+          ) : null} */}
 
           <button type="button" className="ds-create-row" onClick={() => setImportOpen(true)}>
             <span>
@@ -516,78 +516,78 @@ export function DesignSystemsTab({
               {t('dsManager.emptyMine')}
             </div>
           ) : (
-            <div className="ds-user-list">
+            <div className="ds-grid ds-user-grid">
               {userSystems.map((system) => {
                 const status = system.status ?? 'draft';
                 const canUseInProjects = status === 'published';
                 const selected = canUseInProjects && system.id === selectedId;
                 const busy = busyId === system.id;
                 return (
-                  <div className="ds-user-row" key={system.id}>
-                    <button
-                      type="button"
-                      className="ds-user-row__open"
-                      onClick={() => onOpenSystem?.(system.id)}
-                    >
-                      <span className="ds-user-row__title">
-                        <span>{system.title}</span>
-                        {selected ? <span className="ds-card-badge">{t('dsManager.badgeDefault')}</span> : null}
-                      </span>
-                      <span className="ds-user-row__meta">
-                        {t('dsManager.rowMetaUpdated', { date: formatShortDate(system.updatedAt) })}
-                      </span>
-                    </button>
-                    <div className="ds-user-row__actions">
-                      {onOpenSystem ? (
+                  <DesignSystemCard
+                    key={system.id}
+                    system={system}
+                    active={selected}
+                    thumbHtml={thumbs[system.id]}
+                    onIntersect={() => loadThumb(system.id)}
+                    onSelect={() => {
+                      if (onOpenSystem) {
+                        onOpenSystem(system.id);
+                      }
+                    }}
+                    onPreview={() => onPreview(system.id)}
+                    actions={
+                      <>
+                        {onOpenSystem ? (
+                          <button
+                            type="button"
+                            className="ghost compact"
+                            onClick={() => onOpenSystem(system.id)}
+                            disabled={busy}
+                          >
+                            {t('dsManager.edit')}
+                          </button>
+                        ) : null}
+                        {!selected && canUseInProjects ? (
+                          <button
+                            type="button"
+                            className="ghost compact"
+                            onClick={() => handleMakeDefaultClick(system)}
+                            disabled={busy}
+                          >
+                            {t('dsManager.makeDefault')}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          className="ghost compact"
-                          onClick={() => onOpenSystem(system.id)}
+                          className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
+                          aria-pressed={status === 'published'}
+                          onClick={() => void togglePublished(system)}
                           disabled={busy}
                         >
-                          {t('dsManager.edit')}
+                          <span>{status === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
+                          <i aria-hidden />
                         </button>
-                      ) : null}
-                      {!selected && canUseInProjects ? (
+                        {onOpenSystem ? (
+                          <Button
+                            size="icon"
+                            aria-label={t('dsManager.openSystemAria', { title: system.title })}
+                            onClick={() => onOpenSystem(system.id)}
+                          >
+                            <Icon name="external-link" />
+                          </Button>
+                        ) : null}
                         <button
                           type="button"
-                          className="ghost compact"
-                          onClick={() => handleMakeDefaultClick(system)}
+                          className="icon-btn danger"
+                          aria-label={t('dsManager.deleteSystemAria', { title: system.title })}
+                          onClick={() => void deleteSystem(system)}
                           disabled={busy}
                         >
-                          {t('dsManager.makeDefault')}
+                          <Icon name="close" />
                         </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
-                        aria-pressed={status === 'published'}
-                        onClick={() => void togglePublished(system)}
-                        disabled={busy}
-                      >
-                        <span>{status === 'published' ? t('dsManager.statusPublished') : t('dsManager.statusDraft')}</span>
-                        <i aria-hidden />
-                      </button>
-                      {onOpenSystem ? (
-                        <Button
-                          size="icon"
-                          aria-label={t('dsManager.openSystemAria', { title: system.title })}
-                          onClick={() => onOpenSystem(system.id)}
-                        >
-                          <Icon name="external-link" />
-                        </Button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="icon-btn danger"
-                        aria-label={t('dsManager.deleteSystemAria', { title: system.title })}
-                        onClick={() => void deleteSystem(system)}
-                        disabled={busy}
-                      >
-                        <Icon name="close" />
-                      </button>
-                    </div>
-                  </div>
+                      </>
+                    }
+                  />
                 );
               })}
             </div>
@@ -809,6 +809,7 @@ interface CardProps {
   onIntersect: () => void;
   onSelect: () => void;
   onPreview: () => void;
+  actions?: React.ReactNode;
 }
 
 function DesignSystemCard({
@@ -818,6 +819,7 @@ function DesignSystemCard({
   onIntersect,
   onSelect,
   onPreview,
+  actions,
 }: CardProps) {
   const { locale, t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
@@ -933,6 +935,15 @@ function DesignSystemCard({
             </div>
           ) : null}
         </div>
+        {actions ? (
+          <div
+            className="ds-card-actions"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {actions}
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -1530,6 +1530,42 @@
   border-left: 1px solid rgba(0, 0, 0, 0.05);
 }
 
+.design-systems-manager .ds-user-grid {
+  width: 100%;
+  margin: 0;
+  padding: 18px;
+  box-sizing: border-box;
+}
+
+.ds-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  flex-wrap: wrap;
+}
+
+.ds-card-actions .compact {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.ds-card-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ds-card-actions .icon-btn.danger {
+  color: var(--danger, #c0392b);
+}
+
 /* Legacy list classes kept for any consumer outside the tab — the gallery
    itself no longer renders these. Safe to remove once nothing references
    them. */

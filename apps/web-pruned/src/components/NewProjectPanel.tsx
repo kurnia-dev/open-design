@@ -467,10 +467,9 @@ export function NewProjectPanel({
   const skillIdForTab = useMemo(() => {
     if (tab === 'other') return null;
     if (tab === 'prototype') {
-      const list = skills.filter((s) => s.mode === 'prototype');
-      return list.find((s) => s.defaultFor.includes('prototype'))?.id
-        ?? list[0]?.id
-        ?? null;
+      return fidelity === 'wireframe'
+        ? 'web-prototype-wireframe'
+        : 'web-prototype-high-fidelity';
     }
     if (tab === 'live-artifact') {
       const exact = skills.find((s) => s.id === 'live-artifact' || s.name === 'live-artifact');
@@ -507,7 +506,7 @@ export function NewProjectPanel({
         ?? null;
     }
     return null;
-  }, [tab, mediaSurface, skills, videoModel]);
+  }, [tab, mediaSurface, skills, videoModel, fidelity]);
 
   // When the user picks a curated prompt template, propagate the template's
   // declared `model` and `aspect` onto the actual project state. Without
@@ -1056,7 +1055,7 @@ export function NewProjectPanel({
           suggestedName={name}
           disabled={!canCreate || loading}
         />
-        
+
         <button
           className="primary newproj-create"
           data-testid="create-project"
@@ -1668,8 +1667,8 @@ function TemplatePicker({
         <div className="template-list">
           {templates.map((tpl) => {
             const fallbackDesc = `${t('newproj.savedTemplate')} · ${tpl.files.length} ${tpl.files.length === 1
-                ? t('newproj.fileSingular')
-                : t('newproj.filePlural')
+              ? t('newproj.fileSingular')
+              : t('newproj.filePlural')
               }`;
             return (
               <TemplateOption

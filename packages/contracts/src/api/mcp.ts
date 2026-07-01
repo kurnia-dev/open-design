@@ -1,7 +1,7 @@
 // External MCP (Model Context Protocol) server configuration.
 //
 // Open Design acts as an MCP CLIENT here: the user configures one or more
-// external MCP servers (stdio, SSE, or streamable HTTP), and the daemon
+// external MCP servers (stdio or streamable HTTP), and the daemon
 // surfaces those servers to the underlying agent (Claude Code, ACP agents,
 // etc.) at spawn time so the agent can call their tools.
 //
@@ -9,7 +9,7 @@
 // daemon persists the same shape to <dataDir>/mcp-config.json and rewrites
 // per-spawn config files (e.g. project-cwd `.mcp.json` for Claude Code).
 
-export type McpTransport = 'stdio' | 'sse' | 'http';
+export type McpTransport = 'stdio' | 'http';
 export type McpAuthMode = 'none' | 'oauth';
 
 export interface McpServerConfig {
@@ -21,15 +21,13 @@ export interface McpServerConfig {
   /** Optional template id this entry was instantiated from. Lets the UI
    * render the template's logo/help text without re-deriving from the URL. */
   templateId?: string;
-  /** Transport selector. `http` is "streamable HTTP" per MCP spec; `sse` is
-   * the older Server-Sent-Events variant some servers (Higgsfield) still
-   * publish. Both flow through the same upstream URL field. */
+  /** Transport selector. `http` is "streamable HTTP" per MCP spec. */
   transport: McpTransport;
   /** Master enable switch. Disabled entries are persisted but skipped at
    * spawn so users can keep credentials around without them being wired into
    * every run. */
   enabled: boolean;
-  /** HTTP/SSE only: whether Open Design should offer its managed OAuth flow.
+  /** HTTP only: whether Open Design should offer its managed OAuth flow.
    * `none` means no daemon-managed OAuth; credentials, if any, are supplied
    * by headers or by a trusted local server. */
   authMode?: McpAuthMode;
@@ -39,7 +37,7 @@ export interface McpServerConfig {
   args?: string[];
   env?: Record<string, string>;
 
-  // ── sse / http ──
+  // ── http ──
   url?: string;
   headers?: Record<string, string>;
 }
@@ -81,7 +79,7 @@ export interface McpTemplate {
   label: string;
   description: string;
   transport: McpTransport;
-  /** HTTP/SSE only. Defaults are inferred by URL when omitted. */
+  /** HTTP only. Defaults are inferred by URL when omitted. */
   authMode?: McpAuthMode;
   /** Picker grouping. Required so the UI can always find a home for the
    * template — fall back to `utilities` for true grab-bag entries. */
@@ -99,7 +97,7 @@ export interface McpTemplate {
   args?: string[];
   envFields?: McpTemplateField[];
 
-  // sse / http template defaults
+  // http template defaults
   url?: string;
   headerFields?: McpTemplateField[];
 }
@@ -114,7 +112,7 @@ export interface UpdateMcpServersRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Daemon-owned OAuth flow for HTTP / SSE MCP servers.
+// Daemon-owned OAuth flow for HTTP MCP servers.
 //
 // The daemon hosts the OAuth client end-to-end so cloud deployments work
 // without a transient `localhost:<port>` listener and so the issued token
@@ -125,7 +123,7 @@ export interface UpdateMcpServersRequest {
 
 /** Body for `POST /api/mcp/oauth/start`. */
 export interface StartMcpOAuthRequest {
-  /** id of an already-saved McpServerConfig (transport must be http or sse). */
+  /** id of an already-saved McpServerConfig (transport must be http). */
   serverId: string;
 }
 

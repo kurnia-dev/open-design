@@ -92,7 +92,7 @@ function inferMcpAuthMode(url: string | undefined): NonNullable<McpServerConfig[
 function effectiveMcpAuthMode(
   row: Pick<McpServerConfig, 'transport' | 'url' | 'authMode'>,
 ): NonNullable<McpServerConfig['authMode']> {
-  if (row.transport !== 'http' && row.transport !== 'sse') return 'none';
+  if (row.transport !== 'http') return 'none';
   return row.authMode ?? inferMcpAuthMode(row.url);
 }
 
@@ -110,7 +110,7 @@ function authModeAfterUrlChange(
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
   return servers.map((s) => ({
     ...s,
-    ...(s.transport === 'http' || s.transport === 'sse'
+    ...(s.transport === 'http'
       ? { authMode: effectiveMcpAuthMode(s) }
       : {}),
     _envText: s.env ? mapToText(s.env) : '',
@@ -180,7 +180,7 @@ function rowFromTemplate(
     templateId: tpl.id,
     transport: tpl.transport,
     enabled: true,
-    ...(tpl.transport === 'http' || tpl.transport === 'sse'
+    ...(tpl.transport === 'http'
       ? { authMode: tpl.authMode ?? inferMcpAuthMode(tpl.url) }
       : {}),
     command: tpl.command,
@@ -279,7 +279,7 @@ function validateRow(r: DraftRow): string | null {
   if (r.transport === 'stdio') {
     if (!r.command || !r.command.trim()) return 'Command is required for stdio transport.';
   } else {
-    if (!r.url || !r.url.trim()) return 'URL is required for SSE / HTTP transport.';
+    if (!r.url || !r.url.trim()) return 'URL is required for HTTP transport.';
     try {
       const parsed = new URL(r.url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -663,7 +663,7 @@ function PickerPanel({
             <strong>Custom server</strong>
           </span>
           <span className="mcp-picker-desc">
-            Empty form. Pick stdio or SSE / HTTP and fill the fields yourself.
+            Empty form. Pick stdio or HTTP and fill the fields yourself.
           </span>
         </button>
       </div>
@@ -730,7 +730,7 @@ interface RowProps {
 }
 
 function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMoveDown }: RowProps) {
-  const isHttpLike = row.transport === 'http' || row.transport === 'sse';
+  const isHttpLike = row.transport === 'http';
   const usesManagedOAuth = isHttpLike && effectiveMcpAuthMode(row) === 'oauth';
   const [expanded, setExpanded] = useState<boolean>(false);
   const summaryTitle = row.label?.trim() || row.id || 'Unnamed MCP server';
@@ -891,15 +891,14 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                   const transport = e.target.value as DraftRow['transport'];
                   onChange({
                     transport,
-                    ...(transport === 'http' || transport === 'sse'
+                    ...(transport === 'http'
                       ? { authMode: row.authMode ?? inferMcpAuthMode(row.url) }
                       : { authMode: undefined }),
                   });
                 }}
               >
                 <option value="stdio">stdio</option>
-                <option value="sse">SSE</option>
-                <option value="http">streamable HTTP</option>
+                <option value="http">HTTP</option>
               </select>
             </label>
           </div>
@@ -1068,7 +1067,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                     <code>API_KEY = your-key-here</code>
                   </div>
                   <div>
-                    <strong>HTTP / SSE</strong>
+                    <strong>HTTP</strong>
                     <code>use url + headers instead of command / args</code>
                   </div>
                 </div>
@@ -1082,7 +1081,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
 }
 
 /**
- * "Connect" / "Disconnect" panel for an HTTP/SSE MCP server.
+ * "Connect" / "Disconnect" panel for an HTTP MCP server.
  *
  * The OAuth flow is fully owned by the daemon — this component just kicks
  * it off (POST /api/mcp/oauth/start), opens the returned authorize URL in

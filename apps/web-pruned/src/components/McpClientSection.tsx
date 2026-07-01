@@ -20,9 +20,12 @@ import {
   fetchMcpOAuthStatus,
   saveMcpServers,
   suggestMcpServerId,
+  startMcpOAuth,
+  disconnectMcpOAuth,
 } from '../state/mcp';
 import type {
   McpServerConfig,
+  McpOAuthStatusResponse,
 } from '../state/mcp';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
@@ -38,6 +41,7 @@ export interface McpClientSectionHandle {
 }
 
 interface DraftRow extends McpServerConfig {
+  _isNew?: boolean;
   _envText?: string;
   _headersText?: string;
   _localId: string;
@@ -59,9 +63,50 @@ function genLocalId(): string {
   return `mcp-row-${NEXT_LOCAL_ID++}`;
 }
 
+function isLoopbackMcpUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false;
+  try {
+    const host = new URL(rawUrl)
+      .hostname
+      .replace(/^\[|\]$/g, '')
+      .toLowerCase()
+      .replace(/\.+$/g, '');
+    if (host === 'localhost' || host === '::1') return true;
+    if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
+    return /^::ffff:127(?:\.\d{1,3}){3}$/i.test(host);
+  } catch {
+    return false;
+  }
+}
+
+function inferMcpAuthMode(url: string | undefined): NonNullable<McpServerConfig['authMode']> {
+  return isLoopbackMcpUrl(url) ? 'none' : 'oauth';
+}
+
+function effectiveMcpAuthMode(
+  row: Pick<McpServerConfig, 'transport' | 'url' | 'authMode'>,
+): NonNullable<McpServerConfig['authMode']> {
+  if (row.transport !== 'http') return 'none';
+  return row.authMode ?? inferMcpAuthMode(row.url);
+}
+
+function authModeAfterUrlChange(
+  row: Pick<McpServerConfig, 'url' | 'authMode'>,
+  nextUrl: string,
+): NonNullable<McpServerConfig['authMode']> {
+  const previousInferred = inferMcpAuthMode(row.url);
+  if (!row.authMode || row.authMode === previousInferred) {
+    return inferMcpAuthMode(nextUrl);
+  }
+  return row.authMode;
+}
+
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
   return servers.map((s) => ({
     ...s,
+    ...(s.transport === 'http'
+      ? { authMode: effectiveMcpAuthMode(s) }
+      : {}),
     _envText: s.env ? mapToText(s.env) : '',
     _headersText: s.headers ? mapToText(s.headers) : '',
     _localId: genLocalId(),
@@ -107,6 +152,7 @@ function rowsToServers(rows: DraftRow[]): McpServerConfig[] {
       if (r.url) out.url = r.url;
       const headers = textToMap(r._headersText);
       if (headers) out.headers = headers;
+      out.authMode = effectiveMcpAuthMode(r);
     }
     return out;
   });
@@ -121,7 +167,7 @@ function validateRow(r: DraftRow): string | null {
   if (r.transport === 'stdio') {
     if (!r.command || !r.command.trim()) return 'Command is required for stdio transport.';
   } else {
-    if (!r.url || !r.url.trim()) return 'URL is required for SSE / HTTP transport.';
+    if (!r.url || !r.url.trim()) return 'URL is required for HTTP transport.';
     try {
       const parsed = new URL(r.url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -136,17 +182,6 @@ function validateRow(r: DraftRow): string | null {
 
 function signature(rows: DraftRow[]): string {
   return JSON.stringify(rowsToServers(rows));
-}
-
-function getMockToolsForServer(id: string): string[] {
-  if (id.toLowerCase().includes('wangs-ui') || id.toLowerCase().includes('wangs')) {
-    return [
-      'list-all-documentation',
-      'get-documentation-for-story',
-      'get-documentation'
-    ];
-  }
-  return [];
 }
 
 function emptyWizard(taken: ReadonlySet<string>): WizardDraft {
@@ -172,6 +207,7 @@ function wizardToRow(w: WizardDraft): DraftRow {
     _envText: w.transport === 'stdio' ? w.envText : '',
     _headersText: w.transport !== 'stdio' ? w.headersText : '',
     _localId: genLocalId(),
+    _isNew: true,
   };
 }
 
@@ -287,7 +323,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       }
       if (wizard.transport !== 'stdio') {
         if (!wizard.url.trim()) {
-          setWizardError('URL is required for SSE / HTTP transport.');
+          setWizardError('URL is required for HTTP transport.');
           return;
         }
         try {
@@ -385,8 +421,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
                   onChange={(e) => setWizard({ ...wizard, transport: e.target.value as WizardDraft['transport'] })}
                 >
                   <option value="stdio">stdio (local command)</option>
-                  <option value="sse">SSE (HTTP event stream)</option>
-                  <option value="http">streamable HTTP</option>
+                  <option value="http">HTTP (streamable)</option>
                 </select>
               </label>
             </div>
@@ -471,7 +506,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
             </div>
             <strong className="mcp-empty-title">{t('mcpClient.emptyTitle')}</strong>
             <p className="mcp-empty-body">
-              Click <strong>Add server</strong> to connect a stdio command or an HTTP/SSE endpoint.
+              Click <strong>Add server</strong> to connect a stdio command or an HTTP endpoint.
             </p>
           </div>
         ) : rows.length > 0 ? (
@@ -524,12 +559,17 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
   // liveness for stdio MCP servers).
   const [oauthConnected, setOauthConnected] = useState<boolean | null>(null);
 
-  const isHttpTransport = row.transport === 'http' || row.transport === 'sse';
+  const isHttpTransport = row.transport === 'http';
+  const usesManagedOAuth = isHttpTransport && effectiveMcpAuthMode(row) === 'oauth';
   const summaryTitle = row.label || row.id || 'Unnamed MCP server';
+
+  const [tools, setTools] = useState<string[]>([]);
+  const [loadingTools, setLoadingTools] = useState<boolean>(false);
+  const [toolsError, setToolsError] = useState<string | null>(null);
 
   // Probe OAuth status once for HTTP/SSE servers
   useEffect(() => {
-    if (!isHttpTransport || !row.enabled) {
+    if (!isHttpTransport || !row.enabled || !usesManagedOAuth) {
       setOauthConnected(null);
       return;
     }
@@ -541,17 +581,63 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
       }
     })();
     return () => { cancelled = true; };
-  }, [row.id, row.transport, row.enabled]);
+  }, [row.id, row.transport, row.enabled, usesManagedOAuth]);
 
   // Determine status dot state:
   //  - stdio: green when enabled, gray when disabled
   //  - http/sse with no token configured: green when enabled (plain HTTP)
   //  - http/sse with OAuth: green only when oauth token is valid
   const isConnected = isHttpTransport
-    ? (oauthConnected === null ? row.enabled : oauthConnected)
+    ? (usesManagedOAuth ? Boolean(oauthConnected) : row.enabled)
     : row.enabled;
 
-  const tools = getMockToolsForServer(row.id);
+  // Fetch tools dynamically
+  useEffect(() => {
+    if (!row.enabled || !row.id || row._isNew) {
+      setTools([]);
+      setToolsError(null);
+      return;
+    }
+
+    if (isHttpTransport && usesManagedOAuth && !oauthConnected) {
+      setTools([]);
+      setToolsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingTools(true);
+    setToolsError(null);
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/mcp/servers/tools?serverId=${encodeURIComponent(row.id)}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || 'Failed to fetch tools');
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          setTools(data.tools || []);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setToolsError(err.message || 'Failed to fetch tools');
+          setTools([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTools(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [row.id, row.enabled, isHttpTransport, usesManagedOAuth, oauthConnected, row._isNew]);
+
   const hasTools = tools.length > 0;
 
   return (
@@ -598,7 +684,13 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
       </div>
 
       <div className="mcp-tools-container">
-        {hasTools ? (
+        {loadingTools ? (
+          <span className="mcp-no-tools">Loading tools…</span>
+        ) : toolsError ? (
+          <span className="mcp-no-tools" style={{ color: 'var(--danger, #ef4444)' }}>
+            Error: {toolsError}
+          </span>
+        ) : hasTools ? (
           <button
             type="button"
             className="mcp-tools-toggle"
@@ -618,7 +710,7 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
           <span className="mcp-no-tools">0 tools enabled</span>
         )}
 
-        {toolsExpanded && hasTools && (
+        {toolsExpanded && hasTools && !loadingTools && !toolsError && (
           <div className="mcp-tools-list">
             {tools.map((tool) => (
               <span key={tool} className="mcp-tool-pill">{tool}</span>
@@ -629,6 +721,30 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
 
       {expanded && (
         <div className="mcp-row-config-fields">
+          {isHttpTransport && !row._isNew && row.id ? (
+            usesManagedOAuth ? (
+              <McpOAuthControl serverId={row.id} />
+            ) : (
+              <div className="mcp-oauth-hint hint">
+                <strong>No managed OAuth.</strong> Open Design will use this
+                server as configured. Add headers below if the server needs a
+                token.
+              </div>
+            )
+          ) : null}
+          {isHttpTransport && row._isNew && usesManagedOAuth ? (
+            <div className="mcp-oauth-hint hint">
+              Save first, then click <strong>Connect</strong> to grant Open Design
+              access via the provider's OAuth flow.
+            </div>
+          ) : null}
+          {isHttpTransport && row._isNew && !usesManagedOAuth ? (
+            <div className="mcp-oauth-hint hint">
+              <strong>No managed OAuth.</strong> Save this server and Open Design
+              will use it directly.
+            </div>
+          ) : null}
+
           <div className="mcp-row-grid">
             <label className="mcp-row-field">
               <span className="mcp-row-field-label">ID</span>
@@ -645,12 +761,16 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
                 value={row.transport}
                 onChange={(e) => {
                   const transport = e.target.value as DraftRow['transport'];
-                  onChange({ transport });
+                  onChange({
+                    transport,
+                    ...(transport === 'http'
+                      ? { authMode: row.authMode ?? inferMcpAuthMode(row.url) }
+                      : { authMode: undefined }),
+                  });
                 }}
               >
                 <option value="stdio">stdio</option>
-                <option value="sse">SSE</option>
-                <option value="http">streamable HTTP</option>
+                <option value="http">HTTP</option>
               </select>
             </label>
           </div>
@@ -698,6 +818,20 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
           ) : (
             <>
               <label className="mcp-row-field mcp-row-field-stack">
+                <span className="mcp-row-field-label">OAuth mode</span>
+                <select
+                  value={effectiveMcpAuthMode(row)}
+                  onChange={(e) =>
+                    onChange({
+                      authMode: e.target.value as NonNullable<McpServerConfig['authMode']>,
+                    })
+                  }
+                >
+                  <option value="none">No managed OAuth</option>
+                  <option value="oauth">Managed OAuth</option>
+                </select>
+              </label>
+              <label className="mcp-row-field mcp-row-field-stack">
                 <span className="mcp-row-field-label">URL</span>
                 <input
                   type="text"
@@ -705,7 +839,7 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
                   placeholder="https://mcp.higgsfield.ai/mcp"
                   onChange={(e) => {
                     const url = e.target.value;
-                    onChange({ url });
+                    onChange({ url, authMode: authModeAfterUrlChange(row, url) });
                   }}
                   spellCheck={false}
                 />
@@ -735,6 +869,287 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * "Connect" / "Disconnect" panel for an HTTP MCP server.
+ *
+ * The OAuth flow is fully owned by the daemon — this component just kicks
+ * it off (POST /api/mcp/oauth/start), opens the returned authorize URL in
+ * a new tab, listens for the postMessage from the callback page, and
+ * refreshes the local status badge. There's also a fallback poll every
+ * 2 seconds while a connect is pending in case the callback page can't
+ * reach back via postMessage (cross-origin tab opener edge cases).
+ */
+function McpOAuthControl({ serverId }: { serverId: string }) {
+  const [status, setStatus] = useState<McpOAuthStatusResponse | null>(null);
+  const [busy, setBusy] = useState<'idle' | 'starting' | 'awaiting' | 'disconnecting' | 'refreshing'>('idle');
+  const [error, setError] = useState<string | null>(null);
+  // Holds the authorize URL while we are waiting on the user to complete
+  // OAuth in their browser. Surfaced as a fallback `<a>` so the user can
+  // re-open the tab if they accidentally closed it (or if the system
+  // browser ate the popup-open call without giving us feedback).
+  const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const refresh = async () => {
+    const data = await fetchMcpOAuthStatus(serverId);
+    if (data) setStatus(data);
+    return data;
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, [serverId]);
+
+  // Listen for the postMessage that the callback HTML page emits when the
+  // OAuth flow completes. We accept messages from any origin because the
+  // callback page is served by THIS daemon, but we still validate the
+  // payload shape before reacting to it.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      const data = ev.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type !== 'mcp-oauth') return;
+      if (data.serverId && data.serverId !== serverId) return;
+      if (data.ok) {
+        setError(null);
+        setPendingAuthUrl(null);
+        void refresh();
+      } else if (typeof data.message === 'string') {
+        setError(data.message);
+      }
+      setBusy('idle');
+      stopPoll();
+    }
+    window.addEventListener('message', onMessage);
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      bc = new BroadcastChannel('open-design-mcp-oauth');
+      bc.onmessage = (ev) => onMessage(ev as MessageEvent);
+    }
+    return () => {
+      window.removeEventListener('message', onMessage);
+      if (bc) bc.close();
+      stopPoll();
+    };
+  }, [serverId]);
+
+  function stopPoll() {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  }
+
+  function startPoll() {
+    stopPoll();
+    let elapsed = 0;
+    pollTimer.current = setInterval(() => {
+      elapsed += 2000;
+      void (async () => {
+        const data = await refresh();
+        // Auto-stop when the daemon reports connected — handles the
+        // Electron / system-browser case where postMessage can never
+        // reach back across processes, so polling IS the delivery
+        // channel for "auth completed" events.
+        if (data?.connected) {
+          setBusy('idle');
+          setError(null);
+          setPendingAuthUrl(null);
+          stopPoll();
+        }
+      })();
+      // Top out at 5 minutes — same as the daemon-side state cache TTL.
+      if (elapsed >= 5 * 60 * 1000) stopPoll();
+    }, 2000);
+  }
+
+  const onConnect = async () => {
+    setError(null);
+    setPendingAuthUrl(null);
+    setBusy('starting');
+    const result = await startMcpOAuth(serverId);
+    if (!result.ok) {
+      setBusy('idle');
+      setError(result.message);
+      return;
+    }
+    setBusy('awaiting');
+    setPendingAuthUrl(result.response.authorizeUrl);
+    startPoll();
+    // Best-effort: try to open the tab automatically.
+    try {
+      window.open(
+        result.response.authorizeUrl,
+        '_blank',
+        'noopener=no,noreferrer=no',
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  // Manual fallback for the user to push when they've completed auth in
+  // another tab/window but the postMessage handshake didn't fire (closed
+  // opener tab, cross-origin Electron BrowserWindow, etc.).
+  const onRefreshStatus = async () => {
+    setBusy('refreshing');
+    const data = await refresh();
+    setBusy('idle');
+    if (data?.connected) {
+      setError(null);
+      setPendingAuthUrl(null);
+      stopPoll();
+    } else if (busy === 'awaiting' || pendingAuthUrl) {
+      // Still pending — keep the awaiting indicator visible so the user
+      // knows we're still listening for the callback.
+      setBusy('awaiting');
+    }
+  };
+
+  const onCancelPending = () => {
+    setPendingAuthUrl(null);
+    setBusy('idle');
+    setError(null);
+    stopPoll();
+  };
+
+  const onDisconnect = async () => {
+    setBusy('disconnecting');
+    const ok = await disconnectMcpOAuth(serverId);
+    setBusy('idle');
+    if (ok) {
+      setError(null);
+      setPendingAuthUrl(null);
+      setStatus({ connected: false });
+    } else {
+      setError('Disconnect failed. Check daemon logs.');
+    }
+  };
+
+  const connected = Boolean(status?.connected);
+  const expiresLabel =
+    status?.expiresAt && status.expiresAt > 0
+      ? new Date(status.expiresAt).toLocaleString()
+      : null;
+  const isAwaiting = busy === 'awaiting' || (Boolean(pendingAuthUrl) && !connected);
+
+  return (
+    <div className={`mcp-oauth-control${connected ? ' connected' : ''}`}>
+      <div className="mcp-oauth-status" aria-live="polite">
+        {connected ? (
+          <>
+            <span className="mcp-oauth-dot mcp-oauth-dot-ok" aria-hidden />
+            <span>
+              <strong>Connected.</strong>{' '}
+              {expiresLabel ? (
+                <span className="hint">Token expires {expiresLabel}.</span>
+              ) : (
+                <span className="hint">Non-expiring token.</span>
+              )}
+            </span>
+          </>
+        ) : isAwaiting ? (
+          <>
+            <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
+            <span>
+              <strong>Waiting for authorization…</strong>{' '}
+              <span className="hint">
+                Approve in the browser tab that opened. We'll catch the callback
+                automatically — or click Refresh below if you completed it
+                already.
+              </span>
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="mcp-oauth-dot" aria-hidden />
+            <span>
+              <strong>Not connected.</strong>{' '}
+              <span className="hint">
+                Click Connect to grant Open Design access via the provider's OAuth flow.
+              </span>
+            </span>
+          </>
+        )}
+      </div>
+
+      <div className="mcp-oauth-actions">
+        {connected ? (
+          <>
+            <button
+              type="button"
+              className="primary"
+              onClick={onConnect}
+              disabled={busy !== 'idle' && busy !== 'refreshing'}
+              title="Reauthenticate (replaces the existing token)"
+            >
+              {busy === 'starting' || busy === 'awaiting' ? 'Connecting…' : 'Reconnect'}
+            </button>
+            <button
+              type="button"
+              onClick={onRefreshStatus}
+              disabled={busy !== 'idle' && busy !== 'refreshing'}
+              title="Re-check token status against the daemon"
+            >
+              {busy === 'refreshing' ? 'Checking…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              onClick={onDisconnect}
+              disabled={busy !== 'idle' && busy !== 'refreshing'}
+            >
+              {busy === 'disconnecting' ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+          </>
+        ) : isAwaiting ? (
+          <>
+            <button
+              type="button"
+              className="primary"
+              onClick={onRefreshStatus}
+              disabled={busy === 'refreshing'}
+              title="I've completed authorization — check connection status now"
+            >
+              {busy === 'refreshing' ? 'Checking…' : 'I’ve approved — Refresh'}
+            </button>
+            <button type="button" onClick={onCancelPending}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="primary"
+            onClick={onConnect}
+            disabled={busy !== 'idle'}
+          >
+            {busy === 'starting' ? 'Starting…' : 'Connect'}
+          </button>
+        )}
+      </div>
+
+      {pendingAuthUrl && !connected ? (
+        <div className="mcp-oauth-fallback">
+          <span className="hint">
+            Browser didn't open?{' '}
+            <a
+              href={pendingAuthUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="md-link"
+            >
+              Open authorization page
+            </a>
+            .
+          </span>
+        </div>
+      ) : null}
+
+      {error ? <div className="mcp-oauth-error">{error}</div> : null}
     </div>
   );
 }

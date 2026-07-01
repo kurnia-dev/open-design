@@ -179,18 +179,18 @@ describe('buildClaudeMcpJson', () => {
     });
   });
 
-  it('emits an sse / http entry with url + headers + transport type', () => {
+  it('emits an http entry with url + headers + transport type', () => {
     const out = buildClaudeMcpJson([
       {
         id: 'higgsfield',
-        transport: 'sse',
+        transport: 'http',
         enabled: true,
         url: 'https://mcp.higgsfield.ai',
         headers: { Authorization: 'Bearer abc' },
       },
     ]) as { mcpServers: Record<string, Record<string, unknown>> };
     expect(out.mcpServers.higgsfield).toEqual({
-      type: 'sse',
+      type: 'http',
       url: 'https://mcp.higgsfield.ai',
       headers: { Authorization: 'Bearer abc' },
     });
@@ -362,7 +362,7 @@ describe('buildAcpMcpServers', () => {
       },
       {
         id: 'b',
-        transport: 'sse',
+        transport: 'http',
         enabled: true,
         url: 'https://example.com',
       },
@@ -450,11 +450,11 @@ describe('buildOpenCodeMcpConfigContent', () => {
     });
   });
 
-  it('serialises sse / http servers to OpenCode remote schema (type=remote, url, headers)', () => {
+  it('serialises http servers to OpenCode remote schema (type=remote, url, headers)', () => {
     const raw = buildOpenCodeMcpConfigContent([
       {
         id: 'higgsfield',
-        transport: 'sse',
+        transport: 'http',
         enabled: true,
         url: 'https://mcp.higgsfield.ai',
         headers: { Authorization: 'Bearer abc' },

@@ -7,6 +7,9 @@ import { MCP_TEMPLATES, buildAcpMcpServers, buildClaudeMcpJson, isManagedProject
 import { beginAuth, exchangeCodeForToken, refreshAccessToken } from './mcp-oauth.js';
 import { clearToken, getToken, isTokenExpired, readAllTokens, setToken } from './mcp-tokens.js';
 import type { RouteDeps } from './server-context.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 export interface RegisterMcpRoutesDeps extends RouteDeps<'http' | 'paths' | 'mcp'> {}
 
@@ -202,10 +205,10 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       if (!server) {
         return res.status(404).json({ error: `unknown serverId ${serverId}` });
       }
-      if (server.transport !== 'http' && server.transport !== 'sse') {
+      if (server.transport !== 'http') {
         return res
           .status(400)
-          .json({ error: 'OAuth flow only applies to http/sse transports' });
+          .json({ error: 'OAuth flow only applies to http transport' });
       }
       if (!server.url) {
         return res.status(400).json({ error: 'server has no URL configured' });
@@ -353,7 +356,93 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     }
   });
 
+  app.get('/api/mcp/servers/tools', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const serverId =
+      typeof req.query.serverId === 'string' ? req.query.serverId.trim() : '';
+    if (!serverId) {
+      return res.status(400).json({ error: 'serverId query parameter is required' });
+    }
+    try {
+      const cfg = await readMcpConfig(RUNTIME_DATA_DIR);
+      const server = cfg.servers.find((s) => s.id === serverId);
+      if (!server) {
+        return res.status(404).json({ error: `server ${serverId} not found` });
+      }
+      if (!server.enabled) {
+        return res.json({ tools: [], message: 'Server is disabled' });
+      }
 
+      const tokensMap: Record<string, string> = {};
+      try {
+        const allTokens = await readAllTokens(RUNTIME_DATA_DIR);
+        for (const [sid, tok] of Object.entries(allTokens)) {
+          if (tok?.accessToken) {
+            tokensMap[sid] = tok.accessToken;
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      const tools = await probeServerTools(server, tokensMap);
+      res.json({ tools });
+    } catch (err: any) {
+      const msg = err && err.message ? err.message : String(err);
+      res.status(502).json({ error: msg });
+    }
+  });
+
+}
+
+async function probeServerTools(server: any, tokens: Record<string, string>): Promise<string[]> {
+  const client = new Client(
+    { name: 'open-design-probe', version: '1.0.0' },
+    { capabilities: {} }
+  );
+
+  let transport: any;
+  if (server.transport === 'stdio') {
+    if (!server.command) {
+      throw new Error('Command is missing');
+    }
+    transport = new StdioClientTransport({
+      command: server.command,
+      args: server.args || [],
+      env: { ...process.env, ...server.env } as Record<string, string>,
+    });
+  } else {
+    if (!server.url) {
+      throw new Error('URL is missing');
+    }
+    const sseHeaders: Record<string, string> = { ...server.headers };
+    if (server.authMode === 'oauth' && tokens[server.id]) {
+      sseHeaders['Authorization'] = `Bearer ${tokens[server.id]}`;
+    }
+    transport = new StreamableHTTPClientTransport(new URL(server.url), {
+      requestInit: {
+        headers: sseHeaders,
+      },
+    });
+  }
+
+  try {
+    await client.connect(transport, {
+      timeout: 4000,
+    });
+    const response = await client.listTools(undefined, {
+      timeout: 4000,
+    });
+    return (response?.tools || []).map((t: any) => t.name);
+  } finally {
+    try {
+      await client.close();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function getPublicBaseUrl(req: any) {

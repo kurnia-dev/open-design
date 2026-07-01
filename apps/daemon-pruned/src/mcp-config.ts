@@ -26,7 +26,7 @@ import path from 'node:path';
 // definitions in `contracts` (consumed by the web app) and re-stating the
 // minimal mirror in the daemon keeps the existing module-resolution shape
 // for the rest of the codebase intact. Both sides MUST stay in sync.
-export type McpTransport = 'stdio' | 'sse' | 'http';
+export type McpTransport = 'stdio' | 'http';
 export type McpAuthMode = 'none' | 'oauth';
 
 export interface McpServerConfig {
@@ -88,7 +88,6 @@ export interface McpTemplate {
 
 const VALID_TRANSPORTS: ReadonlySet<McpTransport> = new Set([
   'stdio',
-  'sse',
   'http',
 ]);
 const VALID_AUTH_MODES: ReadonlySet<McpAuthMode> = new Set(['none', 'oauth']);
@@ -162,7 +161,7 @@ function sanitizeMcpAuthMode(raw: unknown): McpAuthMode | undefined {
 }
 
 function effectiveMcpAuthMode(server: McpServerConfig): McpAuthMode {
-  if (server.transport !== 'http' && server.transport !== 'sse') return 'none';
+  if (server.transport !== 'http') return 'none';
   return server.authMode ?? inferMcpAuthModeForUrl(server.url);
 }
 
@@ -323,7 +322,7 @@ export function buildClaudeMcpJson(
       out[s.id] = entry;
     } else {
       const entry: Record<string, unknown> = {
-        type: s.transport, // 'sse' | 'http'
+        type: s.transport, // 'http'
         url: s.url,
       };
       const headers = mergeAuthHeader(

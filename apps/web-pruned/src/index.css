@@ -22,6 +22,7 @@
 @import './styles/viewer/theater.css';
 @import './styles/viewer/library.css';
 @import './styles/viewer/memory.css';
+@import './styles/viewer/mcp.css';
 @import './styles/viewer/routines.css';
 @import './styles/modal-window-drag.css';
 @import './styles/entrance.css';

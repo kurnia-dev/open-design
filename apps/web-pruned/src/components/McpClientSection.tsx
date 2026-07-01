@@ -1,7 +1,7 @@
 // External MCP servers panel.
 //
 // Open Design connects to the configured servers as a CLIENT and surfaces
-// their tools to the underlying agent (Claude Code, Hermes, Kimi for v1).
+// their tools to the underlying agent.
 // This panel is the user-facing form; persistence flows through
 // `state/mcp.ts` -> daemon `/api/mcp/servers`.
 
@@ -13,106 +13,55 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Button } from '@open-design/components';
 import { useAnalytics } from '../analytics/provider';
 import { trackIntegrationsMcpTabClick } from '../analytics/events';
 import {
-  disconnectMcpOAuth,
-  fetchMcpOAuthStatus,
   fetchMcpServers,
+  fetchMcpOAuthStatus,
   saveMcpServers,
-  startMcpOAuth,
   suggestMcpServerId,
 } from '../state/mcp';
 import type {
-  McpOAuthStatusResponse,
   McpServerConfig,
-  McpTemplate,
 } from '../state/mcp';
-import { fetchAgents } from '../providers/registry';
-import type { AgentInfo } from '../types';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
 interface Props {
-  // Receive a notification when servers list changes so the parent can
-  // re-render dependent affordances (e.g. composer chip count). Optional.
   onServersChanged?: (servers: McpServerConfig[]) => void;
-  // Surface the dirty/save state up to the dialog footer so a single
-  // "Save" button can drive both the global config and this section.
   onDirtyChange?: (dirty: boolean) => void;
 }
 
-// Imperative handle: lets the dialog footer Save button trigger this
-// section's save without us having to lift the entire row state up.
 export interface McpClientSectionHandle {
   save: () => Promise<boolean>;
   hasDirty: () => boolean;
 }
 
 interface DraftRow extends McpServerConfig {
-  // Local-only flags. Stripped before sending to the daemon.
-  _isNew?: boolean;
-  // Free-form text for the env / headers panel — committed back to a real
-  // map when the user steps away from the field.
   _envText?: string;
   _headersText?: string;
-  // Per-instance local id to use as a stable React `key` independent of
-  // the editable `id` field (avoids remounts & focus loss while editing).
   _localId: string;
 }
 
-// Simple incrementing local id generator for row keys. Kept module-scoped
-// and deterministic for the lifetime of this UI instance.
+// Draft state for the "Add server" wizard form
+interface WizardDraft {
+  id: string;
+  transport: McpServerConfig['transport'];
+  command: string;
+  args: string;
+  url: string;
+  envText: string;
+  headersText: string;
+}
+
 let NEXT_LOCAL_ID = 1;
 function genLocalId(): string {
   return `mcp-row-${NEXT_LOCAL_ID++}`;
 }
 
-function isLoopbackMcpUrl(rawUrl: string | undefined): boolean {
-  if (!rawUrl) return false;
-  try {
-    const host = new URL(rawUrl)
-      .hostname
-      .replace(/^\[|\]$/g, '')
-      .toLowerCase()
-      .replace(/\.+$/g, '');
-    if (host === 'localhost' || host === '::1') return true;
-    if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
-    return /^::ffff:127(?:\.\d{1,3}){3}$/i.test(host);
-  } catch {
-    return false;
-  }
-}
-
-function inferMcpAuthMode(url: string | undefined): NonNullable<McpServerConfig['authMode']> {
-  return isLoopbackMcpUrl(url) ? 'none' : 'oauth';
-}
-
-function effectiveMcpAuthMode(
-  row: Pick<McpServerConfig, 'transport' | 'url' | 'authMode'>,
-): NonNullable<McpServerConfig['authMode']> {
-  if (row.transport !== 'http' && row.transport !== 'sse') return 'none';
-  return row.authMode ?? inferMcpAuthMode(row.url);
-}
-
-function authModeAfterUrlChange(
-  row: Pick<McpServerConfig, 'url' | 'authMode'>,
-  nextUrl: string,
-): NonNullable<McpServerConfig['authMode']> {
-  const previousInferred = inferMcpAuthMode(row.url);
-  if (!row.authMode || row.authMode === previousInferred) {
-    return inferMcpAuthMode(nextUrl);
-  }
-  return row.authMode;
-}
-
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
   return servers.map((s) => ({
     ...s,
-    ...(s.transport === 'http' || s.transport === 'sse'
-      ? { authMode: effectiveMcpAuthMode(s) }
-      : {}),
     _envText: s.env ? mapToText(s.env) : '',
     _headersText: s.headers ? mapToText(s.headers) : '',
     _localId: genLocalId(),
@@ -149,14 +98,12 @@ function rowsToServers(rows: DraftRow[]): McpServerConfig[] {
       enabled: r.enabled,
     };
     if (r.label) out.label = r.label;
-    if (r.templateId) out.templateId = r.templateId;
     if (r.transport === 'stdio') {
       if (r.command) out.command = r.command;
       if (r.args && r.args.length > 0) out.args = r.args;
       const env = textToMap(r._envText);
       if (env) out.env = env;
     } else {
-      out.authMode = effectiveMcpAuthMode(r);
       if (r.url) out.url = r.url;
       const headers = textToMap(r._headersText);
       if (headers) out.headers = headers;
@@ -165,112 +112,7 @@ function rowsToServers(rows: DraftRow[]): McpServerConfig[] {
   });
 }
 
-function rowFromTemplate(
-  tpl: McpTemplate,
-  taken: ReadonlySet<string>,
-): DraftRow {
-  const id = suggestMcpServerId(tpl.id, taken);
-  const env: Record<string, string> = {};
-  for (const f of tpl.envFields ?? []) env[f.key] = '';
-  const headers: Record<string, string> = {};
-  for (const f of tpl.headerFields ?? []) headers[f.key] = '';
-  return {
-    id,
-    label: tpl.label,
-    templateId: tpl.id,
-    transport: tpl.transport,
-    enabled: true,
-    ...(tpl.transport === 'http' || tpl.transport === 'sse'
-      ? { authMode: tpl.authMode ?? inferMcpAuthMode(tpl.url) }
-      : {}),
-    command: tpl.command,
-    args: tpl.args ? [...tpl.args] : undefined,
-    url: tpl.url,
-    _envText: Object.keys(env).length > 0 ? mapToText(env) : '',
-    _headersText: Object.keys(headers).length > 0 ? mapToText(headers) : '',
-    _isNew: true,
-    _localId: genLocalId(),
-  };
-}
-
-function rowFromBlank(taken: ReadonlySet<string>): DraftRow {
-  return {
-    id: suggestMcpServerId('custom', taken),
-    label: '',
-    transport: 'stdio',
-    enabled: true,
-    command: '',
-    args: [],
-    _envText: '',
-    _headersText: '',
-    _isNew: true,
-    _localId: genLocalId(),
-  };
-}
-
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
-
-// Picker grouping. Mirrors `McpTemplateCategory` in `packages/contracts`.
-// The order here is the *display* order in the picker — keep it intentional
-// so the most useful categories for Open Design (visual generation, then
-// editing, then publishing surfaces) sit at the top.
-const CATEGORY_ORDER: ReadonlyArray<{
-  id: NonNullable<McpTemplate['category']>;
-  label: string;
-  hint: string;
-}> = [
-  {
-    id: 'image-generation',
-    label: 'Image generation',
-    hint: 'Models that produce raster, vector or video assets.',
-  },
-  {
-    id: 'image-editing',
-    label: 'Image editing',
-    hint: 'Local post-processing, OCR and CV-driven edits.',
-  },
-  {
-    id: 'web-capture',
-    label: 'Web capture',
-    hint: 'Render a URL into an image so the agent can see what it built.',
-  },
-  {
-    id: 'design-systems',
-    label: 'Design systems',
-    hint: 'Figma read/write, design-token translation, brand inspiration.',
-  },
-  {
-    id: 'ui-components',
-    label: 'UI components',
-    hint: 'Designer-grade components, blocks and landing-page material.',
-  },
-  {
-    id: 'data-viz',
-    label: 'Data viz',
-    hint: 'Charts and diagrams as proper image artifacts.',
-  },
-  {
-    id: 'publishing',
-    label: 'Publishing',
-    hint: 'Push generated artifacts to a public URL.',
-  },
-  {
-    id: 'utilities',
-    label: 'Utilities',
-    hint: 'Filesystem, fetch, GitHub and similar generic tools.',
-  },
-];
-
-function templateMatchesQuery(tpl: McpTemplate, q: string): boolean {
-  if (!q) return true;
-  const needle = q.toLowerCase();
-  return (
-    tpl.label.toLowerCase().includes(needle) ||
-    tpl.id.toLowerCase().includes(needle) ||
-    (tpl.description?.toLowerCase().includes(needle) ?? false) ||
-    (tpl.example?.toLowerCase().includes(needle) ?? false)
-  );
-}
 
 function validateRow(r: DraftRow): string | null {
   if (!ID_PATTERN.test(r.id)) {
@@ -292,587 +134,501 @@ function validateRow(r: DraftRow): string | null {
   return null;
 }
 
-// Stable signature used to detect dirty state — cheap diff against the
-// last-known-saved server list. Avoids a deep equality library.
 function signature(rows: DraftRow[]): string {
   return JSON.stringify(rowsToServers(rows));
 }
 
+function getMockToolsForServer(id: string): string[] {
+  if (id.toLowerCase().includes('wangs-ui') || id.toLowerCase().includes('wangs')) {
+    return [
+      'list-all-documentation',
+      'get-documentation-for-story',
+      'get-documentation'
+    ];
+  }
+  return [];
+}
+
+function emptyWizard(taken: ReadonlySet<string>): WizardDraft {
+  return {
+    id: suggestMcpServerId('my-server', taken),
+    transport: 'stdio',
+    command: '',
+    args: '',
+    url: '',
+    envText: '',
+    headersText: '',
+  };
+}
+
+function wizardToRow(w: WizardDraft): DraftRow {
+  return {
+    id: w.id,
+    transport: w.transport,
+    enabled: true,
+    command: w.transport === 'stdio' ? w.command : undefined,
+    args: w.transport === 'stdio' ? w.args.split(/\s+/).map(s => s.trim()).filter(Boolean) : undefined,
+    url: w.transport !== 'stdio' ? w.url : undefined,
+    _envText: w.transport === 'stdio' ? w.envText : '',
+    _headersText: w.transport !== 'stdio' ? w.headersText : '',
+    _localId: genLocalId(),
+  };
+}
+
 export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   function McpClientSection({ onServersChanged, onDirtyChange }, ref) {
-  const t = useT();
-  const analytics = useAnalytics();
-  const [rows, setRows] = useState<DraftRow[]>([]);
-  const [savedSig, setSavedSig] = useState<string>('[]');
-  const [templates, setTemplates] = useState<McpTemplate[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  // Free-text filter at the top of the picker. Empty string = show all.
-  // Lives in the section (not the picker render block) so toggling the
-  // picker preserves the user's last query while they scan through it.
-  const [pickerQuery, setPickerQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  // Cached agent list so the support banner can tell the user which of the
-  // installed CLI agents will actually receive the MCP servers below.
-  // Without this, OpenCode / Codex / Gemini users save a server and have
-  // no way to learn it never reached the agent (issue #2142).
-  const [agents, setAgents] = useState<AgentInfo[]>([]);
+    const t = useT();
+    const analytics = useAnalytics();
+    const [rows, setRows] = useState<DraftRow[]>([]);
+    const [savedSig, setSavedSig] = useState<string>('[]');
+    const [loaded, setLoaded] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [savedAt, setSavedAt] = useState<number | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    // Wizard state — null = closed, object = open with draft
+    const [wizard, setWizard] = useState<WizardDraft | null>(null);
+    const [wizardError, setWizardError] = useState<string | null>(null);
+    const wizardIdRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const data = await fetchMcpServers();
-      if (cancelled) return;
-      if (!data) {
-        setError(t('mcpClient.daemonError'));
+    useEffect(() => {
+      let cancelled = false;
+      void (async () => {
+        const data = await fetchMcpServers();
+        if (cancelled) return;
+        if (!data) {
+          setError(t('mcpClient.daemonError'));
+          setLoaded(true);
+          return;
+        }
+        const fresh = rowsFromServers(data.servers);
+        setRows(fresh);
+        setSavedSig(signature(fresh));
         setLoaded(true);
-        return;
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+
+    const dirty = useMemo(() => signature(rows) !== savedSig, [rows, savedSig]);
+
+    useEffect(() => {
+      onDirtyChange?.(dirty);
+    }, [dirty, onDirtyChange]);
+
+    const updateRow = (idx: number, patch: Partial<DraftRow>) => {
+      setRows((curr) => curr.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+    };
+
+    const removeRow = (idx: number) => {
+      setRows((curr) => curr.filter((_, i) => i !== idx));
+    };
+
+    const openWizard = () => {
+      const taken = new Set(rows.map((r) => r.id));
+      setWizard(emptyWizard(taken));
+      setWizardError(null);
+      trackIntegrationsMcpTabClick(analytics.track, {
+        page_name: 'integrations',
+        area: 'mcp_tab',
+        element: 'add_server',
+      });
+      // Focus first field on next tick
+      setTimeout(() => wizardIdRef.current?.focus(), 50);
+    };
+
+    const closeWizard = () => {
+      setWizard(null);
+      setWizardError(null);
+    };
+
+    // saveRows persists an explicit rows list (allows commitWizard to pass
+    // the updated list before React state has flushed).
+    const saveRows = async (rowsToSave: DraftRow[]): Promise<boolean> => {
+      for (const r of rowsToSave) {
+        const err = validateRow(r);
+        if (err) {
+          setError(`${r.label || r.id}: ${err}`);
+          return false;
+        }
+      }
+      setError(null);
+      setSaving(true);
+      const payload = rowsToServers(rowsToSave);
+      const data = await saveMcpServers(payload);
+      setSaving(false);
+      if (!data) {
+        setError(t('mcpClient.saveFailed'));
+        return false;
       }
       const fresh = rowsFromServers(data.servers);
       setRows(fresh);
       setSavedSig(signature(fresh));
-      setTemplates(data.templates);
-      setLoaded(true);
-    })();
-    return () => {
-      cancelled = true;
+      setSavedAt(Date.now());
+      onServersChanged?.(data.servers);
+      return true;
     };
-  }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const list = await fetchAgents();
-      if (cancelled) return;
-      setAgents(list);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const dirty = useMemo(() => signature(rows) !== savedSig, [rows, savedSig]);
-
-  useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
-
-  const updateRow = (idx: number, patch: Partial<DraftRow>) => {
-    setRows((curr) => curr.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
-  };
-
-  const removeRow = (idx: number) => {
-    setRows((curr) => curr.filter((_, i) => i !== idx));
-  };
-
-  const moveRow = (idx: number, dir: -1 | 1) => {
-    setRows((curr) => {
-      const next = [...curr];
-      const target = idx + dir;
-      if (target < 0 || target >= next.length) return curr;
-      [next[idx], next[target]] = [next[target]!, next[idx]!];
-      return next;
-    });
-  };
-
-  const addFromTemplate = (tpl: McpTemplate) => {
-    setPickerOpen(false);
-    setRows((curr) => [...curr, rowFromTemplate(tpl, new Set(curr.map((r) => r.id)))]);
-  };
-
-  const addBlank = () => {
-    setPickerOpen(false);
-    setRows((curr) => [...curr, rowFromBlank(new Set(curr.map((r) => r.id)))]);
-  };
-
-  const save = async (): Promise<boolean> => {
-    for (const r of rows) {
-      const err = validateRow(r);
-      if (err) {
-        setError(`${r.label || r.id}: ${err}`);
-        return false;
+    const commitWizard = () => {
+      if (!wizard) return;
+      // Validate wizard draft before committing
+      const idOk = ID_PATTERN.test(wizard.id);
+      if (!idOk) {
+        setWizardError('ID must start with a letter or digit and contain only letters, digits, dash, or underscore.');
+        return;
       }
-    }
-    setError(null);
-    setSaving(true);
-    const payload = rowsToServers(rows);
-    const data = await saveMcpServers(payload);
-    setSaving(false);
-    if (!data) {
-      setError(t('mcpClient.saveFailed'));
-      return false;
-    }
-    const fresh = rowsFromServers(data.servers);
-    setRows(fresh);
-    setSavedSig(signature(fresh));
-    setTemplates(data.templates);
-    setSavedAt(Date.now());
-    onServersChanged?.(data.servers);
-    return true;
-  };
+      if (rows.some(r => r.id === wizard.id)) {
+        setWizardError(`Server ID "${wizard.id}" is already used. Pick a different name.`);
+        return;
+      }
+      if (wizard.transport === 'stdio' && !wizard.command.trim()) {
+        setWizardError('Command is required for stdio transport.');
+        return;
+      }
+      if (wizard.transport !== 'stdio') {
+        if (!wizard.url.trim()) {
+          setWizardError('URL is required for SSE / HTTP transport.');
+          return;
+        }
+        try {
+          const p = new URL(wizard.url);
+          if (p.protocol !== 'http:' && p.protocol !== 'https:') throw new Error();
+        } catch {
+          setWizardError('URL must use http:// or https://.');
+          return;
+        }
+      }
+      const newRow = wizardToRow(wizard);
+      const nextRows = [...rows, newRow];
+      setRows(nextRows);
+      setWizard(null);
+      setWizardError(null);
+      // Save immediately after adding
+      void saveRows(nextRows);
+    };
 
-  useImperativeHandle(ref, () => ({
-    save,
-    hasDirty: () => dirty,
-  }), [save, dirty]);
+    const save = () => saveRows(rows);
 
-  if (!loaded) {
+    useImperativeHandle(ref, () => ({
+      save,
+      hasDirty: () => dirty,
+    }), [save, dirty]);
+
+    const handleRowSave = () => void save();
+
+    if (!loaded) {
+      return (
+        <section className="settings-section">
+          <div className="section-head">
+            <div>
+              <h3>{t('mcpClient.title')}</h3>
+              <p className="hint">{t('common.loading')}</p>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section className="settings-section">
         <div className="section-head">
           <div>
             <h3>{t('mcpClient.title')}</h3>
-            <p className="hint">{t('common.loading')}</p>
+            <p className="hint">{t('mcpClient.subtitle')}</p>
           </div>
+          <button
+            type="button"
+            className="primary mcp-add-btn"
+            onClick={openWizard}
+            disabled={wizard !== null}
+          >
+            <Icon name="plus" size={13} />
+            <span>{t('mcpClient.addServer')}</span>
+          </button>
+        </div>
+
+        {error ? (
+          <div className="mcp-error">{error}</div>
+        ) : null}
+
+        {/* ── Add server wizard ── */}
+        {wizard !== null && (
+          <div className="mcp-wizard">
+            <div className="mcp-wizard-header">
+              <span className="mcp-wizard-title">Add MCP server</span>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={closeWizard}
+                aria-label="Cancel"
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+
+            <div className="mcp-row-grid">
+              <label className="mcp-row-field">
+                <span className="mcp-row-field-label">Server ID</span>
+                <input
+                  ref={wizardIdRef}
+                  type="text"
+                  value={wizard.id}
+                  onChange={(e) => setWizard({ ...wizard, id: e.target.value })}
+                  placeholder="my-server"
+                  spellCheck={false}
+                />
+              </label>
+              <label className="mcp-row-field">
+                <span className="mcp-row-field-label">Transport</span>
+                <select
+                  value={wizard.transport}
+                  onChange={(e) => setWizard({ ...wizard, transport: e.target.value as WizardDraft['transport'] })}
+                >
+                  <option value="stdio">stdio (local command)</option>
+                  <option value="sse">SSE (HTTP event stream)</option>
+                  <option value="http">streamable HTTP</option>
+                </select>
+              </label>
+            </div>
+
+            {wizard.transport === 'stdio' ? (
+              <>
+                <label className="mcp-row-field mcp-row-field-stack">
+                  <span className="mcp-row-field-label">Command</span>
+                  <input
+                    type="text"
+                    value={wizard.command}
+                    onChange={(e) => setWizard({ ...wizard, command: e.target.value })}
+                    placeholder="e.g. npx, node, /usr/local/bin/my-server"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="mcp-row-field mcp-row-field-stack">
+                  <span className="mcp-row-field-label">Args <span className="mcp-row-field-hint">(space-separated)</span></span>
+                  <input
+                    type="text"
+                    value={wizard.args}
+                    onChange={(e) => setWizard({ ...wizard, args: e.target.value })}
+                    placeholder="-y @modelcontextprotocol/server-filesystem /path/to/dir"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="mcp-row-field mcp-row-field-stack">
+                  <span className="mcp-row-field-label">Env variables <span className="mcp-row-field-hint">(KEY=VALUE, one per line)</span></span>
+                  <textarea
+                    rows={3}
+                    value={wizard.envText}
+                    onChange={(e) => setWizard({ ...wizard, envText: e.target.value })}
+                    placeholder="GITHUB_TOKEN=ghp_…"
+                    spellCheck={false}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="mcp-row-field mcp-row-field-stack">
+                  <span className="mcp-row-field-label">URL</span>
+                  <input
+                    type="text"
+                    value={wizard.url}
+                    onChange={(e) => setWizard({ ...wizard, url: e.target.value })}
+                    placeholder="https://mcp.example.com/mcp"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="mcp-row-field mcp-row-field-stack">
+                  <span className="mcp-row-field-label">Headers <span className="mcp-row-field-hint">(KEY=VALUE, one per line)</span></span>
+                  <textarea
+                    rows={3}
+                    value={wizard.headersText}
+                    onChange={(e) => setWizard({ ...wizard, headersText: e.target.value })}
+                    placeholder="Authorization=Bearer your-token"
+                    spellCheck={false}
+                  />
+                </label>
+              </>
+            )}
+
+            {wizardError ? (
+              <div className="mcp-wizard-error">{wizardError}</div>
+            ) : null}
+
+            <div className="mcp-wizard-foot">
+              <button type="button" className="primary" onClick={commitWizard}>
+                Add server
+              </button>
+              <button type="button" onClick={closeWizard}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {rows.length === 0 && !wizard ? (
+          <div className="mcp-empty">
+            <div className="mcp-empty-icon">
+              <Icon name="puzzle" size={28} />
+            </div>
+            <strong className="mcp-empty-title">{t('mcpClient.emptyTitle')}</strong>
+            <p className="mcp-empty-body">
+              Click <strong>Add server</strong> to connect a stdio command or an HTTP/SSE endpoint.
+            </p>
+          </div>
+        ) : rows.length > 0 ? (
+          <div className="mcp-rows">
+            {rows.map((row, idx) => (
+              <McpRow
+                key={row._localId}
+                row={row}
+                idx={idx}
+                total={rows.length}
+                onChange={(patch) => updateRow(idx, patch)}
+                onRemove={() => removeRow(idx)}
+                onSave={handleRowSave}
+                saving={saving}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        <div className="mcp-foot">
+          {savedAt && !dirty ? (
+            <span className="hint mcp-saved-msg">{t('settings.connectorsSaved')}.</span>
+          ) : null}
+          <span className="mcp-foot-spacer" />
+          <span className="hint">
+            {t('mcpClient.storedAt')} <code>.od/mcp-config.json</code>
+          </span>
         </div>
       </section>
     );
   }
-
-  return (
-    <section className="settings-section">
-      <div className="section-head">
-        <div>
-          <h3>{t('mcpClient.title')}</h3>
-          <p className="hint">{t('mcpClient.subtitle')}</p>
-        </div>
-        <button
-          type="button"
-          className="primary mcp-add-btn"
-          onClick={() => {
-            trackIntegrationsMcpTabClick(analytics.track, {
-              page_name: 'integrations',
-              area: 'mcp_tab',
-              element: 'add_server',
-            });
-            setPickerOpen((v) => !v);
-          }}
-          aria-expanded={pickerOpen}
-        >
-          <Icon name="sparkles" size={13} />
-          <span>{t('mcpClient.addServer')}</span>
-        </button>
-      </div>
-
-      <McpAgentSupportBanner agents={agents} />
-
-      {pickerOpen ? (
-        <PickerPanel
-          templates={templates}
-          query={pickerQuery}
-          onQueryChange={setPickerQuery}
-          onPick={addFromTemplate}
-          onPickBlank={addBlank}
-          onClose={() => setPickerOpen(false)}
-        />
-      ) : null}
-
-      {error ? (
-        <div className="mcp-error">{error}</div>
-      ) : null}
-
-      {rows.length === 0 ? (
-        <div className="empty-card">
-          <strong>{t('mcpClient.emptyTitle')}</strong>
-          <p className="hint">
-            {t('mcpClient.emptyBody')}
-          </p>
-        </div>
-      ) : (
-        <div className="mcp-rows">
-          {rows.map((row, idx) => (
-            <McpRow
-              key={row._localId}
-              row={row}
-              idx={idx}
-              total={rows.length}
-              template={
-                row.templateId
-                  ? templates.find((t) => t.id === row.templateId)
-                  : undefined
-              }
-              onChange={(patch) => updateRow(idx, patch)}
-              onRemove={() => removeRow(idx)}
-              onMoveUp={idx > 0 ? () => moveRow(idx, -1) : undefined}
-              onMoveDown={idx < rows.length - 1 ? () => moveRow(idx, 1) : undefined}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="mcp-foot">
-        <button
-          type="button"
-          className="primary"
-          onClick={() => {
-            trackIntegrationsMcpTabClick(analytics.track, {
-              page_name: 'integrations',
-              area: 'mcp_tab',
-              element: 'saved',
-            });
-            void save();
-          }}
-          disabled={saving || !dirty}
-        >
-          {saving ? t('settings.autosaveSaving') : dirty ? t('mcpClient.saveChanges') : t('settings.autosaveSaved')}
-        </button>
-        {savedAt && !dirty ? (
-          <span className="hint mcp-saved-msg">{t('settings.connectorsSaved')}.</span>
-        ) : null}
-        <span className="mcp-foot-spacer" />
-        <span className="hint">
-          {t('mcpClient.storedAt')} <code>.od/mcp-config.json</code>
-        </span>
-      </div>
-    </section>
-  );
-});
-
-interface PickerPanelProps {
-  templates: McpTemplate[];
-  query: string;
-  onQueryChange: (q: string) => void;
-  onPick: (tpl: McpTemplate) => void;
-  onPickBlank: () => void;
-  onClose: () => void;
-}
-
-/**
- * The "Add server" picker, broken out so we can give it categorized
- * `<details>` groups, an inline filter and a sticky close affordance.
- *
- * UX rules:
- *  - Groups are collapsed by default once the catalog crosses ~12 entries
- *    so the picker fits in a normal viewport. We pre-expand all groups
- *    when the user types a search so matches are immediately visible.
- *  - Groups with zero matching templates are hidden entirely while a
- *    search is active to avoid a wall of empty headers.
- *  - "Custom server" lives in its own footer card pinned below the groups
- *    so users can always reach it even after scrolling through templates.
- */
-function PickerPanel({
-  templates,
-  query,
-  onQueryChange,
-  onPick,
-  onPickBlank,
-  onClose,
-}: PickerPanelProps) {
-  const grouped = useMemo(() => {
-    const buckets = new Map<McpTemplate['category'], McpTemplate[]>();
-    for (const tpl of templates) {
-      const list = buckets.get(tpl.category) ?? [];
-      list.push(tpl);
-      buckets.set(tpl.category, list);
-    }
-    return buckets;
-  }, [templates]);
-
-  const trimmed = query.trim();
-  const hasQuery = trimmed.length > 0;
-
-  // Total visible across all groups so we can show an empty-state if the
-  // search filters everything out.
-  let visibleTotal = 0;
-  const renderGroups = CATEGORY_ORDER.map((cat) => {
-    const all = grouped.get(cat.id) ?? [];
-    const matched = all.filter((t) => templateMatchesQuery(t, trimmed));
-    visibleTotal += matched.length;
-    if (all.length === 0) return null;
-    if (hasQuery && matched.length === 0) return null;
-    // Default-expanded for the first three groups (the visual-asset
-    // pipeline most users will land here for); collapsed otherwise.
-    // Active query forces every visible group open so matches surface
-    // without an extra click.
-    const defaultOpen =
-      hasQuery ||
-      cat.id === 'image-generation' ||
-      cat.id === 'image-editing' ||
-      cat.id === 'web-capture';
-    return (
-      <details
-        key={cat.id}
-        className="mcp-picker-group"
-        open={defaultOpen}
-      >
-        <summary className="mcp-picker-group-summary">
-          <span className="mcp-picker-group-summary-title">{cat.label}</span>
-          <span className="mcp-picker-group-summary-count">
-            {hasQuery ? `${matched.length}/${all.length}` : all.length}
-          </span>
-          <span className="mcp-picker-group-summary-hint">{cat.hint}</span>
-        </summary>
-        <div className="mcp-picker-grid">
-          {matched.map((tpl) => (
-            <PickerCard key={tpl.id} tpl={tpl} onPick={() => onPick(tpl)} />
-          ))}
-        </div>
-      </details>
-    );
-  });
-
-  return (
-    <div className="mcp-picker">
-      <div className="mcp-picker-head">
-        <div className="mcp-picker-head-row">
-          <strong>Pick a template</strong>
-          <button
-            type="button"
-            className="icon-btn mcp-picker-close"
-            onClick={onClose}
-            title="Close picker"
-            aria-label="Close picker"
-          >
-            ×
-          </button>
-        </div>
-        <span className="hint">
-          Pre-fills the form. You can still edit any field after.
-        </span>
-        <input
-          type="search"
-          className="mcp-picker-search"
-          placeholder="Filter by name, transport, capability…"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          spellCheck={false}
-          autoFocus
-        />
-      </div>
-
-      <div className="mcp-picker-groups">
-        {renderGroups}
-        {hasQuery && visibleTotal === 0 ? (
-          <div className="mcp-picker-empty hint">
-            No templates match &ldquo;{trimmed}&rdquo;. Try clearing the filter
-            or use the custom server option below.
-          </div>
-        ) : null}
-      </div>
-
-      <div className="mcp-picker-foot">
-        <button
-          type="button"
-          className="mcp-picker-item mcp-picker-item-action mcp-picker-custom"
-          onClick={onPickBlank}
-        >
-          <span className="mcp-picker-item-head">
-            <Icon name="settings" size={13} />
-            <strong>Custom server</strong>
-          </span>
-          <span className="mcp-picker-desc">
-            Empty form. Pick stdio or SSE / HTTP and fill the fields yourself.
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PickerCard({
-  tpl,
-  onPick,
-}: {
-  tpl: McpTemplate;
-  onPick: () => void;
-}) {
-  return (
-    <div className="mcp-picker-item">
-      <button
-        type="button"
-        className="mcp-picker-item-action"
-        onClick={onPick}
-        title={tpl.description}
-      >
-        <span className="mcp-picker-item-head">
-          <Icon name="link" size={13} />
-          <strong>{tpl.label}</strong>
-          <span className="mcp-picker-transport">{tpl.transport}</span>
-        </span>
-        <span className="mcp-picker-desc">{tpl.description}</span>
-        {tpl.example ? (
-          <span className="mcp-picker-example">
-            <span className="mcp-picker-example-label">Try:</span>
-            <span className="mcp-picker-example-text">"{tpl.example}"</span>
-          </span>
-        ) : null}
-      </button>
-      {tpl.homepage ? (
-        <a
-          className="mcp-picker-homepage"
-          href={tpl.homepage}
-          target="_blank"
-          rel="noreferrer noopener"
-          title={tpl.homepage}
-        >
-          <Icon name="external-link" size={11} />
-          <span>Homepage</span>
-        </a>
-      ) : null}
-    </div>
-  );
-}
+);
 
 interface RowProps {
   row: DraftRow;
   idx: number;
   total: number;
-  // The original built-in template this row was instantiated from, when the
-  // user picked a preset. Lets us surface description / homepage / example
-  // hints inline so the saved row isn't a wall of opaque form fields.
-  template?: McpTemplate;
   onChange: (patch: Partial<DraftRow>) => void;
   onRemove: () => void;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
+  onSave: () => void;
+  saving: boolean;
 }
 
-function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMoveDown }: RowProps) {
-  const isHttpLike = row.transport === 'http' || row.transport === 'sse';
-  const usesManagedOAuth = isHttpLike && effectiveMcpAuthMode(row) === 'oauth';
+function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProps) {
   const [expanded, setExpanded] = useState<boolean>(false);
-  const summaryTitle = row.label?.trim() || row.id || 'Unnamed MCP server';
-  const [showMcpExample, setShowMcpExample] = useState<boolean>(false);
-  const helperId = `mcp-json-helper-panel-${row._localId}`;
+  const [toolsExpanded, setToolsExpanded] = useState<boolean>(false);
+  // For http/sse servers we probe the daemon OAuth status to determine
+  // whether there is a live connection. For stdio servers we treat
+  // `enabled` as the connection indicator (daemon doesn't expose per-process
+  // liveness for stdio MCP servers).
+  const [oauthConnected, setOauthConnected] = useState<boolean | null>(null);
+
+  const isHttpTransport = row.transport === 'http' || row.transport === 'sse';
+  const summaryTitle = row.label || row.id || 'Unnamed MCP server';
+
+  // Probe OAuth status once for HTTP/SSE servers
+  useEffect(() => {
+    if (!isHttpTransport || !row.enabled) {
+      setOauthConnected(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const status = await fetchMcpOAuthStatus(row.id);
+      if (!cancelled) {
+        setOauthConnected(status?.connected ?? false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [row.id, row.transport, row.enabled]);
+
+  // Determine status dot state:
+  //  - stdio: green when enabled, gray when disabled
+  //  - http/sse with no token configured: green when enabled (plain HTTP)
+  //  - http/sse with OAuth: green only when oauth token is valid
+  const isConnected = isHttpTransport
+    ? (oauthConnected === null ? row.enabled : oauthConnected)
+    : row.enabled;
+
+  const tools = getMockToolsForServer(row.id);
+  const hasTools = tools.length > 0;
 
   return (
-    <div
-      className={`mcp-row${row.enabled ? '' : ' mcp-row-disabled'}${
-        expanded ? ' mcp-row-expanded' : ''
-      }`}
-    >
+    <div className={`mcp-row${row.enabled ? '' : ' mcp-row-disabled'}${expanded ? ' mcp-row-expanded' : ''}`}>
       <div className="mcp-row-head">
-        <label className="mcp-row-toggle" title={row.enabled ? 'Enabled' : 'Disabled'}>
-          <input
-            type="checkbox"
-            checked={row.enabled}
-            onChange={(e) => onChange({ enabled: e.target.checked })}
-            aria-label="Enable this MCP server"
+        <div className="mcp-row-title-area">
+          <span
+            className={`mcp-status-dot${isConnected ? ' active' : ''}`}
+            title={isConnected ? 'Connected' : 'Not connected'}
           />
-        </label>
-        {expanded ? (
-          <input
-            type="text"
-            className="mcp-row-label"
-            value={row.label ?? ''}
-            placeholder="Display name (optional)"
-            onChange={(e) => onChange({ label: e.target.value })}
-          />
-        ) : (
+          <span className="mcp-row-title">{summaryTitle}</span>
+          <span className="mcp-row-summary-transport">{row.transport}</span>
+        </div>
+
+        <div className="mcp-row-actions">
           <button
             type="button"
-            className="mcp-row-summary-title"
-            onClick={() => setExpanded(true)}
-            title="Expand to edit"
-          >
-            <span className="mcp-row-summary-name">{summaryTitle}</span>
-            <span
-              className="mcp-row-summary-transport"
-              aria-label={`Transport: ${row.transport}`}
-            >
-              {row.transport}
-            </span>
-          </button>
-        )}
-        <span className="mcp-row-counter hint">
-          {idx + 1} / {total}
-        </span>
-        <div className="mcp-row-actions">
-          {onMoveUp ? (
-            <Button size="icon" onClick={onMoveUp} title="Move up">
-              ↑
-            </Button>
-          ) : null}
-          {onMoveDown ? (
-            <Button size="icon" onClick={onMoveDown} title="Move down">
-              ↓
-            </Button>
-          ) : null}
-          <Button
-            size="icon"
-            onClick={onRemove}
-            title="Remove this MCP server"
-          >
-            ×
-          </Button>
-          <Button
-            size="icon"
-            className="mcp-row-toggle-btn"
+            className={`icon-btn${expanded ? ' active' : ''}`}
             onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-label={expanded ? 'Collapse this MCP server' : 'Expand this MCP server'}
-            title={expanded ? 'Collapse' : 'Expand'}
+            title="Configure"
+            aria-label="Configure"
           >
-            <Icon name="chevron-down" size={13} />
-          </Button>
+            <Icon name="settings" size={15} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn danger"
+            onClick={onRemove}
+            title="Delete server"
+            aria-label="Delete server"
+          >
+            <Icon name="trash" size={15} />
+          </button>
+          <label className="toggle-switch toggle-switch-sm">
+            <input
+              type="checkbox"
+              checked={row.enabled}
+              onChange={(e) => onChange({ enabled: e.target.checked })}
+              aria-label="Enable this MCP server"
+            />
+            <span className="toggle-slider" />
+          </label>
         </div>
       </div>
 
-      {expanded ? (
-        <>
-          {template ? (
-            <details className="mcp-row-info">
-              <summary className="mcp-row-info-summary">
-                <span className="mcp-row-info-summary-label">
-                  About {template.label}
-                </span>
-                {template.homepage ? (
-                  <a
-                    className="mcp-row-info-link"
-                    href={template.homepage}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    title={template.homepage}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Icon name="external-link" size={11} />
-                    <span>Homepage</span>
-                  </a>
-                ) : null}
-              </summary>
-              <div className="mcp-row-info-body">
-                {template.description ? (
-                  <p className="mcp-row-info-desc hint">{template.description}</p>
-                ) : null}
-                {template.example ? (
-                  <p
-                    className="mcp-row-info-example"
-                    title="Paste this prompt into the chat composer to try the server end-to-end"
-                  >
-                    <span className="mcp-row-info-example-label">Try:</span>{' '}
-                    <span className="mcp-row-info-example-text">"{template.example}"</span>
-                  </p>
-                ) : null}
-              </div>
-            </details>
-          ) : null}
+      <div className="mcp-tools-container">
+        {hasTools ? (
+          <button
+            type="button"
+            className="mcp-tools-toggle"
+            onClick={() => setToolsExpanded((prev) => !prev)}
+          >
+            <Icon
+              name="chevron-down"
+              size={12}
+              style={{
+                transform: toolsExpanded ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.15s ease',
+              }}
+            />
+            <span>{tools.length === 1 ? '1 tool enabled' : `${tools.length} tools enabled`}</span>
+          </button>
+        ) : (
+          <span className="mcp-no-tools">0 tools enabled</span>
+        )}
 
-          {isHttpLike && !row._isNew && row.id ? (
-            usesManagedOAuth ? (
-              <McpOAuthControl serverId={row.id} />
-            ) : (
-              <div className="mcp-oauth-hint hint">
-                <strong>No managed OAuth.</strong> Open Design will use this
-                server as configured. Add headers below if the server needs a
-                token.
-              </div>
-            )
-          ) : null}
-          {isHttpLike && row._isNew && usesManagedOAuth ? (
-            <div className="mcp-oauth-hint hint">
-              Save first, then click <strong>Connect</strong> to grant Open Design
-              access via the provider's OAuth flow.
-            </div>
-          ) : null}
-          {isHttpLike && row._isNew && !usesManagedOAuth ? (
-            <div className="mcp-oauth-hint hint">
-              <strong>No managed OAuth.</strong> Save this server and Open Design
-              will use it directly.
-            </div>
-          ) : null}
+        {toolsExpanded && hasTools && (
+          <div className="mcp-tools-list">
+            {tools.map((tool) => (
+              <span key={tool} className="mcp-tool-pill">{tool}</span>
+            ))}
+          </div>
+        )}
+      </div>
 
+      {expanded && (
+        <div className="mcp-row-config-fields">
           <div className="mcp-row-grid">
             <label className="mcp-row-field">
               <span className="mcp-row-field-label">ID</span>
@@ -889,12 +645,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                 value={row.transport}
                 onChange={(e) => {
                   const transport = e.target.value as DraftRow['transport'];
-                  onChange({
-                    transport,
-                    ...(transport === 'http' || transport === 'sse'
-                      ? { authMode: row.authMode ?? inferMcpAuthMode(row.url) }
-                      : { authMode: undefined }),
-                  });
+                  onChange({ transport });
                 }}
               >
                 <option value="stdio">stdio</option>
@@ -947,20 +698,6 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : (
             <>
               <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">OAuth mode</span>
-                <select
-                  value={effectiveMcpAuthMode(row)}
-                  onChange={(e) =>
-                    onChange({
-                      authMode: e.target.value as NonNullable<McpServerConfig['authMode']>,
-                    })
-                  }
-                >
-                  <option value="none">No managed OAuth</option>
-                  <option value="oauth">Managed OAuth</option>
-                </select>
-              </label>
-              <label className="mcp-row-field mcp-row-field-stack">
                 <span className="mcp-row-field-label">URL</span>
                 <input
                   type="text"
@@ -968,7 +705,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                   placeholder="https://mcp.higgsfield.ai/mcp"
                   onChange={(e) => {
                     const url = e.target.value;
-                    onChange({ url, authMode: authModeAfterUrlChange(row, url) });
+                    onChange({ url });
                   }}
                   spellCheck={false}
                 />
@@ -986,454 +723,18 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             </>
           )}
 
-          <div className={`mcp-json-helper ${showMcpExample ? 'is-open' : ''}`}>
+          <div className="mcp-row-config-foot">
             <button
               type="button"
-              className="mcp-json-helper-toggle"
-              aria-expanded={showMcpExample}
-              aria-controls={helperId}
-              onClick={() => setShowMcpExample((prev) => !prev)}
+              className="primary"
+              onClick={onSave}
+              disabled={saving}
             >
-              <span className="mcp-json-helper-toggle-content">
-                <span className="mcp-json-helper-eye">
-                  <Icon name="eye" />
-                </span>
-                <span className="mcp-json-helper-toggle-text">
-                  Need help? Map your MCP server's JSON config using the example below.
-                </span>
-              </span>
-              <span className="mcp-json-helper-toggle-icon">
-                {showMcpExample ? (
-                  <Icon name="arrow-up" />
-                ) : (
-                  <Icon name="chevron-down" />
-                )}
-              </span>
+              {saving ? 'Saving…' : 'Save'}
             </button>
-
-            {showMcpExample && (
-              <div className="mcp-json-helper-example" id={helperId}>
-                <div className="mcp-json-helper-example-head">
-                  Example MCP JSON
-                </div>
-                <pre className="mcp-json-helper-code">
-                  <code>
-                    <span className="json-punctuation">{"{"}</span>
-                    {"\n  "}
-                    <span className="json-key">"mcpServers"</span>
-                    <span className="json-punctuation">: {"{"}</span>
-                    {"\n    "}
-                    <span className="json-key">"tdesign"</span>
-                    <span className="json-punctuation">: {"{"}</span>
-                    {"\n      "}
-                    <span className="json-key">"command"</span>
-                    <span className="json-punctuation">:</span>{" "}
-                    <span className="json-string">"npx"</span>
-                    <span className="json-punctuation">,</span>
-                    {"\n      "}
-                    <span className="json-key">"args"</span>
-                    <span className="json-punctuation">: [</span>
-                    <span className="json-string">"-y"</span>
-                    <span className="json-punctuation">, </span>
-                    <span className="json-string">"tdesign-mcp-server@latest"</span>
-                    <span className="json-punctuation">],</span>
-                    {"\n      "}
-                    <span className="json-key">"env"</span>
-                    <span className="json-punctuation">: {"{"}</span>
-                    {"\n        "}
-                    <span className="json-key">"API_KEY"</span>
-                    <span className="json-punctuation">:</span>{" "}
-                    <span className="json-string">"your-key-here"</span>
-                    {"\n      "}
-                    <span className="json-punctuation">{"}"}</span>
-                    {"\n    "}
-                    <span className="json-punctuation">{"}"}</span>
-                    {"\n  "}
-                    <span className="json-punctuation">{"}"}</span>
-                    {"\n"}
-                    <span className="json-punctuation">{"}"}</span>
-                  </code>
-                </pre>
-                <div className="mcp-json-helper-conversion">
-                  <div>
-                    <strong>Command</strong>
-                    <code>npx</code>
-                  </div>
-                  <div>
-                    <strong>Args</strong>
-                    <code>-y tdesign-mcp-server@latest</code>
-                  </div>
-                  <div>
-                    <strong>Env</strong>
-                    <code>API_KEY = your-key-here</code>
-                  </div>
-                  <div>
-                    <strong>HTTP / SSE</strong>
-                    <code>use url + headers instead of command / args</code>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * "Connect" / "Disconnect" panel for an HTTP/SSE MCP server.
- *
- * The OAuth flow is fully owned by the daemon — this component just kicks
- * it off (POST /api/mcp/oauth/start), opens the returned authorize URL in
- * a new tab, listens for the postMessage from the callback page, and
- * refreshes the local status badge. There's also a fallback poll every
- * 2 seconds while a connect is pending in case the callback page can't
- * reach back via postMessage (cross-origin tab opener edge cases).
- */
-function McpOAuthControl({ serverId }: { serverId: string }) {
-  const [status, setStatus] = useState<McpOAuthStatusResponse | null>(null);
-  const [busy, setBusy] = useState<'idle' | 'starting' | 'awaiting' | 'disconnecting' | 'refreshing'>('idle');
-  const [error, setError] = useState<string | null>(null);
-  // Holds the authorize URL while we are waiting on the user to complete
-  // OAuth in their browser. Surfaced as a fallback `<a>` so the user can
-  // re-open the tab if they accidentally closed it (or if the system
-  // browser ate the popup-open call without giving us feedback).
-  const [pendingAuthUrl, setPendingAuthUrl] = useState<string | null>(null);
-  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const refresh = async () => {
-    const data = await fetchMcpOAuthStatus(serverId);
-    if (data) setStatus(data);
-    return data;
-  };
-
-  useEffect(() => {
-    void refresh();
-  }, [serverId]);
-
-  // Listen for the postMessage that the callback HTML page emits when the
-  // OAuth flow completes. We accept messages from any origin because the
-  // callback page is served by THIS daemon, but we still validate the
-  // payload shape before reacting to it.
-  useEffect(() => {
-    function onMessage(ev: MessageEvent) {
-      const data = ev.data;
-      if (!data || typeof data !== 'object') return;
-      if (data.type !== 'mcp-oauth') return;
-      if (data.serverId && data.serverId !== serverId) return;
-      if (data.ok) {
-        setError(null);
-        setPendingAuthUrl(null);
-        void refresh();
-      } else if (typeof data.message === 'string') {
-        setError(data.message);
-      }
-      setBusy('idle');
-      stopPoll();
-    }
-    window.addEventListener('message', onMessage);
-    let bc: BroadcastChannel | null = null;
-    if (typeof BroadcastChannel !== 'undefined') {
-      bc = new BroadcastChannel('open-design-mcp-oauth');
-      bc.onmessage = (ev) => onMessage(ev as MessageEvent);
-    }
-    return () => {
-      window.removeEventListener('message', onMessage);
-      if (bc) bc.close();
-      stopPoll();
-    };
-  }, [serverId]);
-
-  function stopPoll() {
-    if (pollTimer.current) {
-      clearInterval(pollTimer.current);
-      pollTimer.current = null;
-    }
-  }
-
-  function startPoll() {
-    stopPoll();
-    let elapsed = 0;
-    pollTimer.current = setInterval(() => {
-      elapsed += 2000;
-      void (async () => {
-        const data = await refresh();
-        // Auto-stop when the daemon reports connected — handles the
-        // Electron / system-browser case where postMessage can never
-        // reach back across processes, so polling IS the delivery
-        // channel for "auth completed" events.
-        if (data?.connected) {
-          setBusy('idle');
-          setError(null);
-          setPendingAuthUrl(null);
-          stopPoll();
-        }
-      })();
-      // Top out at 5 minutes — same as the daemon-side state cache TTL.
-      if (elapsed >= 5 * 60 * 1000) stopPoll();
-    }, 2000);
-  }
-
-  const onConnect = async () => {
-    setError(null);
-    setPendingAuthUrl(null);
-    setBusy('starting');
-    const result = await startMcpOAuth(serverId);
-    if (!result.ok) {
-      setBusy('idle');
-      setError(result.message);
-      return;
-    }
-    setBusy('awaiting');
-    setPendingAuthUrl(result.response.authorizeUrl);
-    startPoll();
-    // Best-effort: try to open the tab automatically. We deliberately do
-    // NOT treat a null return value as failure — Electron's
-    // setWindowOpenHandler always returns deny (so window.open returns
-    // null) but actually invokes shell.openExternal under the hood, so
-    // the URL DID open in the system browser. The fallback link below
-    // covers the rare case where neither path actually opens a tab.
-    try {
-      window.open(
-        result.response.authorizeUrl,
-        '_blank',
-        'noopener=no,noreferrer=no',
-      );
-    } catch {
-      // ignore — fallback anchor is always rendered while pending
-    }
-  };
-
-  // Manual fallback for the user to push when they've completed auth in
-  // another tab/window but the postMessage handshake didn't fire (closed
-  // opener tab, cross-origin Electron BrowserWindow, etc.).
-  const onRefreshStatus = async () => {
-    setBusy('refreshing');
-    const data = await refresh();
-    setBusy('idle');
-    if (data?.connected) {
-      setError(null);
-      setPendingAuthUrl(null);
-      stopPoll();
-    } else if (busy === 'awaiting' || pendingAuthUrl) {
-      // Still pending — keep the awaiting indicator visible so the user
-      // knows we're still listening for the callback.
-      setBusy('awaiting');
-    }
-  };
-
-  const onCancelPending = () => {
-    setPendingAuthUrl(null);
-    setBusy('idle');
-    setError(null);
-    stopPoll();
-  };
-
-  const onDisconnect = async () => {
-    setBusy('disconnecting');
-    const ok = await disconnectMcpOAuth(serverId);
-    setBusy('idle');
-    if (ok) {
-      setError(null);
-      setPendingAuthUrl(null);
-      setStatus({ connected: false });
-    } else {
-      setError('Disconnect failed. Check daemon logs.');
-    }
-  };
-
-  const connected = Boolean(status?.connected);
-  const expiresLabel =
-    status?.expiresAt && status.expiresAt > 0
-      ? new Date(status.expiresAt).toLocaleString()
-      : null;
-  const isAwaiting = busy === 'awaiting' || (Boolean(pendingAuthUrl) && !connected);
-
-  return (
-    <div className={`mcp-oauth-control${connected ? ' connected' : ''}`}>
-      <div className="mcp-oauth-status" aria-live="polite">
-        {connected ? (
-          <>
-            <span className="mcp-oauth-dot mcp-oauth-dot-ok" aria-hidden />
-            <span>
-              <strong>Connected.</strong>{' '}
-              {expiresLabel ? (
-                <span className="hint">Token expires {expiresLabel}.</span>
-              ) : (
-                <span className="hint">Non-expiring token.</span>
-              )}
-            </span>
-          </>
-        ) : isAwaiting ? (
-          <>
-            <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
-            <span>
-              <strong>Waiting for authorization…</strong>{' '}
-              <span className="hint">
-                Approve in the browser tab that opened. We'll catch the callback
-                automatically — or click Refresh below if you completed it
-                already.
-              </span>
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="mcp-oauth-dot" aria-hidden />
-            <span>
-              <strong>Not connected.</strong>{' '}
-              <span className="hint">
-                Click Connect to grant Open Design access via the provider's OAuth flow.
-              </span>
-            </span>
-          </>
-        )}
-      </div>
-
-      <div className="mcp-oauth-actions">
-        {connected ? (
-          <>
-            <button
-              type="button"
-              className="primary"
-              onClick={onConnect}
-              disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Reauthenticate (replaces the existing token)"
-            >
-              {busy === 'starting' || busy === 'awaiting' ? 'Connecting…' : 'Reconnect'}
-            </button>
-            <button
-              type="button"
-              onClick={onRefreshStatus}
-              disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Re-check token status against the daemon"
-            >
-              {busy === 'refreshing' ? 'Checking…' : 'Refresh'}
-            </button>
-            <button
-              type="button"
-              onClick={onDisconnect}
-              disabled={busy !== 'idle' && busy !== 'refreshing'}
-            >
-              {busy === 'disconnecting' ? 'Disconnecting…' : 'Disconnect'}
-            </button>
-          </>
-        ) : isAwaiting ? (
-          <>
-            <button
-              type="button"
-              className="primary"
-              onClick={onRefreshStatus}
-              disabled={busy === 'refreshing'}
-              title="I've completed authorization — check connection status now"
-            >
-              {busy === 'refreshing' ? 'Checking…' : 'I\u2019ve approved — Refresh'}
-            </button>
-            <button type="button" onClick={onCancelPending}>
-              Cancel
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="primary"
-            onClick={onConnect}
-            disabled={busy !== 'idle'}
-          >
-            {busy === 'starting' ? 'Starting…' : 'Connect'}
-          </button>
-        )}
-      </div>
-
-      {pendingAuthUrl && !connected ? (
-        <div className="mcp-oauth-fallback">
-          <span className="hint">
-            Browser didn't open?{' '}
-            <a
-              href={pendingAuthUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="md-link"
-            >
-              Open authorization page
-            </a>
-            .
-          </span>
         </div>
-      ) : null}
-
-      {error ? <div className="mcp-oauth-error">{error}</div> : null}
-    </div>
-  );
-}
-
-/**
- * Renders a compact two-line banner showing which installed CLI agents
- * receive the user's external MCP servers at spawn time and which do not.
- * The truth source is the daemon `/api/agents` payload — every runtime def
- * carries an `externalMcpInjection` discriminator (one of
- * `claude-mcp-json` / `acp-merge` / `opencode-env-content`, or undefined
- * when no native injection is wired yet).
- *
- * The banner replaces the previous silent-failure UX from issue #2142:
- * users were configuring servers under OpenCode / Codex / Gemini and
- * never learning the daemon never forwarded them to the agent process.
- * Rendered above the picker so it is the first thing the user reads.
- */
-function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
-  const t = useT();
-  // Empty payload = either still loading or daemon unreachable. Either
-  // way, render nothing — the error banner below already covers the
-  // "daemon unreachable" path and we don't want to flash an empty hint
-  // during the initial fetch.
-  if (agents.length === 0) return null;
-  // `/api/agents` returns every runtime def the daemon knows about,
-  // including CLIs the user hasn't installed (those carry
-  // `available: false`). Splitting the full catalog into "Forwarded to /
-  // Not forwarded to" would mention adapters the user can't even launch,
-  // which is misleading. Scope the banner to installed CLIs only.
-  const installed = agents.filter((a) => a.available);
-  if (installed.length === 0) return null;
-  const supported = installed.filter(
-    (a) => typeof a.externalMcpInjection === 'string',
-  );
-  const unsupported = installed.filter(
-    (a) => !a.externalMcpInjection,
-  );
-  if (supported.length === 0 && unsupported.length === 0) return null;
-  // ACP adapters (Hermes / Kimi / Kilo / Kiro / Vibe / Devin) currently
-  // accept stdio MCP servers only — `buildAcpMcpServers()` in
-  // `apps/daemon/src/mcp-config.ts` filters to `transport === 'stdio'`
-  // because the ACP `mcpServers` descriptor itself has no slot for
-  // HTTP / SSE entries. Tag those runtimes inline so the banner does
-  // not silently claim full forwarding for HTTP MCP servers, which
-  // would re-introduce the very silent-failure UX we are removing.
-  const renderNames = (list: AgentInfo[]) =>
-    list
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((a) =>
-        a.externalMcpInjection === 'acp-merge'
-          ? `${a.name} (stdio only)`
-          : a.name,
-      )
-      .join(' · ');
-  const hasAcpSupported = supported.some(
-    (a) => a.externalMcpInjection === 'acp-merge',
-  );
-  return (
-    <div className="mcp-agent-support">
-      {supported.length > 0 ? (
-        <p className="hint mcp-agent-support-line">
-          <strong>{t('mcpClient.forwardedToLabel')}</strong> {renderNames(supported)}.
-          {hasAcpSupported ? <> {t('mcpClient.forwardedAcpNote')}</> : null}
-        </p>
-      ) : null}
-      {unsupported.length > 0 ? (
-        <p className="hint mcp-agent-support-line mcp-agent-support-unsupported">
-          <strong>{t('mcpClient.notForwardedToLabel')}</strong> {renderNames(unsupported)}. {t('mcpClient.notForwardedNote')}
-        </p>
-      ) : null}
+      )}
     </div>
   );
 }

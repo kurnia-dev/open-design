@@ -118,30 +118,6 @@ export function IntegrationsView({
       <div className="integrations-view__panel">
         {activeTab === 'mcp' ? <McpClientSection /> : null}
 
-        {activeTab === 'connectors' ? (
-          <ConnectorSection
-            cfg={localConfig}
-            setCfg={setLocalConfig}
-            onConnectorsTabClick={(element: any) =>
-              trackIntegrationsConnectorsTabClick(analytics.track, {
-                page_name: 'integrations',
-                area: 'connectors_tab',
-                element,
-              })
-            }
-            onConnectorAuthResult={({ connectorId, action, result, errorCode }: any) =>
-              trackSettingsConnectorAuthResult(analytics.track, {
-                page_name: 'settings',
-                area: 'connectors',
-                connector_id: connectorId,
-                action,
-                result,
-                ...(errorCode ? { error_code: errorCode } : {}),
-              })
-            }
-          />
-        ) : null}
-
         {activeTab === 'skills' ? <SkillsComingSoonPanel /> : null}
 
         {activeTab === 'use-everywhere' ? (

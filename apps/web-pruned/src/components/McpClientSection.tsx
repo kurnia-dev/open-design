@@ -24,8 +24,10 @@ import {
   disconnectMcpOAuth,
 } from '../state/mcp';
 import type {
+  McpAuthMode,
   McpServerConfig,
   McpOAuthStatusResponse,
+  McpTransport,
 } from '../state/mcp';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
@@ -51,6 +53,7 @@ interface DraftRow extends McpServerConfig {
 interface WizardDraft {
   id: string;
   transport: McpServerConfig['transport'];
+  authMode?: McpAuthMode;
   command: string;
   args: string;
   url: string;
@@ -99,6 +102,137 @@ function authModeAfterUrlChange(
     return inferMcpAuthMode(nextUrl);
   }
   return row.authMode;
+}
+
+function McpConfigFields({
+  id,
+  transport,
+  authMode,
+  command,
+  args,
+  envText,
+  url,
+  headersText,
+  onChange,
+  idRef,
+}: {
+  id: string;
+  transport: McpTransport;
+  authMode?: McpAuthMode;
+  command?: string;
+  args?: string;
+  envText?: string;
+  url?: string;
+  headersText?: string;
+  onChange: (patch: Record<string, unknown>) => void;
+  idRef?: React.Ref<HTMLInputElement>;
+}) {
+  return (
+    <>
+      <div className="mcp-row-grid">
+        <label className="mcp-row-field">
+          <span className="mcp-row-field-label">Server ID</span>
+          <input
+            ref={idRef ?? undefined}
+            type="text"
+            value={id}
+            onChange={(e) => onChange({ id: e.target.value })}
+            placeholder="my-server"
+            spellCheck={false}
+          />
+        </label>
+        <label className="mcp-row-field">
+          <span className="mcp-row-field-label">Transport</span>
+          <select
+            value={transport}
+            onChange={(e) => {
+              const t = e.target.value as McpTransport;
+              const patch: Record<string, unknown> = { transport: t };
+              if (t === 'http') {
+                patch.authMode = authMode ?? inferMcpAuthMode(url);
+              } else {
+                patch.authMode = undefined;
+              }
+              onChange(patch);
+            }}
+          >
+            <option value="stdio">stdio</option>
+            <option value="http">HTTP</option>
+          </select>
+        </label>
+      </div>
+
+      {transport === 'stdio' ? (
+        <>
+          <label className="mcp-row-field mcp-row-field-stack">
+            <span className="mcp-row-field-label">Command</span>
+            <input
+              type="text"
+              value={command ?? ''}
+              onChange={(e) => onChange({ command: e.target.value })}
+              placeholder="e.g. npx, node, /usr/local/bin/my-server"
+              spellCheck={false}
+            />
+          </label>
+          <label className="mcp-row-field mcp-row-field-stack">
+            <span className="mcp-row-field-label">Args <span className="mcp-row-field-hint">(space-separated)</span></span>
+            <input
+              type="text"
+              value={args ?? ''}
+              onChange={(e) => onChange({ args: e.target.value })}
+              placeholder="-y @modelcontextprotocol/server-filesystem /path/to/dir"
+              spellCheck={false}
+            />
+          </label>
+          <label className="mcp-row-field mcp-row-field-stack">
+            <span className="mcp-row-field-label">Env <span className="mcp-row-field-hint">(KEY=VALUE, one per line)</span></span>
+            <textarea
+              rows={3}
+              value={envText ?? ''}
+              onChange={(e) => onChange({ envText: e.target.value })}
+              placeholder="GITHUB_TOKEN=ghp_&#x2026;"
+              spellCheck={false}
+            />
+          </label>
+        </>
+      ) : (
+        <>
+          <label className="mcp-row-field mcp-row-field-stack">
+            <span className="mcp-row-field-label">OAuth mode</span>
+            <select
+              value={authMode ?? inferMcpAuthMode(url)}
+              onChange={(e) =>
+                onChange({ authMode: e.target.value as NonNullable<McpAuthMode> })
+              }
+            >
+              <option value="none">No managed OAuth</option>
+              <option value="oauth">Managed OAuth</option>
+            </select>
+          </label>
+          <label className="mcp-row-field mcp-row-field-stack">
+            <span className="mcp-row-field-label">URL</span>
+            <input
+              type="text"
+              value={url ?? ''}
+              onChange={(e) => onChange({ url: e.target.value })}
+              placeholder="https://mcp.example.com/mcp"
+              spellCheck={false}
+            />
+          </label>
+          <label className="mcp-row-field mcp-row-field-stack">
+            <span className="mcp-row-field-label">Headers <span className="mcp-row-field-hint">(KEY=VALUE, one per line)</span></span>
+            <textarea
+              rows={3}
+              value={headersText ?? ''}
+              onChange={(e) => onChange({ headersText: e.target.value })}
+              placeholder="Authorization=Bearer your-token"
+              spellCheck={false}
+            />
+          </label>
+        </>
+      )}
+    </>
+  );
 }
 
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
@@ -188,6 +322,7 @@ function emptyWizard(taken: ReadonlySet<string>): WizardDraft {
   return {
     id: suggestMcpServerId('my-server', taken),
     transport: 'stdio',
+    authMode: undefined,
     command: '',
     args: '',
     url: '',
@@ -204,6 +339,7 @@ function wizardToRow(w: WizardDraft): DraftRow {
     command: w.transport === 'stdio' ? w.command : undefined,
     args: w.transport === 'stdio' ? w.args.split(/\s+/).map(s => s.trim()).filter(Boolean) : undefined,
     url: w.transport !== 'stdio' ? w.url : undefined,
+    authMode: w.transport !== 'stdio' ? w.authMode ?? inferMcpAuthMode(w.url) : undefined,
     _envText: w.transport === 'stdio' ? w.envText : '',
     _headersText: w.transport !== 'stdio' ? w.headersText : '',
     _localId: genLocalId(),
@@ -402,87 +538,18 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
               </button>
             </div>
 
-            <div className="mcp-row-grid">
-              <label className="mcp-row-field">
-                <span className="mcp-row-field-label">Server ID</span>
-                <input
-                  ref={wizardIdRef}
-                  type="text"
-                  value={wizard.id}
-                  onChange={(e) => setWizard({ ...wizard, id: e.target.value })}
-                  placeholder="my-server"
-                  spellCheck={false}
-                />
-              </label>
-              <label className="mcp-row-field">
-                <span className="mcp-row-field-label">Transport</span>
-                <select
-                  value={wizard.transport}
-                  onChange={(e) => setWizard({ ...wizard, transport: e.target.value as WizardDraft['transport'] })}
-                >
-                  <option value="stdio">stdio (local command)</option>
-                  <option value="http">HTTP (streamable)</option>
-                </select>
-              </label>
-            </div>
-
-            {wizard.transport === 'stdio' ? (
-              <>
-                <label className="mcp-row-field mcp-row-field-stack">
-                  <span className="mcp-row-field-label">Command</span>
-                  <input
-                    type="text"
-                    value={wizard.command}
-                    onChange={(e) => setWizard({ ...wizard, command: e.target.value })}
-                    placeholder="e.g. npx, node, /usr/local/bin/my-server"
-                    spellCheck={false}
-                  />
-                </label>
-                <label className="mcp-row-field mcp-row-field-stack">
-                  <span className="mcp-row-field-label">Args <span className="mcp-row-field-hint">(space-separated)</span></span>
-                  <input
-                    type="text"
-                    value={wizard.args}
-                    onChange={(e) => setWizard({ ...wizard, args: e.target.value })}
-                    placeholder="-y @modelcontextprotocol/server-filesystem /path/to/dir"
-                    spellCheck={false}
-                  />
-                </label>
-                <label className="mcp-row-field mcp-row-field-stack">
-                  <span className="mcp-row-field-label">Env variables <span className="mcp-row-field-hint">(KEY=VALUE, one per line)</span></span>
-                  <textarea
-                    rows={3}
-                    value={wizard.envText}
-                    onChange={(e) => setWizard({ ...wizard, envText: e.target.value })}
-                    placeholder="GITHUB_TOKEN=ghp_…"
-                    spellCheck={false}
-                  />
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="mcp-row-field mcp-row-field-stack">
-                  <span className="mcp-row-field-label">URL</span>
-                  <input
-                    type="text"
-                    value={wizard.url}
-                    onChange={(e) => setWizard({ ...wizard, url: e.target.value })}
-                    placeholder="https://mcp.example.com/mcp"
-                    spellCheck={false}
-                  />
-                </label>
-                <label className="mcp-row-field mcp-row-field-stack">
-                  <span className="mcp-row-field-label">Headers <span className="mcp-row-field-hint">(KEY=VALUE, one per line)</span></span>
-                  <textarea
-                    rows={3}
-                    value={wizard.headersText}
-                    onChange={(e) => setWizard({ ...wizard, headersText: e.target.value })}
-                    placeholder="Authorization=Bearer your-token"
-                    spellCheck={false}
-                  />
-                </label>
-              </>
-            )}
+            <McpConfigFields
+              id={wizard.id}
+              transport={wizard.transport}
+              authMode={wizard.authMode}
+              command={wizard.command}
+              args={wizard.args}
+              envText={wizard.envText}
+              url={wizard.url}
+              headersText={wizard.headersText}
+              idRef={wizardIdRef}
+              onChange={(patch) => setWizard((prev) => ({ ...prev, ...patch } as WizardDraft))}
+            />
 
             {wizardError ? (
               <div className="mcp-wizard-error">{wizardError}</div>
@@ -745,117 +812,34 @@ function McpRow({ row, idx, total, onChange, onRemove, onSave, saving }: RowProp
             </div>
           ) : null}
 
-          <div className="mcp-row-grid">
-            <label className="mcp-row-field">
-              <span className="mcp-row-field-label">ID</span>
-              <input
-                type="text"
-                value={row.id}
-                onChange={(e) => onChange({ id: e.target.value })}
-                spellCheck={false}
-              />
-            </label>
-            <label className="mcp-row-field">
-              <span className="mcp-row-field-label">Transport</span>
-              <select
-                value={row.transport}
-                onChange={(e) => {
-                  const transport = e.target.value as DraftRow['transport'];
-                  onChange({
-                    transport,
-                    ...(transport === 'http'
-                      ? { authMode: row.authMode ?? inferMcpAuthMode(row.url) }
-                      : { authMode: undefined }),
-                  });
-                }}
-              >
-                <option value="stdio">stdio</option>
-                <option value="http">HTTP</option>
-              </select>
-            </label>
-          </div>
-
-          {row.transport === 'stdio' ? (
-            <>
-              <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Command</span>
-                <input
-                  type="text"
-                  value={row.command ?? ''}
-                  placeholder="e.g. npx, node, /path/to/binary"
-                  onChange={(e) => onChange({ command: e.target.value })}
-                  spellCheck={false}
-                />
-              </label>
-              <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Args</span>
-                <input
-                  type="text"
-                  value={(row.args ?? []).join(' ')}
-                  placeholder="space-separated"
-                  onChange={(e) =>
-                    onChange({
-                      args: e.target.value
-                        .split(/\s+/)
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                  spellCheck={false}
-                />
-              </label>
-              <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Env (KEY=VALUE)</span>
-                <textarea
-                  rows={Math.max(2, (row._envText ?? '').split('\n').length)}
-                  value={row._envText ?? ''}
-                  placeholder="GITHUB_TOKEN=ghp_…"
-                  onChange={(e) => onChange({ _envText: e.target.value })}
-                  spellCheck={false}
-                />
-              </label>
-            </>
-          ) : (
-            <>
-              <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">OAuth mode</span>
-                <select
-                  value={effectiveMcpAuthMode(row)}
-                  onChange={(e) =>
-                    onChange({
-                      authMode: e.target.value as NonNullable<McpServerConfig['authMode']>,
-                    })
-                  }
-                >
-                  <option value="none">No managed OAuth</option>
-                  <option value="oauth">Managed OAuth</option>
-                </select>
-              </label>
-              <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">URL</span>
-                <input
-                  type="text"
-                  value={row.url ?? ''}
-                  placeholder="https://mcp.higgsfield.ai/mcp"
-                  onChange={(e) => {
-                    const url = e.target.value;
-                    onChange({ url, authMode: authModeAfterUrlChange(row, url) });
-                  }}
-                  spellCheck={false}
-                />
-              </label>
-              <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Headers (KEY=VALUE)</span>
-                <textarea
-                  rows={Math.max(2, (row._headersText ?? '').split('\n').length)}
-                  value={row._headersText ?? ''}
-                  placeholder="Authorization=Bearer …"
-                  onChange={(e) => onChange({ _headersText: e.target.value })}
-                  spellCheck={false}
-                />
-              </label>
-            </>
-          )}
+          <McpConfigFields
+            id={row.id}
+            transport={row.transport}
+            authMode={row.authMode}
+            command={row.command ?? ''}
+            args={(row.args ?? []).join(' ')}
+            envText={row._envText ?? ''}
+            url={row.url ?? ''}
+            headersText={row._headersText ?? ''}
+            onChange={(patch) => {
+              const mapped: Record<string, unknown> = {};
+              for (const [k, v] of Object.entries(patch)) {
+                if (k === 'args') {
+                  mapped.args = (v as string).split(/\s+/).map((s) => s.trim()).filter(Boolean);
+                } else if (k === 'envText') {
+                  mapped._envText = v;
+                } else if (k === 'headersText') {
+                  mapped._headersText = v;
+                } else if (k === 'url') {
+                  mapped.url = v;
+                  mapped.authMode = authModeAfterUrlChange(row, v as string);
+                } else {
+                  mapped[k] = v;
+                }
+              }
+              onChange(mapped);
+            }}
+          />
 
           <div className="mcp-row-config-foot">
             <button

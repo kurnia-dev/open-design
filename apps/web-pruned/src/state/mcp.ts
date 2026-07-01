@@ -6,17 +6,21 @@
 // providers PUT uses (the daemon takes the full set rather than merging).
 
 import type {
+  McpAuthMode,
   McpOAuthStatusResponse,
   McpServerConfig,
   McpServersResponse,
   McpTemplate,
+  McpTransport,
   StartMcpOAuthResponse,
 } from '@open-design/contracts';
 
 export type {
+  McpAuthMode,
   McpOAuthStatusResponse,
   McpServerConfig,
   McpTemplate,
+  McpTransport,
   StartMcpOAuthResponse,
 };
 

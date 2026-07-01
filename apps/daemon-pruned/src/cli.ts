@@ -2391,9 +2391,6 @@ async function runPluginRun(rest) {
       ...(flags.message ? { message: flags.message } : {}),
       ...(flags.agent ? { agentId: flags.agent } : {}),
       ...(flags.model ? { model: flags.model } : {}),
-      ...(flags["snapshot-id"]
-        ? { appliedPluginSnapshotId: flags["snapshot-id"] }
-        : {}),
     }),
   });
   const runData = await runResp.json().catch(() => ({}));
@@ -2420,7 +2417,7 @@ async function runPluginRun(rest) {
     return;
   }
   console.log(
-    `[run] started run ${runData.runId} (snapshot ${runData.appliedPluginSnapshotId ?? applyData?.appliedPlugin?.snapshotId ?? "n/a"})`,
+    `[run] started run ${runData.runId}`,
   );
   if (flags.follow) {
     await streamRunEvents(base, runData.runId);
@@ -6394,8 +6391,6 @@ Common options:
           .map((c) => c.trim())
           .filter(Boolean);
       }
-      if (flags["snapshot-id"])
-        body.appliedPluginSnapshotId = flags["snapshot-id"];
       const resp = await fetch(`${base}/api/runs`, {
         method: "POST",
         headers: { "content-type": "application/json" },

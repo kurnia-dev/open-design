@@ -2296,7 +2296,6 @@ function reconcileAssistantMessageOnRunEnd(
       assistantMessageId: any;
       clientRequestId: any;
       agentId: any;
-      appliedPluginSnapshotId: any;
       pluginId: any;
       toolBundle: RunToolBundle;
       status: string;
@@ -2346,7 +2345,6 @@ function reconcileAssistantMessageOnRunEnd(
       conversationId: any;
       assistantMessageId: any;
       agentId: any;
-      appliedPluginSnapshotId: any;
       pluginId: any;
       status: any;
       createdAt: any;
@@ -4752,7 +4750,6 @@ export async function startServer({
     designSystemId?: any;
     pendingPrompt?: any;
     metadata: any;
-    appliedPluginSnapshotId?: any;
     customInstructions?: any;
     createdAt?: number;
     updatedAt?: number;
@@ -5999,7 +5996,6 @@ export async function startServer({
       preTurnFileNames: any;
       sessionMode: ("design" | "chat") | undefined;
       runContext: any;
-      appliedPluginSnapshot: any;
       createdAt: any;
       startedAt: any;
       endedAt: any;
@@ -8524,7 +8520,6 @@ export async function startServer({
     locale,
     sessionMode,
     connectedExternalMcp,
-    appliedPluginSnapshotId,
     mediaExecution,
   }) => {
     const project =
@@ -8995,7 +8990,6 @@ export async function startServer({
       assistantMessageId?: any;
       clientRequestId?: any;
       agentId?: any;
-      appliedPluginSnapshotId?: any;
       pluginId?: any;
       mediaExecution?: any;
       toolBundle?: any;
@@ -9353,10 +9347,6 @@ export async function startServer({
       sessionMode: runSessionMode,
       connectedExternalMcp,
       mediaExecution: run?.mediaExecution,
-      // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
-      // prompt composer can splice in `## Active stage` blocks.
-      // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
-      appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
     });
 
     // Make skill side files reachable through three layers, in order of

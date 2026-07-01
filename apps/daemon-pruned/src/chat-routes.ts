@@ -67,11 +67,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     body: Record<string, unknown>,
     res: any,
   ) => {
-    if (
-      (typeof body.pluginId === "string" && body.pluginId.trim().length > 0) ||
-      (typeof body.appliedPluginSnapshotId === "string" &&
-        body.appliedPluginSnapshotId.trim().length > 0)
-    ) {
+    if (typeof body.pluginId === "string" && body.pluginId.trim().length > 0) {
       sendApiError(
         res,
         409,

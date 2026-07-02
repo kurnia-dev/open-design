@@ -12,7 +12,7 @@
 import type { ChatSessionMode } from '@open-design/contracts';
 
 export interface OfficialDesignerOptions {
-  isReactVite?: boolean | undefined;
+  framework?: 'react-web' | 'react-native' | null | undefined;
   sessionMode?: ChatSessionMode | string | undefined;
   streamFormat?: string | undefined;
 }
@@ -32,7 +32,7 @@ You MUST follow these rules when editing or creating code files:
 7. **Tailwind CSS v4**: The project is pre-configured with Tailwind CSS v4. Use standard Tailwind utility classes in JSX. Custom styles or custom theme extensions can be configured directly in \`src/index.css\` using Tailwind v4 directives (e.g. \`@theme { --color-primary: #...; }\`). Do not create a \`tailwind.config.js\` or \`postcss.config.js\` file.`;
 
 export function buildOfficialDesignerPrompt(options: OfficialDesignerOptions = {}): string {
-  const { isReactVite, sessionMode, streamFormat } = options;
+  const { framework, sessionMode, streamFormat } = options;
   const isChat = sessionMode === 'chat';
   const isPlain = streamFormat === 'plain';
 
@@ -72,11 +72,11 @@ You can talk about your capabilities in non-technical, user-facing terms: HTML, 
   }
 
   workflow += `\n4. **Build the project files.** Write your main file (and any supporting files) to the project root or \`src/\` directory. Show the user something early — even a rough first pass is better than radio silence.
-5. **Finish.** ` + (isReactVite ? `Briefly summarize what you changed and what's still open.` : `If you wrote a new canonical HTML file this turn, wrap up by emitting an \`<artifact>\` block referencing it (see "Artifact handoff" below). If you only made in-place edits to an existing file, skip the artifact block — just summarize **briefly**: what file you changed, what changed, what's still open, what you'd suggest next.`);
+5. **Finish.** ` + (framework ? `Briefly summarize what you changed and what's still open.` : `If you wrote a new canonical HTML file this turn, wrap up by emitting an \`<artifact>\` block referencing it (see "Artifact handoff" below). If you only made in-place edits to an existing file, skip the artifact block — just summarize **briefly**: what file you changed, what changed, what's still open, what you'd suggest next.`);
 
   parts.push(workflow);
 
-  if (isReactVite) {
+  if (framework === 'react-web') {
     parts.push(REACT_VITE_PROJECT_DIRECTIVE);
   } else {
     parts.push(`## Artifact handoff
@@ -123,7 +123,7 @@ PDFs, PPTX, DOCX: you can extract them via Bash (\`unzip\`, \`pdftotext\`, etc.)
 - **Avoid AI slop tropes:** aggressive gradient backgrounds; gratuitous emoji; rounded boxes with a left-border accent; SVG-as-illustration when a placeholder would do; overused fonts (Inter, Roboto, Arial, Fraunces); and the generic warm beige/peach/pink/orange-brown “AI canvas” look when it is not brand-led.
 - **CSS power moves welcome:** \`text-wrap: pretty\`, CSS Grid, container queries, \`color-mix()\`, \`@scope\`, view transitions — use the modern toolbox.`);
 
-  if (!isReactVite) {
+  if (!framework) {
     parts.push(`## React + Babel (inline JSX)
 When writing React prototypes with inline JSX, use these exact pinned versions and integrity hashes:
 \`\`\`html

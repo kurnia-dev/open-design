@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { rm, writeFile, readFile, readdir, stat, mkdir } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { rm, writeFile, readFile, readdir, stat, mkdir, cp } from 'node:fs/promises';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { Express, Response } from 'express';
@@ -867,214 +867,91 @@ async function resolveDesignSystemNpmPackages(
   }
 }
 
-async function initializeReactViteProject(
+const TEMPLATE_PLACEHOLDER = /{{projectName}}/g;
+
+function parseGitignore(srcDir: string): string[] {
+  try {
+    const raw = readFileSync(path.join(srcDir, '.gitignore'), 'utf8');
+    return raw.split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length > 0 && !l.startsWith('#'));
+  } catch {
+    return [];
+  }
+}
+
+function isIgnored(relPath: string, patterns: string[]): boolean {
+  for (const p of patterns) {
+    const dirPattern = p.endsWith('/') ? p : p + '/';
+    if (relPath === p || relPath.startsWith(dirPattern)) return true;
+    if (p.startsWith('/') && (relPath === p.slice(1) || relPath.startsWith(p.slice(1) + '/'))) return true;
+  }
+  return false;
+}
+
+async function copyTemplateDir(projectTemplatesDir: string, templateName: string, dest: string, projectName: string) {
+  const src = path.join(projectTemplatesDir, templateName);
+  const ignorePatterns = parseGitignore(src);
+
+  const sanitized = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+
+  const files: string[] = [];
+  async function walkCopy(dir: string, relDir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = relDir ? relDir + '/' + entry.name : entry.name;
+      if (isIgnored(relPath, ignorePatterns)) continue;
+      const fullSrc = path.join(dir, entry.name);
+      const fullDest = path.join(dest, relPath);
+      if (entry.isDirectory()) {
+        await mkdir(fullDest, { recursive: true });
+        await walkCopy(fullSrc, relPath);
+      } else {
+        await cp(fullSrc, fullDest, { dereference: true });
+        files.push(fullDest);
+      }
+    }
+  }
+  await mkdir(dest, { recursive: true });
+  await walkCopy(src, '');
+
+  await Promise.all(files.map(async (file) => {
+    let content = await readFile(file, 'utf8');
+    content = content.replace(TEMPLATE_PLACEHOLDER, projectName);
+    if (file.endsWith('package.json')) {
+      const pkg = JSON.parse(content);
+      pkg.name = sanitized;
+      content = JSON.stringify(pkg, null, 2) + '\n';
+    }
+    await writeFile(file, content, 'utf8');
+  }));
+}
+
+async function scaffoldProject(
+  projectTemplatesDir: string,
   dir: string,
   projectName: string,
+  framework: 'react-web' | 'react-native',
   designSystemPackages: Array<{ name: string; path: string }>,
-  isPublishedDesignSystem = false,
-  publishedPackages: string[] = [],
   skipGitCommit = false,
   cloneUrl?: string,
   accessToken?: string,
+  projectId?: string,
+  activeProjectEventSinks?: Map<string, Set<any>>,
 ) {
-  await mkdir(path.join(dir, 'src'), { recursive: true });
+  const templateName = framework === 'react-native' ? 'react-native' : 'react-web';
+  await copyTemplateDir(projectTemplatesDir, templateName, dir, projectName);
 
-  let dsDeps = '';
-  if (isPublishedDesignSystem && publishedPackages.length > 0) {
-    dsDeps = publishedPackages
-      .map(pkgName => `,\n    "${pkgName}": "latest"`)
-      .join('');
-
-    const scopes = new Set<string>();
-    for (const pkgName of publishedPackages) {
-      if (pkgName.startsWith('@') && pkgName.includes('/')) {
-        const scope = pkgName.split('/')[0];
-        if (scope) {
-          scopes.add(scope);
-        }
-      }
+  if (designSystemPackages.length > 0) {
+    const pkgJsonPath = path.join(dir, 'package.json');
+    const pkg = JSON.parse(await readFile(pkgJsonPath, 'utf8'));
+    pkg.dependencies ??= {};
+    for (const dsPkg of designSystemPackages) {
+      const relPath = path.relative(dir, dsPkg.path).replace(/\\/g, '/');
+      pkg.dependencies[dsPkg.name] = `link:${relPath}`;
     }
-    let npmrcContent = 'registry=http://127.0.0.1:4873/\n//127.0.0.1:4873/:_authToken="dummy-token"\n';
-    for (const scope of scopes) {
-      npmrcContent += `${scope}:registry=http://127.0.0.1:4873/\n`;
-    }
-    await writeFile(path.join(dir, '.npmrc'), npmrcContent, 'utf8');
-  } else {
-    dsDeps = designSystemPackages
-      .map(pkg => {
-        const relPath = path.relative(dir, pkg.path).replace(/\\/g, '/');
-        return `,\n    "${pkg.name}": "link:${relPath}"`;
-      })
-      .join('');
+    await writeFile(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
   }
-
-  const packageJson = `{
-  "name": "${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"${dsDeps}
-  },
-  "devDependencies": {
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "latest",
-    "@tailwindcss/vite": "^4.3.0",
-    "tailwindcss": "^4.3.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.16"
-  }
-}`;
-
-  const viteConfig = "import { defineConfig } from 'vite';\n" +
-    "import react from '@vitejs/plugin-react';\n" +
-    "import tailwindcss from '@tailwindcss/vite';\n\n" +
-    "// https://vitejs.dev/config/\n" +
-    "export default defineConfig({\n" +
-    "  plugins: [\n" +
-    "    react(),\n" +
-    "    tailwindcss(),\n" +
-    "  ],\n" +
-    "  server: {\n" +
-    "    port: 5173,\n" +
-    "    strictPort: true,\n" +
-    "  }\n" +
-    "});\n";
-
-  const tsConfig = "{\n" +
-    "  \"compilerOptions\": {\n" +
-    "    \"target\": \"ES2020\",\n" +
-    "    \"useDefineForClassFields\": true,\n" +
-    "    \"lib\": [\"DOM\", \"DOM.Iterable\", \"ScriptHost\", \"ES2020\"],\n" +
-    "    \"module\": \"ESNext\",\n" +
-    "    \"skipLibCheck\": true,\n\n" +
-    "    /* Bundler mode */\n" +
-    "    \"moduleResolution\": \"bundler\",\n" +
-    "    \"allowImportingTsExtensions\": true,\n" +
-    "    \"resolveJsonModule\": true,\n" +
-    "    \"isolatedModules\": true,\n" +
-    "    \"noEmit\": true,\n" +
-    "    \"jsx\": \"react-jsx\",\n\n" +
-    "    /* Linting */\n" +
-    "    \"strict\": true,\n" +
-    "    \"noUnusedLocals\": true,\n" +
-    "    \"noUnusedParameters\": true,\n" +
-    "    \"noFallthroughCasesInSwitch\": true\n" +
-    "  },\n" +
-    "  \"include\": [\"src\"]\n" +
-    "}";
-
-  const indexHtml = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${projectName}</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
-`;
-
-  const mainTsx = "import React from 'react';\n" +
-    "import ReactDOM from 'react-dom/client';\n" +
-    "import App from './App.tsx';\n" +
-    "import './index.css';\n\n" +
-    "ReactDOM.createRoot(document.getElementById('root')!).render(\n" +
-    "  <React.StrictMode>\n" +
-    "    <App />\n" +
-    "  </React.StrictMode>,\n" +
-    ");\n";
-
-  const listItems = (isPublishedDesignSystem && publishedPackages.length > 0)
-    ? publishedPackages
-      .map(pkgName => `<li><strong>${pkgName}</strong> (installed from local npm registry)</li>`)
-      .join('\n        ')
-    : designSystemPackages
-      .map(pkg => `<li><strong>${pkg.name}</strong> (linked from <code>${pkg.path}</code>)</li>`)
-      .join('\n        ');
-
-  const appTsx = `import React from 'react';
-
-function App() {
-  return (
-    <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Design Project: ${projectName}</h1>
-      <p>This is a functional React + Vite + TypeScript project ${(isPublishedDesignSystem && publishedPackages.length > 0) ? 'configured with' : 'linked with'} the following design system packages:</p>
-      <ul>
-        ${listItems}
-      </ul>
-      <p>Edit <code>src/App.tsx</code> to start building!</p>
-    </div>
-  );
-}
-
-export default App;
-`;
-
-  const indexCss = "@import \"tailwindcss\";\n";
-
-  const viteEnvD = "/// <reference types=\"vite/client\" />\n";
-
-  const manifestJson = JSON.stringify({
-    schemaVersion: "od-design-system-project/v1",
-    name: projectName,
-    category: "Generated",
-    description: "React Vite Design Project generated by Open Design",
-    importMode: "hybrid",
-    devServer: {
-      url: "http://localhost:5173",
-      port: 5173
-    }
-  }, null, 2) + '\n';
-
-  const gitignore = `# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-`;
-
-  await Promise.all([
-    writeFile(path.join(dir, 'package.json'), packageJson, 'utf8'),
-    writeFile(path.join(dir, 'vite.config.ts'), viteConfig, 'utf8'),
-    writeFile(path.join(dir, 'tsconfig.json'), tsConfig, 'utf8'),
-    writeFile(path.join(dir, 'manifest.json'), manifestJson, 'utf8'),
-    writeFile(path.join(dir, 'index.html'), indexHtml, 'utf8'),
-    writeFile(path.join(dir, 'src/main.tsx'), mainTsx, 'utf8'),
-    writeFile(path.join(dir, 'src/App.tsx'), appTsx, 'utf8'),
-    writeFile(path.join(dir, 'src/index.css'), indexCss, 'utf8'),
-    writeFile(path.join(dir, 'src/vite-env.d.ts'), viteEnvD, 'utf8'),
-    writeFile(path.join(dir, '.gitignore'), gitignore, 'utf8'),
-  ]);
 
   try {
     const runGit = (args: string[]) => new Promise((resolve, reject) => {
@@ -1096,6 +973,10 @@ dist-ssr
     }
   } catch (err) {
     console.warn('[project-routes] Failed to initialize git repository:', err);
+  }
+
+  if (projectId && activeProjectEventSinks) {
+    installDependencies(projectId, dir, activeProjectEventSinks);
   }
 }
 
@@ -1367,7 +1248,7 @@ async function installDependencies(
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
+  const { DESIGN_SYSTEMS_DIR, USER_DESIGN_SYSTEMS_DIR, PROJECTS_DIR, PROJECT_TEMPLATES_DIR, SKILLS_DIR } = ctx.paths;
   const { readAppConfig, writeAppConfig } = ctx.appConfig;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
@@ -1812,56 +1693,28 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           try {
             const projectDir = await ensureProject(PROJECTS_DIR, id, projectMetadata);
 
-            let isPublishedDesignSystem = false;
-            let publishedPackages: string[] = [];
-
-            if (normalizedDesignSystemId) {
-              const dirId = normalizedDesignSystemId.startsWith('user:')
-                ? normalizedDesignSystemId.slice('user:'.length)
-                : normalizedDesignSystemId;
-              const brandRoot = path.join(
-                normalizedDesignSystemId.startsWith('user:') ? USER_DESIGN_SYSTEMS_DIR : DESIGN_SYSTEMS_DIR,
-                dirId
-              );
-
-              let status = 'draft';
-              try {
-                const rawMeta = await readFile(path.join(brandRoot, 'metadata.json'), 'utf8');
-                const parsedMeta = JSON.parse(rawMeta);
-                if (parsedMeta && typeof parsedMeta.status === 'string') {
-                  status = parsedMeta.status;
-                }
-              } catch { }
-
-              if (status === 'published') {
-                isPublishedDesignSystem = true;
-                const info = normalizedDesignSystemId.startsWith('user:')
-                  ? await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, normalizedDesignSystemId, { idPrefix: 'user:' })
-                  : await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, normalizedDesignSystemId);
-
-                if (info && info.manifest && info.manifest.npmPackages && Array.isArray(info.manifest.npmPackages)) {
-                  publishedPackages = info.manifest.npmPackages.map((pkg: any) => pkg.name);
-                }
-              }
-            }
+            const framework: 'react-web' | 'react-native' =
+              projectMetadata?.framework === 'react-native' ? 'react-native' : 'react-web';
 
             const designSystemPackages = await resolveDesignSystemNpmPackages(
               normalizedDesignSystemId,
               DESIGN_SYSTEMS_DIR,
               USER_DESIGN_SYSTEMS_DIR,
             );
-            await initializeReactViteProject(
+            await scaffoldProject(
+              PROJECT_TEMPLATES_DIR,
               projectDir,
               name.trim(),
+              framework,
               designSystemPackages,
-              isPublishedDesignSystem,
-              publishedPackages,
               !(await getGitHubToken(ctx.paths.RUNTIME_DATA_DIR)),
               createdRepoUrl,
-              accessToken
+              accessToken,
+              id,
+              activeProjectEventSinks,
             );
           } catch (initErr) {
-            console.error(`[project-routes] Failed to initialize React Vite project:`, initErr);
+            console.error(`[project-routes] Failed to scaffold project:`, initErr);
           }
         }
       } catch (err) {

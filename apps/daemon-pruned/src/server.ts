@@ -1335,6 +1335,11 @@ const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
   "prompt-templates",
   path.join(PROJECT_ROOT, "prompt-templates"),
 );
+const PROJECT_TEMPLATES_DIR = resolveDaemonResourceDir(
+  DAEMON_RESOURCE_ROOT,
+  "project-templates",
+  path.join(PROJECT_ROOT, "project-templates"),
+);
 
 export function isStaticSpaFallbackRequest(req: express.Request) {
   if (req.method !== "GET" && req.method !== "HEAD") return false;
@@ -5552,6 +5557,7 @@ export async function startServer({
     SKILLS_DIR,
     USER_SKILLS_DIR,
     PROMPT_TEMPLATES_DIR,
+    PROJECT_TEMPLATES_DIR,
     OD_BIN,
   };
   const nodeDeps = { fs, path };
@@ -8537,10 +8543,12 @@ export async function startServer({
       typeof projectId === "string" && projectId
         ? resolveProjectDir(PROJECTS_DIR, projectId, metadata)
         : undefined;
-    const isReactVite =
-      typeof projectDir === "string" && projectDir
-        ? fs.existsSync(path.join(projectDir, "package.json"))
-        : false;
+    const projectFramework =
+      metadata?.framework === "react-native" || metadata?.framework === "react-web"
+        ? metadata.framework
+        : typeof projectDir === "string" && projectDir
+          ? (fs.existsSync(path.join(projectDir, "package.json")) ? "react-web" : null)
+          : null;
     let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null =
       null;
     const loadAllSkills = async () => {
@@ -8939,7 +8947,7 @@ export async function startServer({
 
       userInstructions,
       projectInstructions,
-      isReactVite,
+      projectFramework,
     });
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files

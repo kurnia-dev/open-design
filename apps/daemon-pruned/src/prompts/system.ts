@@ -163,6 +163,7 @@ type ProjectMetadata = {
   examplePrompt?: boolean | null;
   examplePromptTitle?: string | null;
   examplePromptBrief?: Record<string, string> | null;
+  framework?: string | null;
   imageModel?: string | null;
   imageAspect?: string | null;
   imageStyle?: string | null;
@@ -525,7 +526,7 @@ export interface ComposeInput {
   // Run-scoped media policy. Defaults to enabled when omitted so existing
   // local OD behavior keeps the same media prompt contract.
   mediaExecution?: MediaExecutionPolicy | undefined;
-  isReactVite?: boolean | undefined;
+  projectFramework?: 'react-web' | 'react-native' | null | undefined;
 }
 
 export function composeSystemPrompt({
@@ -562,7 +563,7 @@ export function composeSystemPrompt({
   userInstructions,
   projectInstructions,
   mediaExecution,
-  isReactVite,
+  projectFramework,
 }: ComposeInput): string {
   // Injection resistance goes FIRST — before everything else — so no later
   // section (skill body, user instructions, project instructions, tool result)
@@ -615,9 +616,12 @@ export function composeSystemPrompt({
     metadata?.kind === "video" ||
     metadata?.kind === "audio";
 
-  const isHighFidelityPrototype =
-    metadata?.kind === "prototype" && metadata?.fidelity === "high-fidelity";
-  const effectiveReactVite = Boolean(isReactVite || isHighFidelityPrototype);
+  const effectiveFramework: 'react-web' | 'react-native' | null =
+    projectFramework ?? (
+      metadata?.kind === "prototype" && metadata?.fidelity === "high-fidelity"
+        ? (metadata?.framework === 'react-native' ? 'react-native' : 'react-web')
+        : null
+    );
 
   if (metadata?.examplePrompt === true) {
     parts.push(
@@ -645,7 +649,7 @@ export function composeSystemPrompt({
   parts.push(
     "# Identity and workflow charter (background)\n\n",
     buildOfficialDesignerPrompt({
-      isReactVite: effectiveReactVite,
+      framework: effectiveFramework,
       sessionMode,
       streamFormat,
     }),

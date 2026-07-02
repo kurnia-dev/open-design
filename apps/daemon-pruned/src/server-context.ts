@@ -22,6 +22,7 @@ export interface PathDeps {
   OD_BIN: string;
   PROJECT_ROOT: string;
   PROJECTS_DIR: string;
+  PROJECT_TEMPLATES_DIR: string;
   PROMPT_TEMPLATES_DIR: string;
   RUNTIME_DATA_DIR: string;
   RUNTIME_DATA_DIR_CANONICAL: string;

@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "{{projectName}}",
+    "slug": "{{projectName}}",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.design.{{projectName}}"
+    },
+    "android": {
+      "package": "com.design.{{projectName}}",
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "platforms": ["ios", "android"]
+  }
+}

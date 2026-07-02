@@ -9,7 +9,8 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 
 type DetailsScreenRouteProp = RouteProp<RootStackParamList, 'Details'>;
@@ -19,10 +20,19 @@ export default function DetailsScreen() {
   const navigation = useNavigation<DetailsScreenNavigationProp>();
   const route = useRoute<DetailsScreenRouteProp>();
   const info = route.params?.info ?? 'No details provided';
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={s.page}>
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          s.scroll,
+          {
+            paddingTop: insets.top + spacing[4],
+            paddingBottom: insets.bottom + spacing[4],
+          }
+        ]}
+      >
         <View style={s.header}>
           <Pressable style={s.btnBack} onPress={() => navigation.goBack()}>
             <Text style={s.btnBackText}>← Back</Text>

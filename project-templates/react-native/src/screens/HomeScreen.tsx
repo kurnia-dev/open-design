@@ -11,18 +11,28 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { RootStackParamList } from '../navigation/types';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={s.page}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={s.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          s.scroll,
+          {
+            paddingTop: insets.top + spacing[4],
+            paddingBottom: insets.bottom + spacing[4],
+          }
+        ]}
+      >
         <View style={s.hero}>
           <Text style={s.eyebrow}>Open Design x Elegant</Text>
           <Text style={s.title}>{'{{projectName}}'}</Text>
@@ -34,8 +44,8 @@ export default function HomeScreen() {
             <Pressable style={s.btnPrimary}>
               <Text style={s.btnPrimaryText}>Ask a design agent to begin</Text>
             </Pressable>
-            <Pressable 
-              style={s.btnSecondary} 
+            <Pressable
+              style={s.btnSecondary}
               onPress={() => navigation.navigate('Details', { info: 'Scaffold tokens configuration' })}
             >
               <Text style={s.btnSecondaryText}>View Design System Details →</Text>
@@ -146,7 +156,7 @@ const s = StyleSheet.create({
   },
   scroll: {
     padding: spacing[4],
-    paddingTop: spacing[8],
+    paddingTop: spacing[1],
     paddingBottom: spacing[12],
   },
   eyebrow: {

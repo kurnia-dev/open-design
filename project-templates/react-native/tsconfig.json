@@ -2,7 +2,9 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "ESNext",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
@@ -12,5 +14,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["src", "App.tsx"]
+  "include": [
+    "src",
+    "App.tsx",
+    "index.tsx"
+  ],
+  "extends": "expo/tsconfig.base"
 }

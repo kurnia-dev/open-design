@@ -3,6 +3,7 @@ packages:
   - apps/*
   - tools/*
   - e2e
+  - project-templates/*
   - "!**/.od/**"
 
 overrides:

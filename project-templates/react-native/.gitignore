@@ -9,3 +9,4 @@ dist/
 *.orig.*
 web-build/
 .DS_Store
+pnpm-lock.yaml

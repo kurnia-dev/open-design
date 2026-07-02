@@ -1691,6 +1691,11 @@ export interface Dict {
   'newproj.fidelityLabel': string;
   'newproj.fidelityWireframe': string;
   'newproj.fidelityHigh': string;
+  'newproj.frameworkLabel': string;
+  'newproj.framework.reactWeb.label': string;
+  'newproj.framework.reactWeb.hint': string;
+  'newproj.framework.reactNative.label': string;
+  'newproj.framework.reactNative.hint': string;
   'newproj.toggleSpeakerNotes': string;
   'newproj.toggleSpeakerNotesHint': string;
   'newproj.toggleAnimations': string;

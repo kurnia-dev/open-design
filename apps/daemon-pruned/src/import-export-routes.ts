@@ -251,6 +251,10 @@ export function registerImportRoutes(
           nextSkillId === "example-web-prototype-wireframe"
         ) {
           nextSkillId = "example-web-prototype-high-fidelity";
+        } else if (nextSkillId === "web-prototype-react") {
+          nextSkillId = "react-web-prototype";
+        } else if (nextSkillId === "example-web-prototype-react") {
+          nextSkillId = "example-react-web-prototype";
         }
       }
       const updated = updateProject(db, projectId, {
@@ -418,6 +422,10 @@ export function registerImportRoutes(
           targetSkillId === "example-web-prototype-wireframe"
         ) {
           targetSkillId = "example-web-prototype-high-fidelity";
+        } else if (targetSkillId === "web-prototype-react") {
+          targetSkillId = "react-web-prototype";
+        } else if (targetSkillId === "example-web-prototype-react") {
+          targetSkillId = "example-react-web-prototype";
         }
       }
 

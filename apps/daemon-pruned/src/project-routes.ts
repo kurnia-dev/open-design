@@ -1553,6 +1553,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 targetSkillId = 'web-prototype-high-fidelity';
               } else if (targetSkillId === 'example-web-prototype-wireframe' || targetSkillId === 'example-web-prototype') {
                 targetSkillId = 'example-web-prototype-high-fidelity';
+              } else if (targetSkillId === 'web-prototype-react') {
+                targetSkillId = 'react-web-prototype';
+              } else if (targetSkillId === 'example-web-prototype-react') {
+                targetSkillId = 'example-react-web-prototype';
               }
             }
             const project = insertProject(db, {
@@ -1731,6 +1735,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             targetSkillId = 'web-prototype-high-fidelity';
           } else if (targetSkillId === 'example-web-prototype' || targetSkillId === 'example-web-prototype-wireframe') {
             targetSkillId = 'example-web-prototype-high-fidelity';
+          } else if (targetSkillId === 'web-prototype-react') {
+            targetSkillId = 'react-web-prototype';
+          } else if (targetSkillId === 'example-web-prototype-react') {
+            targetSkillId = 'example-react-web-prototype';
           }
         }
       }
@@ -2056,11 +2064,19 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           targetSkillId = 'web-prototype-high-fidelity';
         } else if (targetSkillId === 'example-web-prototype' || targetSkillId === 'example-web-prototype-wireframe') {
           targetSkillId = 'example-web-prototype-high-fidelity';
+        } else if (targetSkillId === 'web-prototype-react') {
+          targetSkillId = 'react-web-prototype';
+        } else if (targetSkillId === 'example-web-prototype-react') {
+          targetSkillId = 'example-react-web-prototype';
         }
       } else if (mergedMeta?.kind === 'prototype' && mergedMeta?.fidelity === 'wireframe') {
         if (targetSkillId === 'web-prototype-react' || targetSkillId === 'web-prototype-high-fidelity') {
           targetSkillId = 'web-prototype-wireframe';
         } else if (targetSkillId === 'example-web-prototype-react' || targetSkillId === 'example-web-prototype-high-fidelity') {
+          targetSkillId = 'example-web-prototype-wireframe';
+        } else if (targetSkillId === 'react-web-prototype' || targetSkillId === 'react-native-prototype') {
+          targetSkillId = 'web-prototype-wireframe';
+        } else if (targetSkillId === 'example-react-web-prototype' || targetSkillId === 'example-react-native-prototype') {
           targetSkillId = 'example-web-prototype-wireframe';
         }
       }

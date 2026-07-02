@@ -27,6 +27,7 @@ import type {
   AudioKind,
   DesignSystemSummary,
   MediaAspect,
+  ProjectFramework,
   ProjectKind,
   ProjectMetadata,
   ProjectPlatform,
@@ -110,6 +111,23 @@ const DESIGN_PLATFORMS: Array<{
       hintKey: 'newproj.platform.desktopApp.hint',
     },
   ];
+
+const FRAMEWORK_OPTIONS: Array<{
+  value: ProjectFramework;
+  labelKey: keyof Dict;
+  hintKey: keyof Dict;
+}> = [
+  {
+    value: 'react-web',
+    labelKey: 'newproj.framework.reactWeb.label',
+    hintKey: 'newproj.framework.reactWeb.hint',
+  },
+  {
+    value: 'react-native',
+    labelKey: 'newproj.framework.reactNative.label',
+    hintKey: 'newproj.framework.reactNative.hint',
+  },
+];
 
 export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
 export type MediaSurface = 'image' | 'video' | 'audio';
@@ -330,6 +348,17 @@ export function NewProjectPanel({
     'high-fidelity',
   );
   const [platformTargets, setPlatformTargets] = useState<NewProjectPlatform[]>(['responsive']);
+  const [framework, setFramework] = useState<ProjectFramework>('react-web');
+  // When framework changes, sync platform targets to match.
+  useEffect(() => {
+    if (tab !== 'prototype') return;
+    setPlatformTargets(framework === 'react-native'
+      ? ['mobile-ios', 'mobile-android']
+      : ['responsive'],
+    );
+    // Intentionally only fire on framework change, not on tab or platformTargets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [framework]);
   const [includeLandingPage, setIncludeLandingPage] = useState(false);
   const [includeOsWidgets, setIncludeOsWidgets] = useState(false);
   const [speakerNotes, setSpeakerNotes] = useState(false);
@@ -467,9 +496,10 @@ export function NewProjectPanel({
   const skillIdForTab = useMemo(() => {
     if (tab === 'other') return null;
     if (tab === 'prototype') {
-      return fidelity === 'wireframe'
-        ? 'web-prototype-wireframe'
-        : 'web-prototype-high-fidelity';
+      if (fidelity === 'wireframe') return 'web-prototype-wireframe';
+      return framework === 'react-native'
+        ? 'react-native-prototype'
+        : 'react-web-prototype';
     }
     if (tab === 'live-artifact') {
       const exact = skills.find((s) => s.id === 'live-artifact' || s.name === 'live-artifact');
@@ -506,7 +536,7 @@ export function NewProjectPanel({
         ?? null;
     }
     return null;
-  }, [tab, mediaSurface, skills, videoModel, fidelity]);
+  }, [tab, mediaSurface, skills, videoModel, fidelity, framework]);
 
   // When the user picks a curated prompt template, propagate the template's
   // declared `model` and `aspect` onto the actual project state. Without
@@ -678,6 +708,7 @@ export function NewProjectPanel({
       tab,
       mediaSurface,
       fidelity,
+      framework,
       platformTargets,
       includeLandingPage,
       includeOsWidgets,
@@ -951,23 +982,27 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+        {/* Live artifact always renders at high fidelity — its whole point
+            is data-bound polished UI, so the wireframe option is hidden. */}
+        {tab === 'prototype' ? (
+          <FidelityPicker value={fidelity} onChange={setFidelity} />
+        ) : null}
+
+        {tab === 'prototype' && fidelity === 'high-fidelity' ? (
+          <FrameworkSelector value={framework} onChange={setFramework} />
+        ) : null}
+
+        {tab === 'prototype' || tab === 'template' || tab === 'other' ? (
           <PlatformPicker value={platformTargets} onChange={setPlatformTargets} />
         ) : null}
 
-        {tab === 'prototype' || tab === 'live-artifact' || tab === 'template' || tab === 'other' ? (
+        {tab === 'prototype' || tab === 'template' || tab === 'other' ? (
           <SurfaceOptions
             includeLandingPage={includeLandingPage}
             includeOsWidgets={includeOsWidgets}
             onIncludeLandingPage={setIncludeLandingPage}
             onIncludeOsWidgets={setIncludeOsWidgets}
           />
-        ) : null}
-
-        {/* Live artifact always renders at high fidelity — its whole point
-            is data-bound polished UI, so the wireframe option is hidden. */}
-        {tab === 'prototype' ? (
-          <FidelityPicker value={fidelity} onChange={setFidelity} />
         ) : null}
 
         {tab === 'live-artifact' ? (
@@ -1575,6 +1610,38 @@ function HighFidelityArt() {
       <rect x="70" y="29" width="36" height="3" rx="1.5" fill="#b3b0a8" />
       <rect x="70" y="36" width="20" height="6" rx="2" fill="#c96442" />
     </svg>
+  );
+}
+
+function FrameworkSelector({
+  value,
+  onChange,
+}: {
+  value: ProjectFramework;
+  onChange: (v: ProjectFramework) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="newproj-section">
+      <label className="newproj-label">{t('newproj.frameworkLabel')}</label>
+      <div className="framework-grid">
+        {FRAMEWORK_OPTIONS.map((option) => {
+          const active = value === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={`framework-card${active ? ' active' : ''}`}
+              onClick={() => onChange(option.value)}
+              aria-pressed={active}
+            >
+              <span className="framework-card-title">{t(option.labelKey)}</span>
+              <span className="framework-card-hint">{t(option.hintKey)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -2969,6 +3036,7 @@ function buildMetadata(input: {
   tab: CreateTab;
   mediaSurface: MediaSurface;
   fidelity: 'wireframe' | 'high-fidelity';
+  framework: ProjectFramework;
   platformTargets: NewProjectPlatform[];
   includeLandingPage: boolean;
   includeOsWidgets: boolean;
@@ -3016,6 +3084,9 @@ function buildMetadata(input: {
       // Live artifact is locked to high fidelity (the picker is hidden in
       // the panel) — wireframe live artifacts don't make sense.
       fidelity: input.tab === 'live-artifact' ? 'high-fidelity' : input.fidelity,
+      ...(input.tab === 'prototype' && input.fidelity === 'high-fidelity'
+        ? { framework: input.framework }
+        : {}),
       ...(input.tab === 'live-artifact' ? { intent: 'live-artifact' as const } : {}),
       ...inspirations,
     };

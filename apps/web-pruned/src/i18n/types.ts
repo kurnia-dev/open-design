@@ -2693,6 +2693,12 @@ export interface Dict {
   'fileViewer.viewportTabletTitle': string;
   'fileViewer.viewportMobile': string;
   'fileViewer.viewportMobileTitle': string;
+  'fileViewer.viewportIphonePro': string;
+  'fileViewer.viewportIphoneProTitle': string;
+  'fileViewer.viewportIpadPro': string;
+  'fileViewer.viewportIpadProTitle': string;
+  'fileViewer.rotateDevice': string;
+  'fileViewer.rotateDeviceTitle': string;
   'fileViewer.reloadAria': string;
   'fileViewer.previousSlide': string;
   'fileViewer.nextSlide': string;

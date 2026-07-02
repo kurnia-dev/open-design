@@ -144,6 +144,9 @@ import {
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
+import { ReactNativePreviewViewer } from './ReactNativePreviewViewer';
+import { MobileDeviceSelector } from './MobileDeviceSelector';
+import type { DeviceName } from 'react-mockframe';
 
 function resolveChromeActionsHost(): HTMLElement | null {
   return document.querySelector<HTMLElement>(APP_CHROME_FILE_ACTIONS_SELECTOR)
@@ -216,6 +219,7 @@ type DeployResultCard = {
   message?: string;
 };
 const MAX_BRIDGE_COORDINATE = 1_000_000;
+
 const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
   {
     id: 'desktop',
@@ -237,6 +241,23 @@ const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
     height: 844,
     labelKey: 'fileViewer.viewportMobile',
     titleKey: 'fileViewer.viewportMobileTitle',
+  },
+];
+
+const PREVIEW_VIEWPORT_PRESETS_RN: PreviewViewportPreset[] = [
+  {
+    id: 'mobile',
+    width: 393,
+    height: 852,
+    labelKey: 'fileViewer.viewportIphonePro',
+    titleKey: 'fileViewer.viewportIphoneProTitle',
+  },
+  {
+    id: 'tablet',
+    width: 834,
+    height: 1194,
+    labelKey: 'fileViewer.viewportIpadPro',
+    titleKey: 'fileViewer.viewportIpadProTitle',
   },
 ];
 
@@ -487,17 +508,24 @@ function PreviewViewportControls({
   onViewport,
   t,
   tabIndex,
+  projectFramework,
 }: {
   viewport: PreviewViewportId;
   onViewport: (viewport: PreviewViewportId) => void;
   t: TranslateFn;
   tabIndex?: number;
+  projectFramework?: import('../types').ProjectFramework;
 }) {
+  const isReactNative = projectFramework === 'react-native';
+  const presets = useMemo(
+    () => isReactNative ? PREVIEW_VIEWPORT_PRESETS_RN : PREVIEW_VIEWPORT_PRESETS,
+    [isReactNative],
+  );
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const listboxId = useId();
   const activePreset =
-    PREVIEW_VIEWPORT_PRESETS.find((preset) => preset.id === viewport) ?? PREVIEW_VIEWPORT_PRESETS[0]!;
+    presets.find((preset) => preset.id === viewport) ?? presets[0]!;
 
   useEffect(() => {
     if (!open) return;
@@ -541,7 +569,7 @@ function PreviewViewportControls({
       </button>
       {open ? (
         <div className="viewer-viewport-menu" id={listboxId} role="listbox" aria-label={t('fileViewer.viewportAria')}>
-          {PREVIEW_VIEWPORT_PRESETS.map((preset) => {
+          {presets.map((preset) => {
             const selected = viewport === preset.id;
             return (
               <button
@@ -963,6 +991,7 @@ interface Props {
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
   devServerUrl?: string;
   devServerReady?: boolean,
+  projectFramework?: import('../types').ProjectFramework;
 }
 
 export function FileViewer({
@@ -988,6 +1017,7 @@ export function FileViewer({
   slideNavRequest,
   devServerUrl,
   devServerReady,
+  projectFramework,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -1033,6 +1063,7 @@ export function FileViewer({
         slideNavRequest={slideNavRequest}
         devServerUrl={devServerUrl}
         devServerReady={devServerReady}
+        projectFramework={projectFramework}
       />
     );
   }
@@ -1082,11 +1113,13 @@ export function FileViewer({
 
 export function LiveArtifactViewer({
   projectId,
+  projectFramework,
   liveArtifact,
   liveArtifactEvents = [],
   onRefreshArtifacts,
 }: {
   projectId: string;
+  projectFramework?: import('../types').ProjectFramework;
   liveArtifact: LiveArtifactWorkspaceEntry;
   liveArtifactEvents?: LiveArtifactEventItem[];
   onRefreshArtifacts?: () => Promise<void> | void;
@@ -1442,6 +1475,7 @@ export function LiveArtifactViewer({
               onViewport={setPreviewViewport}
               t={t}
               tabIndex={mode === 'preview' ? 0 : -1}
+              projectFramework={projectFramework}
             />
             <span className="viewer-divider" aria-hidden />
             <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
@@ -4432,6 +4466,7 @@ function HtmlViewer({
   slideNavRequest,
   devServerUrl,
   devServerReady,
+  projectFramework,
 }: {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -4454,6 +4489,7 @@ function HtmlViewer({
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
   devServerUrl?: string;
   devServerReady?: boolean;
+  projectFramework?: import('../types').ProjectFramework;
 }) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -4601,6 +4637,39 @@ function HtmlViewer({
     setPreviewViewportCached(fileViewportKey, viewport);
     setPreviewViewportState(viewport);
   }, [fileViewportKey]);
+  const [rnDeviceName, setRnDeviceName] = useState<DeviceName>('iPhone 17');
+  const [rnLandscape, setRnLandscape] = useState<boolean>(false);
+  const rnInitialUrl = useMemo(() => {
+    const base = (devServerUrl ?? '').replace(/\/+$/, '');
+    const safePath = file.path?.replace(/\\/g, '/') ?? '';
+    return `${base}/${safePath}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot`;
+  }, [devServerUrl, file.path]);
+  const rnHistoryRef = useRef([rnInitialUrl]);
+  const [rnHistoryIndex, setRnHistoryIndex] = useState(0);
+  const [rnCurrentUrl, setRnCurrentUrl] = useState(rnInitialUrl);
+  const rnCanGoBack = rnHistoryIndex > 0;
+  const rnCanGoForward = rnHistoryIndex < rnHistoryRef.current.length - 1;
+  const rnNavigate = useCallback((url: string) => {
+    rnHistoryRef.current = [...rnHistoryRef.current.slice(0, rnHistoryIndex + 1), url];
+    setRnHistoryIndex(rnHistoryIndex + 1);
+    setRnCurrentUrl(url);
+  }, [rnHistoryIndex]);
+  const rnGoBack = useCallback(() => {
+    if (!rnCanGoBack) return;
+    const newIndex = rnHistoryIndex - 1;
+    setRnHistoryIndex(newIndex);
+    setRnCurrentUrl(rnHistoryRef.current[newIndex]!);
+  }, [rnCanGoBack, rnHistoryIndex]);
+  const rnGoForward = useCallback(() => {
+    if (!rnCanGoForward) return;
+    const newIndex = rnHistoryIndex + 1;
+    setRnHistoryIndex(newIndex);
+    setRnCurrentUrl(rnHistoryRef.current[newIndex]!);
+  }, [rnCanGoForward, rnHistoryIndex]);
+  const rnGoHome = useCallback(() => {
+    const base = (devServerUrl ?? '').replace(/\/+$/, '');
+    rnNavigate(`${base}/`);
+  }, [devServerUrl, rnNavigate]);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
@@ -7982,11 +8051,71 @@ function HtmlViewer({
           {showPreviewToolbarControls ? (
             <>
               <span className="viewer-divider" aria-hidden />
-              <PreviewViewportControls
-                viewport={previewViewport}
-                onViewport={setPreviewViewport}
-                t={t}
-              />
+              {projectFramework === 'react-native' && devServerUrl ? (
+                <>
+                  <MobileDeviceSelector
+                    device={rnDeviceName}
+                    onDevice={setRnDeviceName}
+                    t={t}
+                  />
+                  <button
+                    type="button"
+                    className={`viewer-action viewer-action-icon od-tooltip${rnLandscape ? ' active' : ''}`}
+                    aria-label={t('fileViewer.rotateDevice')}
+                    title={t('fileViewer.rotateDeviceTitle')}
+                    data-tooltip={t('fileViewer.rotateDeviceTitle')}
+                    data-tooltip-placement="bottom"
+                    onClick={() => setRnLandscape((v) => !v)}
+                  >
+                    <RemixIcon name="clockwise-line" size={14} />
+                  </button>
+                  <span className="viewer-divider" aria-hidden />
+                  <div className="rn-nav-group">
+                    <button
+                      type="button"
+                      className="viewer-action viewer-action-icon od-tooltip"
+                      aria-label="Go back"
+                      disabled={!rnCanGoBack}
+                      title="Go back"
+                      data-tooltip="Go back"
+                      data-tooltip-placement="bottom"
+                      onClick={rnGoBack}
+                    >
+                      <RemixIcon name="arrow-left-s-line" size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="viewer-action viewer-action-icon od-tooltip"
+                      aria-label="Go forward"
+                      disabled={!rnCanGoForward}
+                      title="Go forward"
+                      data-tooltip="Go forward"
+                      data-tooltip-placement="bottom"
+                      onClick={rnGoForward}
+                    >
+                      <RemixIcon name="arrow-right-s-line" size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="viewer-action viewer-action-icon od-tooltip"
+                      aria-label="Home"
+                      title="Go to root"
+                      data-tooltip="Go to root"
+                      data-tooltip-placement="bottom"
+                      onClick={rnGoHome}
+                    >
+                      <RemixIcon name="home-4-line" size={14} />
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <PreviewViewportControls
+                  viewport={previewViewport}
+                  onViewport={setPreviewViewport}
+                  t={t}
+                  projectFramework={projectFramework}
+                />
+              )}
             </>
           ) : null}
           {showPreviewToolbarControls && effectiveDeck ? (
@@ -8480,6 +8609,15 @@ function HtmlViewer({
               t('fileViewer.loading')
             )}
           </div>
+        ) : mode === 'preview' && devServerUrl && projectFramework === 'react-native' ? (
+          <ReactNativePreviewViewer
+            projectId={projectId}
+            file={file}
+            devServerUrl={devServerUrl}
+            deviceName={rnDeviceName}
+            currentUrl={rnCurrentUrl}
+            landscape={rnLandscape}
+          />
         ) : mode === 'preview' ? (
           <div
             className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}

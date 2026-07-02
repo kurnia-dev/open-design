@@ -59,6 +59,7 @@ import {
   type ProjectBrowserWorkspaceTab,
   type ProjectFile,
   type ProjectFolder,
+  type ProjectFramework,
   type ProjectMetadata
 } from '../types';
 import { isMacPlatform } from '../utils/platform';
@@ -103,6 +104,7 @@ interface Props {
   // True while a working-dir replace is reindexing; shows a loading state.
   reloading?: boolean;
   devServerUrl?: string;
+  projectFramework?: ProjectFramework;
   /** Absolute on-disk project directory (from GET /api/projects/:id). Used by
    * the Design Files panel's "copy absolute path" action. */
   resolvedDir?: string | null;
@@ -439,6 +441,7 @@ export function FileWorkspace({
   npmInstallMessage = '',
   npmInstallLogs = [],
   devServerUrl,
+  projectFramework,
 }: Props) {
   const t = useT();
   const githubConnected = githubAuth?.connected;
@@ -2314,6 +2317,7 @@ export function FileWorkspace({
                 file={devPreviewFile}
                 devServerUrl={activeDevServerUrl}
                 devServerReady={devServerReady}
+                projectFramework={projectFramework}
                 liveHtml=""
                 isDeck={false}
                 filesRefreshKey={filesRefreshKey}
@@ -2485,6 +2489,7 @@ export function FileWorkspace({
             ) : activeLiveArtifact ? (
               <LiveArtifactViewer
                 projectId={projectId}
+                projectFramework={projectFramework}
                 liveArtifact={activeLiveArtifact}
                 liveArtifactEvents={liveArtifactEvents}
                 onRefreshArtifacts={onRefreshFiles}
@@ -2498,6 +2503,7 @@ export function FileWorkspace({
                 isDeck={isDeck}
                 onExportAsPptx={onExportAsPptx}
                 streaming={streaming}
+                projectFramework={projectFramework}
                 commentQueueOnSend={commentQueueOnSend}
                 commentSendDisabled={commentSendDisabled}
                 previewComments={previewComments.filter((comment) => comment.filePath === activeFile.name)}

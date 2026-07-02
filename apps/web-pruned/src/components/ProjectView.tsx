@@ -5510,6 +5510,7 @@ export function ProjectView({
           projectId={project.id}
           npmInstallLogs={npmInstallLogs}
             devServerUrl={projectDetail.project?.devServerUrl ?? project.devServerUrl}
+            projectFramework={project.metadata?.framework}
             npmInstallStatus={npmInstallStatus}
             npmInstallMessage={npmInstallMessage}
             projectKind={projectKindToTracking(project.metadata?.kind) ?? 'prototype'}

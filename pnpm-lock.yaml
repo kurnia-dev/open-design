@@ -529,6 +529,9 @@ importers:
       react-dom:
         specifier: 18.3.1
         version: 18.3.1(react@18.3.1)
+      react-mockframe:
+        specifier: ^1.1.0
+        version: 1.1.0(react@18.3.1)
       shiki:
         specifier: 4.1.0
         version: 4.1.0
@@ -6604,6 +6607,11 @@ packages:
 
   react-is@19.2.7:
     resolution: {integrity: sha512-kZFnouyVv7eP/Phmrlo9FK+zcAdriZJvzxXHF1Sl1P377WSGe2G/JxVolhTrB/jeV47lKImhNUsijjHAAbcl/A==}
+
+  react-mockframe@1.1.0:
+    resolution: {integrity: sha512-X9I3fFKUIs4zsj5TLDpjpTTioMeGnnzZYtXU0Bah5A3Pod8TSyH1qxBet32wT7yMXa8aDMv3Ipvzj49jshHmFg==}
+    peerDependencies:
+      react: ^18.0.0 || ^19.0.0
 
   react-native-edge-to-edge@1.6.0:
     resolution: {integrity: sha512-2WCNdE3Qd6Fwg9+4BpbATUxCLcouF6YRY7K+J36KJ4l3y+tWN6XCqAC4DuoGblAAbb2sLkhEDp4FOlbOIot2Og==}
@@ -14824,6 +14832,10 @@ snapshots:
   react-is@18.3.1: {}
 
   react-is@19.2.7: {}
+
+  react-mockframe@1.1.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   react-native-edge-to-edge@1.6.0(react-native@0.81.6(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.1.4))(react@19.1.4):
     dependencies:

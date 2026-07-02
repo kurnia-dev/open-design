@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/types';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { colors, fonts, fontSizes, spacing, radii } from '../tokens';
 
 type DetailsScreenRouteProp = RouteProp<RootStackParamList, 'Details'>;

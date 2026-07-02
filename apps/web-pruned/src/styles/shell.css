@@ -915,10 +915,6 @@
 }
 
 
-  background: var(--bg);
-  color: var(--text);
-}
-
 /* Settings: custom instructions textarea */
 .custom-instructions-input {
   width: 100%;

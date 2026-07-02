@@ -854,8 +854,7 @@
 .app .app-chrome-back,
 .app .settings-icon-btn,
 .app .avatar-btn,
-.app .project-instructions-toggle {
-  width: 30px;
+
   height: 30px;
   border-radius: 8px;
 }

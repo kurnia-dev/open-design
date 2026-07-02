@@ -754,8 +754,15 @@ function normalizeChatSessionMode(value: unknown): ChatSessionMode {
   return value === 'chat' ? 'chat' : 'design';
 }
 
-async function scanDirForPackages(dir: string): Promise<Array<{ name: string; path: string }>> {
-  const packages: Array<{ name: string; path: string }> = [];
+interface DesignSystemPackage {
+  name: string;
+  path?: string;
+  version?: string;
+  registry?: string;
+}
+
+async function scanDirForPackages(dir: string): Promise<DesignSystemPackage[]> {
+  const packages: DesignSystemPackage[] = [];
 
   const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
   let hasWorkspace = false;
@@ -842,7 +849,7 @@ async function resolveDesignSystemNpmPackages(
   designSystemId: string | undefined | null,
   DESIGN_SYSTEMS_DIR: string,
   USER_DESIGN_SYSTEMS_DIR: string,
-): Promise<Array<{ name: string; path: string }>> {
+): Promise<DesignSystemPackage[]> {
   if (!designSystemId) return [];
 
   try {
@@ -853,6 +860,20 @@ async function resolveDesignSystemNpmPackages(
     if (!info || !info.manifest) return [];
 
     const manifest = info.manifest;
+
+    // If manifest has npmPackages with registry/version, use those directly
+    if (manifest.npmPackages && manifest.npmPackages.length > 0) {
+      const published = manifest.npmPackages.filter(p => p.registry || p.version);
+      if (published.length > 0) {
+        return published.map(p => {
+          const out: DesignSystemPackage = { name: p.name, version: p.version || 'latest' };
+          if (p.registry) out.registry = p.registry;
+          return out;
+        });
+      }
+    }
+
+    // Otherwise scan local dir for packages to link
     const sourcePath = (manifest as any).source?.path;
     if (!sourcePath || typeof sourcePath !== 'string') {
       const dirId = designSystemId.startsWith('user:') ? designSystemId.slice('user:'.length) : designSystemId;
@@ -932,7 +953,7 @@ async function scaffoldProject(
   dir: string,
   projectName: string,
   framework: 'react-web' | 'react-native',
-  designSystemPackages: Array<{ name: string; path: string }>,
+  designSystemPackages: DesignSystemPackage[],
   skipGitCommit = false,
   cloneUrl?: string,
   accessToken?: string,
@@ -947,8 +968,12 @@ async function scaffoldProject(
     const pkg = JSON.parse(await readFile(pkgJsonPath, 'utf8'));
     pkg.dependencies ??= {};
     for (const dsPkg of designSystemPackages) {
-      const relPath = path.relative(dir, dsPkg.path).replace(/\\/g, '/');
-      pkg.dependencies[dsPkg.name] = `link:${relPath}`;
+      if (dsPkg.path) {
+        const relPath = path.relative(dir, dsPkg.path).replace(/\\/g, '/');
+        pkg.dependencies[dsPkg.name] = `link:${relPath}`;
+      } else {
+        pkg.dependencies[dsPkg.name] = `^${dsPkg.version || '0.0.0'}`;
+      }
     }
     await writeFile(pkgJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
   }

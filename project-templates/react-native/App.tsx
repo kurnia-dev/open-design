@@ -21,7 +21,7 @@ function HomeScreen() {
       <ScrollView contentContainerStyle={s.scroll}>
         <View style={s.hero}>
           <Text style={s.eyebrow}>Open Design x Elegant</Text>
-          <Text style={s.title}>{'{{ projectName }}'}</Text>
+          <Text style={s.title}>{'{{projectName}}'}</Text>
           <Text style={s.lead}>
             This is a React Native + Expo project template using the Elegant
             design system. It is not a finished design — it is a starting point.

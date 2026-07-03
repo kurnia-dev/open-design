@@ -1,9 +1,10 @@
-import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Navigation } from './src/navigation/RootNavigator';
 
-export default function App({ initialMetrics }: { initialMetrics?: any }) {
+export default function App() {
   return (
-    <SafeAreaProvider initialMetrics={initialMetrics ?? initialWindowMetrics}>
+    <SafeAreaProvider>
       <Navigation />
     </SafeAreaProvider>
   );
